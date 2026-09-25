@@ -1,33 +1,11 @@
-#!/usr/bin/env python3
-
-"""
-AI Vision - RSS Collector 2.0
-
-Funzioni:
-- raccoglie articoli da fonti italiane e internazionali
-- filtra gli articoli troppo vecchi
-- normalizza titoli e URL
-- elimina duplicati esatti
-- raggruppa notizie simili
-- conserva le diverse fonti della stessa storia
-- prepara i cluster per il passaggio a Gemini
-
-NON pubblica nulla.
-NON utilizza Gemini.
-"""
-
-from __future__ import annotations
-
-import hashlib
 import json
+import hashlib
 import re
-import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
-from pathlib import Path
-from urllib.parse import urlparse
 
 import feedparser
+import requests
 
 
 # ============================================================
@@ -35,14 +13,17 @@ import feedparser
 # ============================================================
 
 MAX_AGE_HOURS = 48
-MAX_ITEMS_PER_FEED = 30
-MAX_TOTAL_RAW_ITEMS = 300
+MAX_ITEMS_PER_FEED = 25
+MAX_TOTAL_ITEMS = 200
 
-TITLE_SIMILARITY_THRESHOLD = 0.72
-
+# Numero massimo di storie uniche da passare successivamente a Gemini
 MAX_GEMINI_CLUSTERS = 80
 
-OUTPUT_FILE = Path("data/rss_items.json")
+REQUEST_TIMEOUT = 15
+
+HEADERS = {
+    "User-Agent": "AI-Vision-RSS-Collector/2.0"
+}
 
 
 # ============================================================
@@ -51,267 +32,143 @@ OUTPUT_FILE = Path("data/rss_items.json")
 
 FEEDS = [
 
-    # ========================================================
-    # 🇮🇹 FONTI ITALIANE
-    # ========================================================
-
-    {
-        "name": "Hardware Upgrade",
-        "url": "http://feeds.hwupgrade.it/rss_news.xml",
-        "country": "IT",
-        "priority": 8,
-        "areas": [
-            "Tecnologia",
-            "AI",
-            "Sicurezza",
-            "Hardware",
-            "Smartphone",
-        ],
-    },
-
-    {
-        "name": "Tom's Hardware Italia",
-        "url": "https://www.tomshw.it/feed-rss",
-        "country": "IT",
-        "priority": 8,
-        "areas": [
-            "Tecnologia",
-            "AI",
-            "Hardware",
-            "Smartphone",
-            "Guide",
-            "Offerte",
-        ],
-    },
-
-    {
-        "name": "DDay.it",
-        "url": "https://www.dday.it/feed",
-        "country": "IT",
-        "priority": 8,
-        "areas": [
-            "Tecnologia",
-            "Smartphone",
-            "Hardware",
-            "AI",
-            "TV",
-            "Offerte",
-        ],
-    },
-
-    {
-        "name": "Everyeye Tech",
-        "url": "https://tech.everyeye.it/feed/feed_news_rss.asp",
-        "country": "IT",
-        "priority": 7,
-        "areas": [
-            "Tecnologia",
-            "Smartphone",
-            "AI",
-            "Software",
-            "Gaming",
-            "Guide",
-        ],
-    },
-
-    {
-        "name": "HDblog",
-        "url": "https://www.hdblog.it/feed/",
-        "country": "IT",
-        "priority": 8,
-        "areas": [
-            "Tecnologia",
-            "Smartphone",
-            "Hardware",
-            "Software",
-            "AI",
-            "Gadget",
-        ],
-    },
-
-    {
-        "name": "SmartWorld",
-        "url": "https://www.smartworld.it/feed",
-        "country": "IT",
-        "priority": 7,
-        "areas": [
-            "Tecnologia",
-            "Smartphone",
-            "App",
-            "Software",
-            "Guide",
-            "Servizi",
-        ],
-    },
-
-    {
-        "name": "Multiplayer.it",
-        "url": "https://psapp.multiplayer.it/feed/",
-        "country": "IT",
-        "priority": 6,
-        "areas": [
-            "Tecnologia",
-            "Gaming",
-            "Hardware",
-            "Console",
-            "AI",
-        ],
-    },
-
-
-    # ========================================================
-    # 🌍 FONTI INTERNAZIONALI
-    # ========================================================
+    # --------------------------------------------------------
+    # INTERNAZIONALI
+    # --------------------------------------------------------
 
     {
         "name": "TechCrunch",
         "url": "https://techcrunch.com/feed/",
-        "country": "INT",
-        "priority": 9,
-        "areas": [
-            "News",
-            "AI",
-            "Startup",
-            "Tecnologia",
-        ],
+        "country": "International",
+        "type": "Tech"
     },
 
     {
         "name": "The Verge",
         "url": "https://www.theverge.com/rss/index.xml",
-        "country": "INT",
-        "priority": 9,
-        "areas": [
-            "Tecnologia",
-            "AI",
-            "Hardware",
-            "Software",
-        ],
+        "country": "International",
+        "type": "Tech"
     },
 
     {
         "name": "Ars Technica",
         "url": "https://feeds.arstechnica.com/arstechnica/index",
-        "country": "INT",
-        "priority": 9,
-        "areas": [
-            "Tecnologia",
-            "AI",
-            "Sicurezza",
-            "Scienza",
-        ],
+        "country": "International",
+        "type": "Tech"
     },
 
     {
         "name": "BleepingComputer",
         "url": "https://www.bleepingcomputer.com/feed/",
-        "country": "INT",
-        "priority": 9,
-        "areas": [
-            "Sicurezza",
-            "Tecnologia",
-            "Guide",
-        ],
+        "country": "International",
+        "type": "Security"
     },
 
     {
         "name": "The Register",
         "url": "https://www.theregister.com/headlines.atom",
-        "country": "INT",
-        "priority": 8,
-        "areas": [
-            "Tecnologia",
-            "AI",
-            "Sicurezza",
-            "Cloud",
-        ],
+        "country": "International",
+        "type": "Tech"
     },
 
     {
         "name": "OpenAI",
         "url": "https://openai.com/news/rss.xml",
-        "country": "INT",
-        "priority": 10,
-        "areas": [
-            "AI",
-        ],
+        "country": "International",
+        "type": "AI"
     },
 
     {
         "name": "Google AI",
         "url": "https://blog.google/technology/ai/rss/",
-        "country": "INT",
-        "priority": 10,
-        "areas": [
-            "AI",
-        ],
+        "country": "International",
+        "type": "AI"
     },
+
+
+    # --------------------------------------------------------
+    # ITALIANE
+    # --------------------------------------------------------
+
+    {
+        "name": "Hardware Upgrade",
+        "url": "https://www.hwupgrade.it/rss.xml",
+        "country": "Italy",
+        "type": "Tech"
+    },
+
+    {
+        "name": "Tom's Hardware Italia",
+        "url": "https://www.tomshw.it/feed/",
+        "country": "Italy",
+        "type": "Tech"
+    },
+
+    {
+        "name": "DDay",
+        "url": "https://www.dday.it/feed",
+        "country": "Italy",
+        "type": "Tech"
+    },
+
+    {
+        "name": "Everyeye Tech",
+        "url": "https://tech.everyeye.it/feed/feed_news_rss.asp",
+        "country": "Italy",
+        "type": "Tech"
+    },
+
+    {
+        "name": "HDblog",
+        "url": "https://www.hdblog.it/feed/",
+        "country": "Italy",
+        "type": "Tech"
+    },
+
+    {
+        "name": "SmartWorld",
+        "url": "https://www.smartworld.it/feed",
+        "country": "Italy",
+        "type": "Tech"
+    },
+
+    {
+        "name": "Multiplayer.it",
+        "url": "https://psapp.multiplayer.it/feed/",
+        "country": "Italy",
+        "type": "Gaming"
+    }
 ]
 
 
 # ============================================================
-# PULIZIA TESTO
+# UTILITY
 # ============================================================
 
-def clean_text(value: str) -> str:
-
-    if not value:
+def clean_text(text):
+    if not text:
         return ""
 
-    value = re.sub(
-        r"<[^>]+>",
-        " ",
-        value,
-    )
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
 
-    value = unicodedata.normalize(
-        "NFKC",
-        value,
-    )
-
-    value = re.sub(
-        r"\s+",
-        " ",
-        value,
-    )
-
-    return value.strip()
+    return text.strip()
 
 
-# ============================================================
-# NORMALIZZAZIONE TITOLI
-# ============================================================
-
-def normalize_title(title: str) -> str:
-
+def normalize_title(title):
     title = clean_text(title).lower()
 
-    title = re.sub(
-        r"\b(update|breaking|news|exclusive|report)\b",
-        " ",
-        title,
-    )
+    title = re.sub(r"https?://\S+", "", title)
 
-    title = re.sub(
-        r"[^a-z0-9àèéìòù\s]",
-        " ",
-        title,
-    )
+    title = re.sub(r"[^\w\s]", " ", title)
 
-    title = re.sub(
-        r"\s+",
-        " ",
-        title,
-    )
+    title = re.sub(r"\s+", " ", title)
 
     return title.strip()
 
 
-def title_tokens(title: str) -> set[str]:
-
-    words = normalize_title(
-        title
-    ).split()
+def title_tokens(title):
+    normalized = normalize_title(title)
 
     stopwords = {
         "the",
@@ -319,525 +176,402 @@ def title_tokens(title: str) -> set[str]:
         "an",
         "and",
         "or",
-        "of",
         "to",
+        "of",
         "in",
         "on",
         "for",
+        "with",
         "is",
         "are",
-        "with",
-        "new",
-        "di",
         "il",
-        "la",
         "lo",
+        "la",
+        "i",
+        "gli",
         "le",
-        "un",
-        "una",
+        "di",
+        "del",
+        "della",
+        "dei",
+        "delle",
         "e",
+        "o",
         "per",
         "con",
-        "su",
+        "un",
+        "una"
     }
 
     return {
-        word
-        for word in words
-        if len(word) >= 3
-        and word not in stopwords
+        token
+        for token in normalized.split()
+        if len(token) >= 3 and token not in stopwords
     }
 
 
-# ============================================================
-# SIMILARITÀ TITOLI
-# ============================================================
+def title_similarity(title_a, title_b):
 
-def title_similarity(
-    title_a: str,
-    title_b: str,
-) -> float:
+    norm_a = normalize_title(title_a)
+    norm_b = normalize_title(title_b)
 
-    a = normalize_title(title_a)
-    b = normalize_title(title_b)
-
-    if not a or not b:
+    if not norm_a or not norm_b:
         return 0.0
 
     sequence_score = SequenceMatcher(
         None,
-        a,
-        b,
+        norm_a,
+        norm_b
     ).ratio()
 
-    tokens_a = title_tokens(
-        title_a
-    )
+    tokens_a = title_tokens(title_a)
+    tokens_b = title_tokens(title_b)
 
-    tokens_b = title_tokens(
-        title_b
-    )
-
-    if tokens_a and tokens_b:
-
-        intersection = len(
-            tokens_a & tokens_b
-        )
-
-        union = len(
-            tokens_a | tokens_b
-        )
-
-        jaccard_score = (
-            intersection / union
-        )
-
+    if not tokens_a or not tokens_b:
+        token_score = 0.0
     else:
+        intersection = len(tokens_a & tokens_b)
+        union = len(tokens_a | tokens_b)
 
-        jaccard_score = 0.0
+        token_score = intersection / union if union else 0.0
 
-    return (
-        sequence_score * 0.45
-        + jaccard_score * 0.55
-    )
+    return max(sequence_score, token_score)
 
 
-# ============================================================
-# ID ARTICOLO
-# ============================================================
+def make_id(url, title):
 
-def make_id(
-    title: str,
-    url: str,
-) -> str:
-
-    raw = (
-        normalize_title(title)
-        + "|"
-        + url.strip().lower()
-    )
+    base = f"{url}|{title}"
 
     return hashlib.sha256(
-        raw.encode("utf-8")
+        base.encode("utf-8")
     ).hexdigest()[:16]
 
 
-# ============================================================
-# DATA
-# ============================================================
-
 def parse_date(entry):
 
-    for field in (
-        "published_parsed",
-        "updated_parsed",
-        "created_parsed",
-    ):
+    parsed = None
 
-        value = getattr(
-            entry,
-            field,
-            None,
-        )
+    if getattr(entry, "published_parsed", None):
+        parsed = entry.published_parsed
 
-        if value:
+    elif getattr(entry, "updated_parsed", None):
+        parsed = entry.updated_parsed
 
-            try:
+    if parsed:
+        try:
+            return datetime(
+                *parsed[:6],
+                tzinfo=timezone.utc
+            )
+        except Exception:
+            pass
 
-                return datetime(
-                    value.tm_year,
-                    value.tm_mon,
-                    value.tm_mday,
-                    value.tm_hour,
-                    value.tm_min,
-                    value.tm_sec,
-                    tzinfo=timezone.utc,
-                )
-
-            except Exception:
-                pass
-
-    return None
+    return datetime.now(timezone.utc)
 
 
-# ============================================================
-# IMMAGINE
-# ============================================================
+def get_image(entry):
 
-def get_image(entry) -> str:
-
-    media_content = getattr(
-        entry,
-        "media_content",
-        [],
-    )
+    # media_content
+    media_content = getattr(entry, "media_content", None)
 
     if media_content:
 
         for media in media_content:
 
-            url = media.get(
-                "url"
-            )
+            if isinstance(media, dict):
 
-            if url:
-                return url
+                url = media.get("url")
 
-    media_thumbnail = getattr(
-        entry,
-        "media_thumbnail",
-        [],
-    )
+                if url:
+                    return url
+
+    # media_thumbnail
+    media_thumbnail = getattr(entry, "media_thumbnail", None)
 
     if media_thumbnail:
 
         for media in media_thumbnail:
 
-            url = media.get(
-                "url"
-            )
+            if isinstance(media, dict):
 
-            if url:
-                return url
+                url = media.get("url")
 
-    for enclosure in getattr(
-        entry,
-        "enclosures",
-        [],
-    ):
+                if url:
+                    return url
 
-        url = (
-            enclosure.get("href")
-            or enclosure.get("url")
+    # enclosure
+    enclosures = getattr(entry, "enclosures", None)
+
+    if enclosures:
+
+        for enclosure in enclosures:
+
+            if isinstance(enclosure, dict):
+
+                url = enclosure.get("href") or enclosure.get("url")
+
+                if url:
+                    return url
+
+    return None
+
+
+# ============================================================
+# CONTROLLO FEED
+# ============================================================
+
+def check_feed(feed):
+
+    name = feed["name"]
+    url = feed["url"]
+
+    result = {
+        "name": name,
+        "url": url,
+        "country": feed["country"],
+        "type": feed["type"],
+        "status": "ERRORE",
+        "http_status": None,
+        "articles": 0,
+        "message": ""
+    }
+
+    try:
+
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=REQUEST_TIMEOUT
         )
 
-        if url:
-            return url
+        result["http_status"] = response.status_code
 
-    return ""
+        if response.status_code != 200:
+
+            result["message"] = (
+                f"HTTP {response.status_code}"
+            )
+
+            return result
+
+        content = response.content
+
+        if not content:
+
+            result["status"] = "VUOTO"
+
+            result["message"] = "Risposta vuota"
+
+            return result
+
+        parsed = feedparser.parse(content)
+
+        if getattr(parsed, "bozo", False):
+
+            bozo_exception = getattr(
+                parsed,
+                "bozo_exception",
+                None
+            )
+
+            if not parsed.entries:
+
+                result["status"] = "ERRORE"
+
+                result["message"] = (
+                    f"Feed non interpretabile: {bozo_exception}"
+                )
+
+                return result
+
+        articles = len(parsed.entries)
+
+        result["articles"] = articles
+
+        if articles == 0:
+
+            result["status"] = "VUOTO"
+
+            result["message"] = "Nessun articolo trovato"
+
+            return result
+
+        result["status"] = "OK"
+
+        result["message"] = (
+            f"{articles} articoli disponibili"
+        )
+
+        return result
+
+    except requests.RequestException as exc:
+
+        result["status"] = "ERRORE"
+
+        result["message"] = (
+            f"Errore rete: {exc}"
+        )
+
+        return result
+
+    except Exception as exc:
+
+        result["status"] = "ERRORE"
+
+        result["message"] = (
+            f"Errore: {exc}"
+        )
+
+        return result
 
 
 # ============================================================
 # RACCOLTA FEED
 # ============================================================
 
-def collect_feed(
-    feed_config: dict,
-) -> list[dict]:
+def collect_feed(feed):
 
-    name = feed_config[
-        "name"
-    ]
+    name = feed["name"]
+    url = feed["url"]
 
-    url = feed_config[
-        "url"
-    ]
-
-    print("")
-    print(
-        f"[RSS] {name}"
-    )
-
-    print(
-        f"      {url}"
-    )
+    items = []
 
     try:
 
-        feed = feedparser.parse(
-            url
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=REQUEST_TIMEOUT
         )
+
+        if response.status_code != 200:
+            return items
+
+        parsed = feedparser.parse(response.content)
+
+        cutoff = (
+            datetime.now(timezone.utc)
+            - timedelta(hours=MAX_AGE_HOURS)
+        )
+
+        for entry in parsed.entries[:MAX_ITEMS_PER_FEED]:
+
+            title = clean_text(
+                getattr(entry, "title", "")
+            )
+
+            link = getattr(entry, "link", "")
+
+            if not title or not link:
+                continue
+
+            published = parse_date(entry)
+
+            if published < cutoff:
+                continue
+
+            description = clean_text(
+                getattr(
+                    entry,
+                    "summary",
+                    getattr(entry, "description", "")
+                )
+            )
+
+            image = get_image(entry)
+
+            item = {
+                "id": make_id(link, title),
+                "title": title,
+                "link": link,
+                "description": description,
+                "published": published.isoformat(),
+                "source": name,
+                "country": feed["country"],
+                "type": feed["type"],
+                "image": image
+            }
+
+            items.append(item)
 
     except Exception as exc:
 
         print(
-            f"      ERRORE: {exc}"
+            f"   Errore raccolta {name}: {exc}"
         )
-
-        return []
-
-    if getattr(
-        feed,
-        "bozo",
-        False,
-    ):
-
-        print(
-            "      Avviso feed: "
-            f"{getattr(feed, 'bozo_exception', '')}"
-        )
-
-    entries = getattr(
-        feed,
-        "entries",
-        [],
-    )
-
-    if not entries:
-
-        print(
-            "      Articoli validi: 0"
-        )
-
-        return []
-
-    now = datetime.now(
-        timezone.utc
-    )
-
-    cutoff = (
-        now
-        - timedelta(
-            hours=MAX_AGE_HOURS
-        )
-    )
-
-    items = []
-
-    for entry in entries[
-        :MAX_ITEMS_PER_FEED
-    ]:
-
-        title = clean_text(
-            entry.get(
-                "title",
-                "",
-            )
-        )
-
-        link = (
-            entry.get(
-                "link",
-                "",
-            )
-            .strip()
-        )
-
-        description = clean_text(
-            entry.get(
-                "summary",
-                entry.get(
-                    "description",
-                    "",
-                ),
-            )
-        )
-
-        if not title or not link:
-            continue
-
-        published = parse_date(
-            entry
-        )
-
-        if (
-            published
-            and published < cutoff
-        ):
-            continue
-
-        item = {
-
-            "id": make_id(
-                title,
-                link,
-            ),
-
-            "title": title,
-
-            "url": link,
-
-            "description": description[
-                :4000
-            ],
-
-            "image": get_image(
-                entry
-            ),
-
-            "source": name,
-
-            "source_domain": urlparse(
-                link
-            ).netloc,
-
-            "source_country": feed_config[
-                "country"
-            ],
-
-            "source_priority": feed_config[
-                "priority"
-            ],
-
-            "areas": feed_config[
-                "areas"
-            ],
-
-            "published_at": (
-                published.isoformat()
-                if published
-                else ""
-            ),
-        }
-
-        items.append(
-            item
-        )
-
-    print(
-        f"      Articoli validi: "
-        f"{len(items)}"
-    )
 
     return items
 
 
 # ============================================================
-# DUPLICATI ESATTI
+# DEDUPLICAZIONE ESATTA
 # ============================================================
 
-def remove_exact_duplicates(
-    items: list[dict],
-) -> list[dict]:
+def remove_exact_duplicates(items):
 
-    seen_urls = set()
-
-    seen_titles = set()
-
-    result = []
+    seen = set()
+    unique = []
 
     for item in items:
 
-        normalized_url = (
-            item["url"]
-            .split("#")[0]
-            .rstrip("/")
-            .lower()
+        key = (
+            item["link"].strip().lower()
+            or normalize_title(item["title"])
         )
 
-        normalized_title = normalize_title(
-            item["title"]
-        )
-
-        if normalized_url in seen_urls:
+        if key in seen:
             continue
 
-        if normalized_title in seen_titles:
-            continue
+        seen.add(key)
 
-        seen_urls.add(
-            normalized_url
-        )
+        unique.append(item)
 
-        seen_titles.add(
-            normalized_title
-        )
-
-        result.append(
-            item
-        )
-
-    return result
+    return unique
 
 
 # ============================================================
-# RAGGRUPPAMENTO STORIE
+# CLUSTERING
 # ============================================================
 
-def build_clusters(
-    items: list[dict],
-) -> list[dict]:
+def build_clusters(items):
 
     clusters = []
-
-    items = sorted(
-        items,
-        key=lambda item: (
-            item.get(
-                "source_priority",
-                0,
-            ),
-
-            item.get(
-                "published_at",
-                "",
-            ),
-        ),
-
-        reverse=True,
-    )
 
     for item in items:
 
         best_cluster = None
-
         best_score = 0.0
 
         for cluster in clusters:
 
-            representative = cluster[
-                "representative"
-            ]
+            representative = cluster["items"][0]
 
             score = title_similarity(
                 item["title"],
-                representative[
-                    "title"
-                ],
+                representative["title"]
             )
 
             if score > best_score:
 
                 best_score = score
+                best_cluster = cluster
 
-                best_cluster = (
-                    cluster
-                )
+        # Soglia per considerare due titoli
+        # appartenenti alla stessa storia
+        if best_cluster and best_score >= 0.62:
 
-        if (
-            best_cluster is not None
-            and best_score
-            >= TITLE_SIMILARITY_THRESHOLD
-        ):
-
-            best_cluster[
-                "items"
-            ].append(
-                item
-            )
-
-            if (
-                item[
-                    "source_priority"
-                ]
-                >
-                best_cluster[
-                    "representative"
-                ][
-                    "source_priority"
-                ]
-            ):
-
-                best_cluster[
-                    "representative"
-                ] = item
+            best_cluster["items"].append(item)
 
         else:
 
-            clusters.append(
-                {
-                    "cluster_id": (
-                        f"story-"
-                        f"{len(clusters) + 1:04d}"
-                    ),
+            cluster_id = hashlib.sha256(
+                item["id"].encode("utf-8")
+            ).hexdigest()[:12]
 
-                    "representative": item,
-
-                    "items": [
-                        item
-                    ],
-                }
-            )
+            clusters.append({
+                "cluster_id": cluster_id,
+                "items": [item]
+            })
 
     return clusters
 
@@ -846,115 +580,46 @@ def build_clusters(
 # PREPARAZIONE PER GEMINI
 # ============================================================
 
-def prepare_for_ai(
-    clusters: list[dict],
-) -> list[dict]:
+def prepare_for_ai(clusters):
 
     prepared = []
 
-    for cluster in clusters:
+    # Prima le storie con più fonti
+    clusters = sorted(
+        clusters,
+        key=lambda cluster: len(cluster["items"]),
+        reverse=True
+    )
 
-        representative = cluster[
-            "representative"
-        ]
+    for cluster in clusters[:MAX_GEMINI_CLUSTERS]:
+
+        items = cluster["items"]
 
         sources = []
 
-        for item in cluster[
-            "items"
-        ]:
+        for item in items:
 
-            sources.append(
-                {
-                    "source": item[
-                        "source"
-                    ],
+            sources.append({
+                "source": item["source"],
+                "country": item["country"],
+                "title": item["title"],
+                "description": item["description"],
+                "url": item["link"],
+                "published": item["published"]
+            })
 
-                    "url": item[
-                        "url"
-                    ],
+        representative = items[0]
 
-                    "title": item[
-                        "title"
-                    ],
+        prepared.append({
+            "cluster_id": cluster["cluster_id"],
+            "title": representative["title"],
+            "description": representative["description"],
+            "published": representative["published"],
+            "source_count": len(sources),
+            "sources": sources
+        })
 
-                    "description": item[
-                        "description"
-                    ],
-
-                    "published_at": item[
-                        "published_at"
-                    ],
-                }
-            )
-
-        prepared.append(
-            {
-                "cluster_id": cluster[
-                    "cluster_id"
-                ],
-
-                "title": representative[
-                    "title"
-                ],
-
-                "url": representative[
-                    "url"
-                ],
-
-                "description": representative[
-                    "description"
-                ],
-
-                "image": representative[
-                    "image"
-                ],
-
-                "source": representative[
-                    "source"
-                ],
-
-                "source_domain": representative[
-                    "source_domain"
-                ],
-
-                "source_country": representative[
-                    "source_country"
-                ],
-
-                "areas": representative[
-                    "areas"
-                ],
-
-                "published_at": representative[
-                    "published_at"
-                ],
-
-                "source_count": len(
-                    sources
-                ),
-
-                "sources": sources,
-            }
-        )
-
-    prepared.sort(
-        key=lambda item: (
-            item[
-                "source_count"
-            ],
-
-            item[
-                "published_at"
-            ],
-        ),
-
-        reverse=True,
-    )
-
-    return prepared[
-        :MAX_GEMINI_CLUSTERS
-    ]
+    return prepared
 
 
 # ============================================================
@@ -963,50 +628,96 @@ def prepare_for_ai(
 
 def main():
 
-    print("")
-    print("=" * 65)
+    print()
+    print("==============================================")
+    print("       AI VISION - RSS COLLECTOR 2.0")
+    print("==============================================")
+    print()
+
+    print("CONTROLLO AUTOMATICO DEI FEED")
+    print("----------------------------------------------")
+
+    feed_status = []
+
+    working_feeds = []
+
+    for feed in FEEDS:
+
+        status = check_feed(feed)
+
+        feed_status.append(status)
+
+        if status["status"] == "OK":
+
+            working_feeds.append(feed)
+
+            print(
+                f"OK       {feed['name']:<25} "
+                f"{status['articles']} articoli"
+            )
+
+        elif status["status"] == "VUOTO":
+
+            print(
+                f"VUOTO    {feed['name']:<25} "
+                f"{status['message']}"
+            )
+
+        else:
+
+            print(
+                f"ERRORE   {feed['name']:<25} "
+                f"{status['message']}"
+            )
+
+    print()
     print(
-        "       AI VISION - RSS COLLECTOR 2.0"
+        f"Feed funzionanti: "
+        f"{len(working_feeds)}/{len(FEEDS)}"
     )
-    print("=" * 65)
+
+    print()
+    print("RACCOLTA NOTIZIE")
+    print("----------------------------------------------")
 
     all_items = []
 
-    for feed_config in FEEDS:
+    for feed in working_feeds:
 
-        items = collect_feed(
-            feed_config
+        items = collect_feed(feed)
+
+        print(
+            f"{feed['name']:<25} "
+            f"{len(items)} articoli validi"
         )
 
-        all_items.extend(
-            items
-        )
+        all_items.extend(items)
 
-    print("")
-    print("-" * 65)
+    # Limite globale
+    all_items = all_items[:MAX_TOTAL_ITEMS]
 
+    print()
     print(
-        "Articoli raccolti: "
-        f"{len(all_items)}"
+        f"Articoli raccolti: {len(all_items)}"
     )
 
-    all_items = all_items[
-        :MAX_TOTAL_RAW_ITEMS
-    ]
-
     # --------------------------------------------------------
-    # DUPLICATI ESATTI
+    # DEDUP
     # --------------------------------------------------------
 
-    unique_items = (
-        remove_exact_duplicates(
-            all_items
-        )
+    before_dedup = len(all_items)
+
+    unique_items = remove_exact_duplicates(
+        all_items
+    )
+
+    removed_duplicates = (
+        before_dedup - len(unique_items)
     )
 
     print(
-        "Dopo duplicati esatti: "
-        f"{len(unique_items)}"
+        f"Duplicati esatti eliminati: "
+        f"{removed_duplicates}"
     )
 
     # --------------------------------------------------------
@@ -1018,7 +729,7 @@ def main():
     )
 
     print(
-        "Storie raggruppate: "
+        f"Storie/cluster individuati: "
         f"{len(clusters)}"
     )
 
@@ -1031,73 +742,59 @@ def main():
     )
 
     print(
-        "Storie passate a Gemini: "
+        f"Cluster preparati per Gemini: "
         f"{len(ai_items)}"
     )
 
     # --------------------------------------------------------
-    # OUTPUT
+    # RISULTATO
     # --------------------------------------------------------
 
-    OUTPUT_FILE.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
     output = {
-
         "generated_at": datetime.now(
             timezone.utc
         ).isoformat(),
 
-        "collector_version": "2.0",
-
-        "statistics": {
-
-            "raw_items": len(
-                all_items
-            ),
-
-            "unique_items": len(
-                unique_items
-            ),
-
-            "clusters": len(
-                clusters
-            ),
-
-            "sent_to_ai": len(
-                ai_items
-            ),
+        "config": {
+            "max_age_hours": MAX_AGE_HOURS,
+            "max_items_per_feed": MAX_ITEMS_PER_FEED,
+            "max_total_items": MAX_TOTAL_ITEMS,
+            "max_gemini_clusters": MAX_GEMINI_CLUSTERS
         },
 
-        "items": ai_items,
+        "feed_status": feed_status,
+
+        "statistics": {
+            "feeds_total": len(FEEDS),
+            "feeds_working": len(working_feeds),
+            "articles_collected": len(all_items),
+            "articles_after_dedup": len(unique_items),
+            "duplicates_removed": removed_duplicates,
+            "clusters_total": len(clusters),
+            "clusters_for_gemini": len(ai_items)
+        },
+
+        "items": ai_items
     }
 
-    with OUTPUT_FILE.open(
+    with open(
+        "data/rss_items.json",
         "w",
-        encoding="utf-8",
-    ) as file:
+        encoding="utf-8"
+    ) as f:
 
         json.dump(
             output,
-            file,
+            f,
             ensure_ascii=False,
-            indent=2,
+            indent=2
         )
 
-    print("")
-    print("=" * 65)
-    print(
-        "             RACCOLTA COMPLETATA"
-    )
-    print("=" * 65)
-
-    print(
-        f"File creato: {OUTPUT_FILE}"
-    )
-
-    print("")
+    print()
+    print("==============================================")
+    print("RSS COLLECTOR COMPLETATO")
+    print("==============================================")
+    print()
 
 
 if __name__ == "__main__":
