@@ -4,18 +4,49 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  rss-collector:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Scarica repository
         uses: actions/checkout@v4
 
-      - name: Test AI Vision
+      - name: Configura Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installa dipendenze
         run: |
-          echo "================================"
-          echo "       AI VISION AUTOMATION"
-          echo "================================"
-          echo "Motore avviato correttamente."
-          echo "Prossimo obiettivo: 5 articoli al giorno."
-          echo "================================"
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Raccogli notizie RSS
+        run: |
+          python scripts/rss_collector.py
+
+      - name: Mostra risultato
+        run: |
+          echo "======================================"
+          echo "       AI VISION - RISULTATO RSS"
+          echo "======================================"
+          python - <<'PY'
+          import json
+
+          with open("data/rss_items.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          print(f"Articoli raccolti: {data['total_items']}")
+          print("")
+
+          for item in data["items"][:10]:
+              print(f"- {item['title']}")
+              print(f"  Fonte: {item['source']}")
+              print("")
+          PY
+
+      - name: Salva raccolta RSS
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-vision-rss
+          path: data/rss_items.json
