@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  rss-collector:
+  ai-pipeline:
     runs-on: ubuntu-latest
 
     steps:
       - name: Scarica repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configura Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -25,28 +25,53 @@ jobs:
         run: |
           python scripts/rss_collector.py
 
-      - name: Mostra risultato
+      - name: Analizza notizie con Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python scripts/ai_filter.py
+
+      - name: Mostra candidati selezionati
         run: |
           echo "======================================"
-          echo "       AI VISION - RISULTATO RSS"
+          echo "       AI VISION - RISULTATO AI"
           echo "======================================"
+
           python - <<'PY'
           import json
 
-          with open("data/rss_items.json", "r", encoding="utf-8") as f:
+          with open("data/ai_candidates.json", "r", encoding="utf-8") as f:
               data = json.load(f)
 
-          print(f"Articoli raccolti: {data['total_items']}")
+          print(f"Articoli analizzati: {data['total_analyzed']}")
+          print(f"Candidati: {data['publishable_candidates']}")
           print("")
 
-          for item in data["items"][:10]:
-              print(f"- {item['title']}")
-              print(f"  Fonte: {item['source']}")
-              print("")
+          for item in data["items"]:
+              ai = item.get("ai", {})
+
+              if ai.get("publishable"):
+                  print(
+                      f"[{ai.get('score', 0)}] "
+                      f"{item.get('title', '')}"
+                  )
+                  print(
+                      f"Categoria: {ai.get('category', '')}"
+                  )
+                  print(
+                      f"Motivo: {ai.get('reason', '')}"
+                  )
+                  print("")
           PY
 
-      - name: Salva raccolta RSS
-        uses: actions/upload-artifact@v4
+      - name: Salva risultati RSS
+        uses: actions/upload-artifact@v6
         with:
           name: ai-vision-rss
           path: data/rss_items.json
+
+      - name: Salva risultati AI
+        uses: actions/upload-artifact@v6
+        with:
+          name: ai-vision-ai-candidates
+          path: data/ai_candidates.json
