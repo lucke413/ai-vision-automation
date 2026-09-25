@@ -1,0 +1,21 @@
+name: AI Vision Automation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test AI Vision
+        run: |
+          echo "================================"
+          echo "       AI VISION AUTOMATION"
+          echo "================================"
+          echo "Motore avviato correttamente."
+          echo "Prossimo obiettivo: 5 articoli al giorno."
+          echo "================================"
