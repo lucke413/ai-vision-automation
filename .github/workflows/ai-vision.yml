@@ -1,12 +1,85 @@
-name: AI Vision Test
+name: AI Vision Automation
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  ai-pipeline:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Test
-        run: echo "AI Vision workflow OK"
+      - name: Scarica repository
+        uses: actions/checkout@v5
+
+      - name: Configura Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Installa dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Raccogli notizie RSS
+        run: python scripts/rss_collector.py
+
+      - name: Controlla Collector
+        run: |
+          test -f data/rss_output.json
+          echo "OK: rss_output.json creato"
+
+      - name: Analizza con Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/ai_filter.py
+
+      - name: Controlla AI Filter
+        run: |
+          test -f data/ai_candidates.json
+          echo "OK: ai_candidates.json creato"
+
+      - name: Mostra risultato
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("data/ai_candidates.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          print("======================================")
+          print("       AI VISION - RISULTATO AI")
+          print("======================================")
+          print(f"Articoli ricevuti: {data.get('total_received', 0)}")
+          print(f"Articoli analizzati: {data.get('total_analyzed', 0)}")
+          print(f"Approvati dall'AI: {data.get('total_passed_ai', 0)}")
+          print(f"Candidati finali: {data.get('total_final_candidates', 0)}")
+          print("")
+
+          for i, item in enumerate(data.get("items", []), 1):
+              print(
+                  f"{i}. [{item.get('final_score', 0)}] "
+                  f"{item.get('title', '')}"
+              )
+              print(f"   Categoria: {item.get('category', 'N/D')}")
+              print(f"   Tipo: {item.get('story_type', 'N/D')}")
+              print("")
+
+          print("======================================")
+          print("             FINE PIPELINE")
+          print("======================================")
+          PY
+
+      - name: Salva risultati RSS
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-vision-rss
+          path: data/rss_output.json
+          if-no-files-found: error
+
+      - name: Salva risultati AI
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-vision-ai-candidates
+          path: data/ai_candidates.json
+          if-no-files-found: error
