@@ -1,6 +1,7 @@
 import json
 import hashlib
 import re
+import os
 from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
 
@@ -15,8 +16,6 @@ import requests
 MAX_AGE_HOURS = 48
 MAX_ITEMS_PER_FEED = 25
 MAX_TOTAL_ITEMS = 200
-
-# Numero massimo di storie uniche da passare successivamente a Gemini
 MAX_GEMINI_CLUSTERS = 80
 
 REQUEST_TIMEOUT = 15
@@ -159,9 +158,7 @@ def normalize_title(title):
     title = clean_text(title).lower()
 
     title = re.sub(r"https?://\S+", "", title)
-
     title = re.sub(r"[^\w\s]", " ", title)
-
     title = re.sub(r"\s+", " ", title)
 
     return title.strip()
@@ -271,8 +268,11 @@ def parse_date(entry):
 
 def get_image(entry):
 
-    # media_content
-    media_content = getattr(entry, "media_content", None)
+    media_content = getattr(
+        entry,
+        "media_content",
+        None
+    )
 
     if media_content:
 
@@ -285,8 +285,11 @@ def get_image(entry):
                 if url:
                     return url
 
-    # media_thumbnail
-    media_thumbnail = getattr(entry, "media_thumbnail", None)
+    media_thumbnail = getattr(
+        entry,
+        "media_thumbnail",
+        None
+    )
 
     if media_thumbnail:
 
@@ -299,8 +302,11 @@ def get_image(entry):
                 if url:
                     return url
 
-    # enclosure
-    enclosures = getattr(entry, "enclosures", None)
+    enclosures = getattr(
+        entry,
+        "enclosures",
+        None
+    )
 
     if enclosures:
 
@@ -308,7 +314,10 @@ def get_image(entry):
 
             if isinstance(enclosure, dict):
 
-                url = enclosure.get("href") or enclosure.get("url")
+                url = (
+                    enclosure.get("href")
+                    or enclosure.get("url")
+                )
 
                 if url:
                     return url
@@ -317,7 +326,7 @@ def get_image(entry):
 
 
 # ============================================================
-# CONTROLLO FEED
+# CONTROLLO AUTOMATICO DEI FEED
 # ============================================================
 
 def check_feed(feed):
@@ -359,7 +368,6 @@ def check_feed(feed):
         if not content:
 
             result["status"] = "VUOTO"
-
             result["message"] = "Risposta vuota"
 
             return result
@@ -379,7 +387,8 @@ def check_feed(feed):
                 result["status"] = "ERRORE"
 
                 result["message"] = (
-                    f"Feed non interpretabile: {bozo_exception}"
+                    f"Feed non interpretabile: "
+                    f"{bozo_exception}"
                 )
 
                 return result
@@ -391,13 +400,13 @@ def check_feed(feed):
         if articles == 0:
 
             result["status"] = "VUOTO"
-
-            result["message"] = "Nessun articolo trovato"
+            result["message"] = (
+                "Nessun articolo trovato"
+            )
 
             return result
 
         result["status"] = "OK"
-
         result["message"] = (
             f"{articles} articoli disponibili"
         )
@@ -407,7 +416,6 @@ def check_feed(feed):
     except requests.RequestException as exc:
 
         result["status"] = "ERRORE"
-
         result["message"] = (
             f"Errore rete: {exc}"
         )
@@ -417,7 +425,6 @@ def check_feed(feed):
     except Exception as exc:
 
         result["status"] = "ERRORE"
-
         result["message"] = (
             f"Errore: {exc}"
         )
@@ -447,20 +454,32 @@ def collect_feed(feed):
         if response.status_code != 200:
             return items
 
-        parsed = feedparser.parse(response.content)
+        parsed = feedparser.parse(
+            response.content
+        )
 
         cutoff = (
             datetime.now(timezone.utc)
             - timedelta(hours=MAX_AGE_HOURS)
         )
 
-        for entry in parsed.entries[:MAX_ITEMS_PER_FEED]:
+        for entry in parsed.entries[
+            :MAX_ITEMS_PER_FEED
+        ]:
 
             title = clean_text(
-                getattr(entry, "title", "")
+                getattr(
+                    entry,
+                    "title",
+                    ""
+                )
             )
 
-            link = getattr(entry, "link", "")
+            link = getattr(
+                entry,
+                "link",
+                ""
+            )
 
             if not title or not link:
                 continue
@@ -474,14 +493,21 @@ def collect_feed(feed):
                 getattr(
                     entry,
                     "summary",
-                    getattr(entry, "description", "")
+                    getattr(
+                        entry,
+                        "description",
+                        ""
+                    )
                 )
             )
 
             image = get_image(entry)
 
             item = {
-                "id": make_id(link, title),
+                "id": make_id(
+                    link,
+                    title
+                ),
                 "title": title,
                 "link": link,
                 "description": description,
@@ -516,14 +542,15 @@ def remove_exact_duplicates(items):
 
         key = (
             item["link"].strip().lower()
-            or normalize_title(item["title"])
+            or normalize_title(
+                item["title"]
+            )
         )
 
         if key in seen:
             continue
 
         seen.add(key)
-
         unique.append(item)
 
     return unique
@@ -544,7 +571,9 @@ def build_clusters(items):
 
         for cluster in clusters:
 
-            representative = cluster["items"][0]
+            representative = (
+                cluster["items"][0]
+            )
 
             score = title_similarity(
                 item["title"],
@@ -556,11 +585,14 @@ def build_clusters(items):
                 best_score = score
                 best_cluster = cluster
 
-        # Soglia per considerare due titoli
-        # appartenenti alla stessa storia
-        if best_cluster and best_score >= 0.62:
+        if (
+            best_cluster
+            and best_score >= 0.62
+        ):
 
-            best_cluster["items"].append(item)
+            best_cluster["items"].append(
+                item
+            )
 
         else:
 
@@ -584,14 +616,17 @@ def prepare_for_ai(clusters):
 
     prepared = []
 
-    # Prima le storie con più fonti
     clusters = sorted(
         clusters,
-        key=lambda cluster: len(cluster["items"]),
+        key=lambda cluster: len(
+            cluster["items"]
+        ),
         reverse=True
     )
 
-    for cluster in clusters[:MAX_GEMINI_CLUSTERS]:
+    for cluster in clusters[
+        :MAX_GEMINI_CLUSTERS
+    ]:
 
         items = cluster["items"]
 
@@ -611,10 +646,18 @@ def prepare_for_ai(clusters):
         representative = items[0]
 
         prepared.append({
-            "cluster_id": cluster["cluster_id"],
-            "title": representative["title"],
-            "description": representative["description"],
-            "published": representative["published"],
+            "cluster_id": cluster[
+                "cluster_id"
+            ],
+            "title": representative[
+                "title"
+            ],
+            "description": representative[
+                "description"
+            ],
+            "published": representative[
+                "published"
+            ],
             "source_count": len(sources),
             "sources": sources
         })
@@ -634,11 +677,14 @@ def main():
     print("==============================================")
     print()
 
+    # --------------------------------------------------------
+    # CONTROLLO AUTOMATICO
+    # --------------------------------------------------------
+
     print("CONTROLLO AUTOMATICO DEI FEED")
     print("----------------------------------------------")
 
     feed_status = []
-
     working_feeds = []
 
     for feed in FEEDS:
@@ -652,29 +698,37 @@ def main():
             working_feeds.append(feed)
 
             print(
-                f"OK       {feed['name']:<25} "
+                f"OK       "
+                f"{feed['name']:<25} "
                 f"{status['articles']} articoli"
             )
 
         elif status["status"] == "VUOTO":
 
             print(
-                f"VUOTO    {feed['name']:<25} "
+                f"VUOTO    "
+                f"{feed['name']:<25} "
                 f"{status['message']}"
             )
 
         else:
 
             print(
-                f"ERRORE   {feed['name']:<25} "
+                f"ERRORE   "
+                f"{feed['name']:<25} "
                 f"{status['message']}"
             )
 
     print()
+
     print(
         f"Feed funzionanti: "
         f"{len(working_feeds)}/{len(FEEDS)}"
     )
+
+    # --------------------------------------------------------
+    # RACCOLTA
+    # --------------------------------------------------------
 
     print()
     print("RACCOLTA NOTIZIE")
@@ -693,16 +747,19 @@ def main():
 
         all_items.extend(items)
 
-    # Limite globale
-    all_items = all_items[:MAX_TOTAL_ITEMS]
+    all_items = all_items[
+        :MAX_TOTAL_ITEMS
+    ]
 
     print()
+
     print(
-        f"Articoli raccolti: {len(all_items)}"
+        f"Articoli raccolti: "
+        f"{len(all_items)}"
     )
 
     # --------------------------------------------------------
-    # DEDUP
+    # DEDUPLICAZIONE
     # --------------------------------------------------------
 
     before_dedup = len(all_items)
@@ -712,7 +769,8 @@ def main():
     )
 
     removed_duplicates = (
-        before_dedup - len(unique_items)
+        before_dedup
+        - len(unique_items)
     )
 
     print(
@@ -721,7 +779,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # CLUSTER
+    # CLUSTERING
     # --------------------------------------------------------
 
     clusters = build_clusters(
@@ -747,34 +805,68 @@ def main():
     )
 
     # --------------------------------------------------------
-    # RISULTATO
+    # CREAZIONE CARTELLA DATA
+    # --------------------------------------------------------
+
+    os.makedirs(
+        "data",
+        exist_ok=True
+    )
+
+    # --------------------------------------------------------
+    # OUTPUT
     # --------------------------------------------------------
 
     output = {
+
         "generated_at": datetime.now(
             timezone.utc
         ).isoformat(),
 
         "config": {
-            "max_age_hours": MAX_AGE_HOURS,
-            "max_items_per_feed": MAX_ITEMS_PER_FEED,
-            "max_total_items": MAX_TOTAL_ITEMS,
-            "max_gemini_clusters": MAX_GEMINI_CLUSTERS
+
+            "max_age_hours":
+                MAX_AGE_HOURS,
+
+            "max_items_per_feed":
+                MAX_ITEMS_PER_FEED,
+
+            "max_total_items":
+                MAX_TOTAL_ITEMS,
+
+            "max_gemini_clusters":
+                MAX_GEMINI_CLUSTERS
         },
 
-        "feed_status": feed_status,
+        "feed_status":
+            feed_status,
 
         "statistics": {
-            "feeds_total": len(FEEDS),
-            "feeds_working": len(working_feeds),
-            "articles_collected": len(all_items),
-            "articles_after_dedup": len(unique_items),
-            "duplicates_removed": removed_duplicates,
-            "clusters_total": len(clusters),
-            "clusters_for_gemini": len(ai_items)
+
+            "feeds_total":
+                len(FEEDS),
+
+            "feeds_working":
+                len(working_feeds),
+
+            "articles_collected":
+                len(all_items),
+
+            "articles_after_dedup":
+                len(unique_items),
+
+            "duplicates_removed":
+                removed_duplicates,
+
+            "clusters_total":
+                len(clusters),
+
+            "clusters_for_gemini":
+                len(ai_items)
         },
 
-        "items": ai_items
+        "items":
+            ai_items
     }
 
     with open(
