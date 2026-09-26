@@ -1,18 +1,14 @@
 name: AI Vision Automation
-
-on:
-workflow_dispatch:
+on: workflow_dispatch
 
 jobs:
 ai-pipeline:
 runs-on: ubuntu-latest
+steps:
+- name: Scarica repository
+uses: actions/checkout@v5
 
 ```
-steps:
-
-  - name: Scarica repository
-    uses: actions/checkout@v5
-
   - name: Configura Python
     uses: actions/setup-python@v6
     with:
@@ -24,45 +20,27 @@ steps:
       pip install -r requirements.txt
 
   - name: Raccogli notizie RSS
-    run: |
-      echo "======================================"
-      echo "       AI VISION - RSS COLLECTOR"
-      echo "======================================"
-      python scripts/rss_collector.py
+    run: python scripts/rss_collector.py
 
   - name: Controlla output Collector
     run: |
-      echo "======================================"
-      echo "       CONTROLLO COLLECTOR"
-      echo "======================================"
-
       if [ ! -f data/rss_output.json ]; then
         echo "ERRORE: data/rss_output.json non trovato"
         exit 1
       fi
-
       echo "OK: data/rss_output.json presente"
 
   - name: Analizza notizie con Gemini
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-    run: |
-      echo "======================================"
-      echo "        AI VISION - AI FILTER"
-      echo "======================================"
-      python scripts/ai_filter.py
+    run: python scripts/ai_filter.py
 
   - name: Controlla output AI Filter
     run: |
-      echo "======================================"
-      echo "       CONTROLLO AI FILTER"
-      echo "======================================"
-
       if [ ! -f data/ai_candidates.json ]; then
         echo "ERRORE: data/ai_candidates.json non trovato"
         exit 1
       fi
-
       echo "OK: data/ai_candidates.json presente"
 
   - name: Mostra risultato AI
@@ -80,132 +58,35 @@ steps:
       with path.open("r", encoding="utf-8") as f:
           data = json.load(f)
 
-      print("")
       print(f"Articoli ricevuti: {data.get('total_received', 0)}")
       print(f"Articoli analizzati: {data.get('total_analyzed', 0)}")
       print(f"Approvati dall'AI: {data.get('total_passed_ai', 0)}")
       print(f"Candidati finali: {data.get('total_final_candidates', 0)}")
-      print("")
+      print()
 
-      print("======================================")
-      print("       DISTRIBUZIONE CATEGORIE")
-      print("======================================")
+      print("CANDIDATI FINALI")
+      print("--------------------------------------")
 
-      for category, count in data.get(
-          "category_distribution", {}
-      ).items():
-          print(f"{category}: {count}")
-
-      print("")
-
-      print("======================================")
-      print("       DISTRIBUZIONE TIPOLOGIE")
-      print("======================================")
-
-      for story_type, count in data.get(
-          "story_type_distribution", {}
-      ).items():
-          print(f"{story_type}: {count}")
-
-      print("")
-
-      print("======================================")
-      print("          CANDIDATI FINALI")
-      print("======================================")
-
-      items = data.get("items", [])
-
-      if not items:
-          print("Nessun candidato finale.")
-
-      for i, item in enumerate(items, 1):
-
-          title = item.get(
-              "title",
-              "Titolo non disponibile"
-          )
-
-          category = item.get(
-              "category",
-              "N/D"
-          )
-
-          story_type = item.get(
-              "story_type",
-              "N/D"
-          )
-
-          collector_score = item.get(
-              "collector_score",
-              0
-          )
-
-          final_score = item.get(
-              "final_score",
-              0
-          )
-
-          print("")
-          print(
-              f"{i}. [{final_score}] {title}"
-          )
-
-          print(
-              f"   Categoria: {category}"
-          )
-
-          print(
-              f"   Tipo: {story_type}"
-          )
-
-          print(
-              f"   Collector score: {collector_score}"
-          )
+      for i, item in enumerate(data.get("items", []), 1):
+          print(f"{i}. [{item.get('final_score', 0)}] {item.get('title', '')}")
+          print(f"   Categoria: {item.get('category', 'N/D')}")
+          print(f"   Tipo: {item.get('story_type', 'N/D')}")
+          print(f"   Collector score: {item.get('collector_score', 0)}")
 
           ai = item.get("ai", {})
 
           if ai:
-              print(
-                  f"   AI score: "
-                  f"{ai.get('score', 0)}"
-              )
+              print(f"   AI score: {ai.get('score', 0)}")
+              print(f"   Valore lettore: {ai.get('reader_value', 0)}")
+              print(f"   Rilevanza Italia: {ai.get('italian_relevance', 0)}")
+              print(f"   Originalità: {ai.get('originality_potential', 0)}")
+              print(f"   Valore commerciale: {ai.get('commercial_value', 0)}")
+              print(f"   Urgenza: {ai.get('urgency', 0)}")
+              print(f"   Formato: {ai.get('format', '')}")
+              print(f"   Motivo: {ai.get('reason', '')}")
 
-              print(
-                  f"   Valore lettore: "
-                  f"{ai.get('reader_value', 0)}"
-              )
+          print()
 
-              print(
-                  f"   Rilevanza Italia: "
-                  f"{ai.get('italian_relevance', 0)}"
-              )
-
-              print(
-                  f"   Originalità: "
-                  f"{ai.get('originality_potential', 0)}"
-              )
-
-              print(
-                  f"   Valore commerciale: "
-                  f"{ai.get('commercial_value', 0)}"
-              )
-
-              print(
-                  f"   Urgenza: "
-                  f"{ai.get('urgency', 0)}"
-              )
-
-              print(
-                  f"   Formato: "
-                  f"{ai.get('format', '')}"
-              )
-
-              print(
-                  f"   Motivo: "
-                  f"{ai.get('reason', '')}"
-              )
-
-      print("")
       print("======================================")
       print("             FINE PIPELINE")
       print("======================================")
