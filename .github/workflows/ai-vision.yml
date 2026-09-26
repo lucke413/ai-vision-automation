@@ -1,92 +1,227 @@
-```yaml
 name: AI Vision Automation
 
 on:
-  workflow_dispatch:
+workflow_dispatch:
 
 jobs:
-  ai-pipeline:
-    runs-on: ubuntu-latest
+ai-pipeline:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Scarica repository
-        uses: actions/checkout@v5
+```
+steps:
 
-      - name: Configura Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
+  - name: Scarica repository
+    uses: actions/checkout@v5
 
-      - name: Installa dipendenze
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+  - name: Configura Python
+    uses: actions/setup-python@v6
+    with:
+      python-version: "3.12"
 
-      - name: Raccogli notizie RSS
-        run: python scripts/rss_collector.py
+  - name: Installa dipendenze
+    run: |
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
 
-      - name: Analizza notizie con Gemini
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python scripts/ai_filter.py
+  - name: Raccogli notizie RSS
+    run: |
+      echo "======================================"
+      echo "       AI VISION - RSS COLLECTOR"
+      echo "======================================"
+      python scripts/rss_collector.py
 
-      - name: Mostra risultato AI
-        run: |
-          echo "======================================"
-          echo "       AI VISION - RISULTATO AI"
-          echo "======================================"
+  - name: Controlla output Collector
+    run: |
+      echo "======================================"
+      echo "       CONTROLLO COLLECTOR"
+      echo "======================================"
 
-          python - <<'PY'
-          import json
-          from pathlib import Path
+      if [ ! -f data/rss_output.json ]; then
+        echo "ERRORE: data/rss_output.json non trovato"
+        exit 1
+      fi
 
-          path = Path("data/ai_candidates.json")
+      echo "OK: data/rss_output.json presente"
 
-          if not path.exists():
-              print("ERRORE: data/ai_candidates.json non trovato")
-              raise SystemExit(1)
+  - name: Analizza notizie con Gemini
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    run: |
+      echo "======================================"
+      echo "        AI VISION - AI FILTER"
+      echo "======================================"
+      python scripts/ai_filter.py
 
-          with path.open("r", encoding="utf-8") as f:
-              data = json.load(f)
+  - name: Controlla output AI Filter
+    run: |
+      echo "======================================"
+      echo "       CONTROLLO AI FILTER"
+      echo "======================================"
 
-          print(f"Articoli ricevuti: {data.get('total_received', 0)}")
-          print(f"Articoli analizzati: {data.get('total_analyzed', 0)}")
-          print(f"Approvati dall'AI: {data.get('total_passed_ai', 0)}")
-          print(f"Candidati finali: {data.get('total_final_candidates', 0)}")
+      if [ ! -f data/ai_candidates.json ]; then
+        echo "ERRORE: data/ai_candidates.json non trovato"
+        exit 1
+      fi
+
+      echo "OK: data/ai_candidates.json presente"
+
+  - name: Mostra risultato AI
+    run: |
+      echo "======================================"
+      echo "       AI VISION - RISULTATO AI"
+      echo "======================================"
+
+      python - <<'PY'
+      import json
+      from pathlib import Path
+
+      path = Path("data/ai_candidates.json")
+
+      with path.open("r", encoding="utf-8") as f:
+          data = json.load(f)
+
+      print("")
+      print(f"Articoli ricevuti: {data.get('total_received', 0)}")
+      print(f"Articoli analizzati: {data.get('total_analyzed', 0)}")
+      print(f"Approvati dall'AI: {data.get('total_passed_ai', 0)}")
+      print(f"Candidati finali: {data.get('total_final_candidates', 0)}")
+      print("")
+
+      print("======================================")
+      print("       DISTRIBUZIONE CATEGORIE")
+      print("======================================")
+
+      for category, count in data.get(
+          "category_distribution", {}
+      ).items():
+          print(f"{category}: {count}")
+
+      print("")
+
+      print("======================================")
+      print("       DISTRIBUZIONE TIPOLOGIE")
+      print("======================================")
+
+      for story_type, count in data.get(
+          "story_type_distribution", {}
+      ).items():
+          print(f"{story_type}: {count}")
+
+      print("")
+
+      print("======================================")
+      print("          CANDIDATI FINALI")
+      print("======================================")
+
+      items = data.get("items", [])
+
+      if not items:
+          print("Nessun candidato finale.")
+
+      for i, item in enumerate(items, 1):
+
+          title = item.get(
+              "title",
+              "Titolo non disponibile"
+          )
+
+          category = item.get(
+              "category",
+              "N/D"
+          )
+
+          story_type = item.get(
+              "story_type",
+              "N/D"
+          )
+
+          collector_score = item.get(
+              "collector_score",
+              0
+          )
+
+          final_score = item.get(
+              "final_score",
+              0
+          )
+
           print("")
+          print(
+              f"{i}. [{final_score}] {title}"
+          )
 
-          print("CANDIDATI FINALI")
-          print("--------------------------------------")
+          print(
+              f"   Categoria: {category}"
+          )
 
-          for i, item in enumerate(data.get("items", []), 1):
+          print(
+              f"   Tipo: {story_type}"
+          )
+
+          print(
+              f"   Collector score: {collector_score}"
+          )
+
+          ai = item.get("ai", {})
+
+          if ai:
               print(
-                  f"{i}. "
-                  f"[{item.get('final_score', 0)}] "
-                  f"{item.get('title', '')}"
+                  f"   AI score: "
+                  f"{ai.get('score', 0)}"
               )
 
               print(
-                  f"   Categoria: {item.get('category', 'N/D')}"
+                  f"   Valore lettore: "
+                  f"{ai.get('reader_value', 0)}"
               )
 
               print(
-                  f"   Tipo: {item.get('story_type', 'N/D')}"
+                  f"   Rilevanza Italia: "
+                  f"{ai.get('italian_relevance', 0)}"
               )
 
-              print("")
+              print(
+                  f"   Originalità: "
+                  f"{ai.get('originality_potential', 0)}"
+              )
 
-          print("======================================")
-          PY
+              print(
+                  f"   Valore commerciale: "
+                  f"{ai.get('commercial_value', 0)}"
+              )
 
-      - name: Salva risultati RSS
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-vision-rss
-          path: data/rss_output.json
+              print(
+                  f"   Urgenza: "
+                  f"{ai.get('urgency', 0)}"
+              )
 
-      - name: Salva risultati AI
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-vision-ai-candidates
-          path: data/ai_candidates.json
+              print(
+                  f"   Formato: "
+                  f"{ai.get('format', '')}"
+              )
+
+              print(
+                  f"   Motivo: "
+                  f"{ai.get('reason', '')}"
+              )
+
+      print("")
+      print("======================================")
+      print("             FINE PIPELINE")
+      print("======================================")
+      PY
+
+  - name: Salva risultati RSS
+    uses: actions/upload-artifact@v4
+    with:
+      name: ai-vision-rss
+      path: data/rss_output.json
+      if-no-files-found: error
+
+  - name: Salva risultati AI
+    uses: actions/upload-artifact@v4
+    with:
+      name: ai-vision-ai-candidates
+      path: data/ai_candidates.json
+      if-no-files-found: error
 ```
