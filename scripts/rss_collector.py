@@ -21,7 +21,7 @@ MAX_GEMINI_CLUSTERS = 80
 REQUEST_TIMEOUT = 15
 
 HEADERS = {
-    "User-Agent": "AI-Vision-RSS-Collector/2.0"
+    "User-Agent": "AI-Vision-RSS-Collector/2.1"
 }
 
 
@@ -84,7 +84,6 @@ FEEDS = [
         "type": "AI"
     },
 
-
     # --------------------------------------------------------
     # ITALIANE
     # --------------------------------------------------------
@@ -141,7 +140,95 @@ FEEDS = [
 
 
 # ============================================================
-# UTILITY
+# STOPWORDS
+# ============================================================
+
+STOPWORDS = {
+    # Inglese
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "to",
+    "of",
+    "in",
+    "on",
+    "for",
+    "with",
+    "is",
+    "are",
+    "this",
+    "that",
+    "from",
+    "into",
+    "after",
+    "before",
+    "new",
+    "news",
+    "how",
+    "why",
+    "what",
+    "its",
+    "it",
+    "as",
+    "by",
+    "over",
+    "more",
+
+    # Italiano
+    "il",
+    "lo",
+    "la",
+    "i",
+    "gli",
+    "le",
+    "di",
+    "del",
+    "della",
+    "delle",
+    "dei",
+    "degli",
+    "e",
+    "o",
+    "per",
+    "con",
+    "un",
+    "una",
+    "uno",
+    "da",
+    "dal",
+    "dalla",
+    "su",
+    "nel",
+    "nella",
+    "nelle",
+    "nei",
+    "degli",
+    "come",
+    "che",
+    "non",
+    "anche",
+    "tra",
+    "fra",
+    "più",
+    "nuovo",
+    "nuova",
+    "nuovi",
+    "nuove",
+    "oggi",
+    "ora",
+    "sul",
+    "sulla",
+    "questo",
+    "questa",
+    "questi",
+    "queste"
+}
+
+
+# ============================================================
+# UTILITY TESTO
 # ============================================================
 
 def clean_text(text):
@@ -154,86 +241,188 @@ def clean_text(text):
     return text.strip()
 
 
+def normalize_text(text):
+    text = clean_text(text).lower()
+
+    text = re.sub(
+        r"https?://\S+",
+        " ",
+        text
+    )
+
+    text = text.replace("&amp;", " and ")
+
+    text = re.sub(
+        r"[^\w\s]",
+        " ",
+        text
+    )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
+
+    return text.strip()
+
+
 def normalize_title(title):
-    title = clean_text(title).lower()
-
-    title = re.sub(r"https?://\S+", "", title)
-    title = re.sub(r"[^\w\s]", " ", title)
-    title = re.sub(r"\s+", " ", title)
-
-    return title.strip()
+    return normalize_text(title)
 
 
-def title_tokens(title):
-    normalized = normalize_title(title)
+def extract_keywords(text, max_keywords=30):
 
-    stopwords = {
-        "the",
-        "a",
-        "an",
-        "and",
-        "or",
-        "to",
-        "of",
-        "in",
-        "on",
-        "for",
-        "with",
-        "is",
-        "are",
-        "il",
-        "lo",
-        "la",
-        "i",
-        "gli",
-        "le",
-        "di",
-        "del",
-        "della",
-        "dei",
-        "delle",
-        "e",
-        "o",
-        "per",
-        "con",
-        "un",
-        "una"
-    }
+    normalized = normalize_text(text)
 
-    return {
-        token
-        for token in normalized.split()
-        if len(token) >= 3 and token not in stopwords
-    }
+    words = normalized.split()
+
+    keywords = []
+
+    for word in words:
+
+        if len(word) < 4:
+            continue
+
+        if word in STOPWORDS:
+            continue
+
+        if word.isdigit():
+            continue
+
+        if word not in keywords:
+            keywords.append(word)
+
+    return keywords[:max_keywords]
 
 
-def title_similarity(title_a, title_b):
+def keyword_set(text):
 
-    norm_a = normalize_title(title_a)
-    norm_b = normalize_title(title_b)
+    return set(
+        extract_keywords(text)
+    )
 
-    if not norm_a or not norm_b:
+
+# ============================================================
+# SIMILARITÀ
+# ============================================================
+
+def sequence_similarity(text_a, text_b):
+
+    if not text_a or not text_b:
         return 0.0
 
-    sequence_score = SequenceMatcher(
+    return SequenceMatcher(
         None,
-        norm_a,
-        norm_b
+        text_a,
+        text_b
     ).ratio()
 
-    tokens_a = title_tokens(title_a)
-    tokens_b = title_tokens(title_b)
 
-    if not tokens_a or not tokens_b:
-        token_score = 0.0
-    else:
-        intersection = len(tokens_a & tokens_b)
-        union = len(tokens_a | tokens_b)
+def keyword_similarity(text_a, text_b):
 
-        token_score = intersection / union if union else 0.0
+    words_a = keyword_set(text_a)
+    words_b = keyword_set(text_b)
 
-    return max(sequence_score, token_score)
+    if not words_a or not words_b:
+        return 0.0
 
+    intersection = words_a & words_b
+    union = words_a | words_b
+
+    return (
+        len(intersection) / len(union)
+        if union
+        else 0.0
+    )
+
+
+def calculate_story_similarity(
+    item_a,
+    item_b
+):
+
+    title_a = normalize_title(
+        item_a.get("title", "")
+    )
+
+    title_b = normalize_title(
+        item_b.get("title", "")
+    )
+
+    description_a = normalize_text(
+        item_a.get("description", "")
+    )
+
+    description_b = normalize_text(
+        item_b.get("description", "")
+    )
+
+    # --------------------------------------------------------
+    # Similarità titoli
+    # --------------------------------------------------------
+
+    title_sequence = sequence_similarity(
+        title_a,
+        title_b
+    )
+
+    title_keywords = keyword_similarity(
+        title_a,
+        title_b
+    )
+
+    title_score = max(
+        title_sequence,
+        title_keywords
+    )
+
+    # --------------------------------------------------------
+    # Similarità descrizioni
+    # --------------------------------------------------------
+
+    description_keywords = keyword_similarity(
+        description_a,
+        description_b
+    )
+
+    # --------------------------------------------------------
+    # Keyword combinate titolo + descrizione
+    # --------------------------------------------------------
+
+    combined_a = (
+        title_a
+        + " "
+        + description_a
+    )
+
+    combined_b = (
+        title_b
+        + " "
+        + description_b
+    )
+
+    combined_keywords = keyword_similarity(
+        combined_a,
+        combined_b
+    )
+
+    # --------------------------------------------------------
+    # Score finale
+    # --------------------------------------------------------
+
+    score = (
+        title_score * 0.60
+        + description_keywords * 0.15
+        + combined_keywords * 0.25
+    )
+
+    return score
+
+
+# ============================================================
+# ID
+# ============================================================
 
 def make_id(url, title):
 
@@ -244,27 +433,48 @@ def make_id(url, title):
     ).hexdigest()[:16]
 
 
+# ============================================================
+# DATA
+# ============================================================
+
 def parse_date(entry):
 
     parsed = None
 
-    if getattr(entry, "published_parsed", None):
+    if getattr(
+        entry,
+        "published_parsed",
+        None
+    ):
         parsed = entry.published_parsed
 
-    elif getattr(entry, "updated_parsed", None):
+    elif getattr(
+        entry,
+        "updated_parsed",
+        None
+    ):
         parsed = entry.updated_parsed
 
     if parsed:
+
         try:
+
             return datetime(
                 *parsed[:6],
                 tzinfo=timezone.utc
             )
+
         except Exception:
             pass
 
-    return datetime.now(timezone.utc)
+    return datetime.now(
+        timezone.utc
+    )
 
+
+# ============================================================
+# IMMAGINE
+# ============================================================
 
 def get_image(entry):
 
@@ -278,9 +488,14 @@ def get_image(entry):
 
         for media in media_content:
 
-            if isinstance(media, dict):
+            if isinstance(
+                media,
+                dict
+            ):
 
-                url = media.get("url")
+                url = media.get(
+                    "url"
+                )
 
                 if url:
                     return url
@@ -295,9 +510,14 @@ def get_image(entry):
 
         for media in media_thumbnail:
 
-            if isinstance(media, dict):
+            if isinstance(
+                media,
+                dict
+            ):
 
-                url = media.get("url")
+                url = media.get(
+                    "url"
+                )
 
                 if url:
                     return url
@@ -312,11 +532,18 @@ def get_image(entry):
 
         for enclosure in enclosures:
 
-            if isinstance(enclosure, dict):
+            if isinstance(
+                enclosure,
+                dict
+            ):
 
                 url = (
-                    enclosure.get("href")
-                    or enclosure.get("url")
+                    enclosure.get(
+                        "href"
+                    )
+                    or enclosure.get(
+                        "url"
+                    )
                 )
 
                 if url:
@@ -326,7 +553,7 @@ def get_image(entry):
 
 
 # ============================================================
-# CONTROLLO AUTOMATICO DEI FEED
+# CONTROLLO AUTOMATICO FEED
 # ============================================================
 
 def check_feed(feed):
@@ -335,14 +562,28 @@ def check_feed(feed):
     url = feed["url"]
 
     result = {
+
         "name": name,
+
         "url": url,
-        "country": feed["country"],
-        "type": feed["type"],
-        "status": "ERRORE",
-        "http_status": None,
-        "articles": 0,
-        "message": ""
+
+        "country":
+            feed["country"],
+
+        "type":
+            feed["type"],
+
+        "status":
+            "ERRORE",
+
+        "http_status":
+            None,
+
+        "articles":
+            0,
+
+        "message":
+            ""
     }
 
     try:
@@ -353,12 +594,17 @@ def check_feed(feed):
             timeout=REQUEST_TIMEOUT
         )
 
-        result["http_status"] = response.status_code
+        result[
+            "http_status"
+        ] = response.status_code
 
         if response.status_code != 200:
 
-            result["message"] = (
-                f"HTTP {response.status_code}"
+            result[
+                "message"
+            ] = (
+                f"HTTP "
+                f"{response.status_code}"
             )
 
             return result
@@ -367,14 +613,25 @@ def check_feed(feed):
 
         if not content:
 
-            result["status"] = "VUOTO"
-            result["message"] = "Risposta vuota"
+            result[
+                "status"
+            ] = "VUOTO"
+
+            result[
+                "message"
+            ] = "Risposta vuota"
 
             return result
 
-        parsed = feedparser.parse(content)
+        parsed = feedparser.parse(
+            content
+        )
 
-        if getattr(parsed, "bozo", False):
+        if getattr(
+            parsed,
+            "bozo",
+            False
+        ):
 
             bozo_exception = getattr(
                 parsed,
@@ -384,30 +641,48 @@ def check_feed(feed):
 
             if not parsed.entries:
 
-                result["status"] = "ERRORE"
+                result[
+                    "status"
+                ] = "ERRORE"
 
-                result["message"] = (
-                    f"Feed non interpretabile: "
+                result[
+                    "message"
+                ] = (
+                    "Feed non interpretabile: "
                     f"{bozo_exception}"
                 )
 
                 return result
 
-        articles = len(parsed.entries)
+        articles = len(
+            parsed.entries
+        )
 
-        result["articles"] = articles
+        result[
+            "articles"
+        ] = articles
 
         if articles == 0:
 
-            result["status"] = "VUOTO"
-            result["message"] = (
+            result[
+                "status"
+            ] = "VUOTO"
+
+            result[
+                "message"
+            ] = (
                 "Nessun articolo trovato"
             )
 
             return result
 
-        result["status"] = "OK"
-        result["message"] = (
+        result[
+            "status"
+        ] = "OK"
+
+        result[
+            "message"
+        ] = (
             f"{articles} articoli disponibili"
         )
 
@@ -415,8 +690,13 @@ def check_feed(feed):
 
     except requests.RequestException as exc:
 
-        result["status"] = "ERRORE"
-        result["message"] = (
+        result[
+            "status"
+        ] = "ERRORE"
+
+        result[
+            "message"
+        ] = (
             f"Errore rete: {exc}"
         )
 
@@ -424,8 +704,13 @@ def check_feed(feed):
 
     except Exception as exc:
 
-        result["status"] = "ERRORE"
-        result["message"] = (
+        result[
+            "status"
+        ] = "ERRORE"
+
+        result[
+            "message"
+        ] = (
             f"Errore: {exc}"
         )
 
@@ -433,7 +718,7 @@ def check_feed(feed):
 
 
 # ============================================================
-# RACCOLTA FEED
+# RACCOLTA
 # ============================================================
 
 def collect_feed(feed):
@@ -459,8 +744,12 @@ def collect_feed(feed):
         )
 
         cutoff = (
-            datetime.now(timezone.utc)
-            - timedelta(hours=MAX_AGE_HOURS)
+            datetime.now(
+                timezone.utc
+            )
+            - timedelta(
+                hours=MAX_AGE_HOURS
+            )
         )
 
         for entry in parsed.entries[
@@ -484,7 +773,9 @@ def collect_feed(feed):
             if not title or not link:
                 continue
 
-            published = parse_date(entry)
+            published = parse_date(
+                entry
+            )
 
             if published < cutoff:
                 continue
@@ -501,29 +792,59 @@ def collect_feed(feed):
                 )
             )
 
-            image = get_image(entry)
+            image = get_image(
+                entry
+            )
 
             item = {
-                "id": make_id(
+
+                "id":
+                    make_id(
+                        link,
+                        title
+                    ),
+
+                "title":
+                    title,
+
+                "link":
                     link,
-                    title
-                ),
-                "title": title,
-                "link": link,
-                "description": description,
-                "published": published.isoformat(),
-                "source": name,
-                "country": feed["country"],
-                "type": feed["type"],
-                "image": image
+
+                "description":
+                    description,
+
+                "published":
+                    published.isoformat(),
+
+                "source":
+                    name,
+
+                "country":
+                    feed["country"],
+
+                "type":
+                    feed["type"],
+
+                "image":
+                    image,
+
+                "keywords":
+                    extract_keywords(
+                        title
+                        + " "
+                        + description
+                    )
             }
 
-            items.append(item)
+            items.append(
+                item
+            )
 
     except Exception as exc:
 
         print(
-            f"   Errore raccolta {name}: {exc}"
+            f"   Errore raccolta "
+            f"{name}: {exc}"
         )
 
     return items
@@ -533,31 +854,47 @@ def collect_feed(feed):
 # DEDUPLICAZIONE ESATTA
 # ============================================================
 
-def remove_exact_duplicates(items):
+def remove_exact_duplicates(
+    items
+):
 
-    seen = set()
+    seen_urls = set()
+    seen_titles = set()
+
     unique = []
 
     for item in items:
 
-        key = (
-            item["link"].strip().lower()
-            or normalize_title(
-                item["title"]
-            )
+        url = (
+            item["link"]
+            .strip()
+            .lower()
         )
 
-        if key in seen:
+        title = normalize_title(
+            item["title"]
+        )
+
+        # URL identico
+        if url in seen_urls:
             continue
 
-        seen.add(key)
-        unique.append(item)
+        # Titolo identico
+        if title in seen_titles:
+            continue
+
+        seen_urls.add(url)
+        seen_titles.add(title)
+
+        unique.append(
+            item
+        )
 
     return unique
 
 
 # ============================================================
-# CLUSTERING
+# CLUSTERING 2.1
 # ============================================================
 
 def build_clusters(items):
@@ -571,55 +908,104 @@ def build_clusters(items):
 
         for cluster in clusters:
 
-            representative = (
-                cluster["items"][0]
-            )
+            # Confrontiamo la nuova notizia
+            # con tutti gli articoli del cluster,
+            # non solamente con il primo.
+            cluster_best_score = 0.0
 
-            score = title_similarity(
-                item["title"],
-                representative["title"]
-            )
+            for existing_item in cluster[
+                "items"
+            ]:
 
-            if score > best_score:
+                score = calculate_story_similarity(
+                    item,
+                    existing_item
+                )
 
-                best_score = score
+                if score > cluster_best_score:
+                    cluster_best_score = score
+
+            if cluster_best_score > best_score:
+
+                best_score = (
+                    cluster_best_score
+                )
+
                 best_cluster = cluster
+
+        # ----------------------------------------------------
+        # SOGLIA
+        # ----------------------------------------------------
 
         if (
             best_cluster
-            and best_score >= 0.62
+            and best_score >= 0.48
         ):
 
-            best_cluster["items"].append(
+            best_cluster[
+                "items"
+            ].append(
                 item
+            )
+
+            best_cluster[
+                "similarity_scores"
+            ].append(
+                round(
+                    best_score,
+                    3
+                )
             )
 
         else:
 
             cluster_id = hashlib.sha256(
-                item["id"].encode("utf-8")
+                item["id"].encode(
+                    "utf-8"
+                )
             ).hexdigest()[:12]
 
             clusters.append({
-                "cluster_id": cluster_id,
-                "items": [item]
+
+                "cluster_id":
+                    cluster_id,
+
+                "items":
+                    [item],
+
+                "similarity_scores":
+                    []
             })
 
     return clusters
 
 
 # ============================================================
-# PREPARAZIONE PER GEMINI
+# PREPARAZIONE GEMINI
 # ============================================================
 
-def prepare_for_ai(clusters):
+def prepare_for_ai(
+    clusters
+):
 
     prepared = []
 
+    # Prima i cluster con più fonti.
+    # Sono potenzialmente più importanti
+    # perché più siti stanno trattando
+    # la stessa storia.
     clusters = sorted(
         clusters,
-        key=lambda cluster: len(
-            cluster["items"]
+        key=lambda cluster: (
+            len(
+                cluster["items"]
+            ),
+            max(
+                cluster[
+                    "similarity_scores"
+                ]
+                or [0]
+            )
         ),
         reverse=True
     )
@@ -628,38 +1014,85 @@ def prepare_for_ai(clusters):
         :MAX_GEMINI_CLUSTERS
     ]:
 
-        items = cluster["items"]
+        items = cluster[
+            "items"
+        ]
 
         sources = []
+
+        all_keywords = set()
 
         for item in items:
 
             sources.append({
-                "source": item["source"],
-                "country": item["country"],
-                "title": item["title"],
-                "description": item["description"],
-                "url": item["link"],
-                "published": item["published"]
+
+                "source":
+                    item["source"],
+
+                "country":
+                    item["country"],
+
+                "title":
+                    item["title"],
+
+                "description":
+                    item["description"],
+
+                "url":
+                    item["link"],
+
+                "published":
+                    item["published"]
             })
+
+            all_keywords.update(
+                item.get(
+                    "keywords",
+                    []
+                )
+            )
+
+        # Ordina le fonti per data
+        sources.sort(
+            key=lambda source:
+                source["published"],
+            reverse=True
+        )
 
         representative = items[0]
 
         prepared.append({
-            "cluster_id": cluster[
-                "cluster_id"
-            ],
-            "title": representative[
-                "title"
-            ],
-            "description": representative[
-                "description"
-            ],
-            "published": representative[
-                "published"
-            ],
-            "source_count": len(sources),
-            "sources": sources
+
+            "cluster_id":
+                cluster[
+                    "cluster_id"
+                ],
+
+            "title":
+                representative[
+                    "title"
+                ],
+
+            "description":
+                representative[
+                    "description"
+                ],
+
+            "published":
+                representative[
+                    "published"
+                ],
+
+            "source_count":
+                len(sources),
+
+            "sources":
+                sources,
+
+            "keywords":
+                sorted(
+                    all_keywords
+                )
         })
 
     return prepared
@@ -672,30 +1105,49 @@ def prepare_for_ai(clusters):
 def main():
 
     print()
-    print("==============================================")
-    print("       AI VISION - RSS COLLECTOR 2.0")
-    print("==============================================")
+    print(
+        "=============================================="
+    )
+    print(
+        "       AI VISION - RSS COLLECTOR 2.1"
+    )
+    print(
+        "=============================================="
+    )
     print()
 
     # --------------------------------------------------------
-    # CONTROLLO AUTOMATICO
+    # CONTROLLO FEED
     # --------------------------------------------------------
 
-    print("CONTROLLO AUTOMATICO DEI FEED")
-    print("----------------------------------------------")
+    print(
+        "CONTROLLO AUTOMATICO DEI FEED"
+    )
+
+    print(
+        "----------------------------------------------"
+    )
 
     feed_status = []
     working_feeds = []
 
     for feed in FEEDS:
 
-        status = check_feed(feed)
+        status = check_feed(
+            feed
+        )
 
-        feed_status.append(status)
+        feed_status.append(
+            status
+        )
 
-        if status["status"] == "OK":
+        if status[
+            "status"
+        ] == "OK":
 
-            working_feeds.append(feed)
+            working_feeds.append(
+                feed
+            )
 
             print(
                 f"OK       "
@@ -703,7 +1155,9 @@ def main():
                 f"{status['articles']} articoli"
             )
 
-        elif status["status"] == "VUOTO":
+        elif status[
+            "status"
+        ] == "VUOTO":
 
             print(
                 f"VUOTO    "
@@ -723,7 +1177,8 @@ def main():
 
     print(
         f"Feed funzionanti: "
-        f"{len(working_feeds)}/{len(FEEDS)}"
+        f"{len(working_feeds)}"
+        f"/{len(FEEDS)}"
     )
 
     # --------------------------------------------------------
@@ -731,21 +1186,31 @@ def main():
     # --------------------------------------------------------
 
     print()
-    print("RACCOLTA NOTIZIE")
-    print("----------------------------------------------")
+
+    print(
+        "RACCOLTA NOTIZIE"
+    )
+
+    print(
+        "----------------------------------------------"
+    )
 
     all_items = []
 
     for feed in working_feeds:
 
-        items = collect_feed(feed)
+        items = collect_feed(
+            feed
+        )
 
         print(
             f"{feed['name']:<25} "
             f"{len(items)} articoli validi"
         )
 
-        all_items.extend(items)
+        all_items.extend(
+            items
+        )
 
     all_items = all_items[
         :MAX_TOTAL_ITEMS
@@ -762,10 +1227,14 @@ def main():
     # DEDUPLICAZIONE
     # --------------------------------------------------------
 
-    before_dedup = len(all_items)
-
-    unique_items = remove_exact_duplicates(
+    before_dedup = len(
         all_items
+    )
+
+    unique_items = (
+        remove_exact_duplicates(
+            all_items
+        )
     )
 
     removed_duplicates = (
@@ -786,9 +1255,37 @@ def main():
         unique_items
     )
 
+    multi_source_clusters = sum(
+        1
+        for cluster in clusters
+        if len(
+            cluster["items"]
+        ) > 1
+    )
+
+    largest_cluster = max(
+        (
+            len(
+                cluster["items"]
+            )
+            for cluster in clusters
+        ),
+        default=0
+    )
+
     print(
         f"Storie/cluster individuati: "
         f"{len(clusters)}"
+    )
+
+    print(
+        f"Cluster con più fonti: "
+        f"{multi_source_clusters}"
+    )
+
+    print(
+        f"Dimensione massima cluster: "
+        f"{largest_cluster}"
     )
 
     # --------------------------------------------------------
@@ -805,7 +1302,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # CREAZIONE CARTELLA DATA
+    # CARTELLA DATA
     # --------------------------------------------------------
 
     os.makedirs(
@@ -819,9 +1316,13 @@ def main():
 
     output = {
 
-        "generated_at": datetime.now(
-            timezone.utc
-        ).isoformat(),
+        "generated_at":
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+
+        "collector_version":
+            "2.1",
 
         "config": {
 
@@ -835,7 +1336,10 @@ def main():
                 MAX_TOTAL_ITEMS,
 
             "max_gemini_clusters":
-                MAX_GEMINI_CLUSTERS
+                MAX_GEMINI_CLUSTERS,
+
+            "cluster_threshold":
+                0.48
         },
 
         "feed_status":
@@ -861,6 +1365,12 @@ def main():
             "clusters_total":
                 len(clusters),
 
+            "multi_source_clusters":
+                multi_source_clusters,
+
+            "largest_cluster":
+                largest_cluster,
+
             "clusters_for_gemini":
                 len(ai_items)
         },
@@ -883,9 +1393,19 @@ def main():
         )
 
     print()
-    print("==============================================")
-    print("RSS COLLECTOR COMPLETATO")
-    print("==============================================")
+
+    print(
+        "=============================================="
+    )
+
+    print(
+        "RSS COLLECTOR 2.1 COMPLETATO"
+    )
+
+    print(
+        "=============================================="
+    )
+
     print()
 
 
