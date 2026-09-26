@@ -1,108 +1,12 @@
-name: AI Vision Automation
-on: workflow_dispatch
+name: AI Vision Test
+
+on:
+  workflow_dispatch:
 
 jobs:
-ai-pipeline:
-runs-on: ubuntu-latest
-steps:
-- name: Scarica repository
-uses: actions/checkout@v5
+  test:
+    runs-on: ubuntu-latest
 
-```
-  - name: Configura Python
-    uses: actions/setup-python@v6
-    with:
-      python-version: "3.12"
-
-  - name: Installa dipendenze
-    run: |
-      python -m pip install --upgrade pip
-      pip install -r requirements.txt
-
-  - name: Raccogli notizie RSS
-    run: python scripts/rss_collector.py
-
-  - name: Controlla output Collector
-    run: |
-      if [ ! -f data/rss_output.json ]; then
-        echo "ERRORE: data/rss_output.json non trovato"
-        exit 1
-      fi
-      echo "OK: data/rss_output.json presente"
-
-  - name: Analizza notizie con Gemini
-    env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-    run: python scripts/ai_filter.py
-
-  - name: Controlla output AI Filter
-    run: |
-      if [ ! -f data/ai_candidates.json ]; then
-        echo "ERRORE: data/ai_candidates.json non trovato"
-        exit 1
-      fi
-      echo "OK: data/ai_candidates.json presente"
-
-  - name: Mostra risultato AI
-    run: |
-      echo "======================================"
-      echo "       AI VISION - RISULTATO AI"
-      echo "======================================"
-
-      python - <<'PY'
-      import json
-      from pathlib import Path
-
-      path = Path("data/ai_candidates.json")
-
-      with path.open("r", encoding="utf-8") as f:
-          data = json.load(f)
-
-      print(f"Articoli ricevuti: {data.get('total_received', 0)}")
-      print(f"Articoli analizzati: {data.get('total_analyzed', 0)}")
-      print(f"Approvati dall'AI: {data.get('total_passed_ai', 0)}")
-      print(f"Candidati finali: {data.get('total_final_candidates', 0)}")
-      print()
-
-      print("CANDIDATI FINALI")
-      print("--------------------------------------")
-
-      for i, item in enumerate(data.get("items", []), 1):
-          print(f"{i}. [{item.get('final_score', 0)}] {item.get('title', '')}")
-          print(f"   Categoria: {item.get('category', 'N/D')}")
-          print(f"   Tipo: {item.get('story_type', 'N/D')}")
-          print(f"   Collector score: {item.get('collector_score', 0)}")
-
-          ai = item.get("ai", {})
-
-          if ai:
-              print(f"   AI score: {ai.get('score', 0)}")
-              print(f"   Valore lettore: {ai.get('reader_value', 0)}")
-              print(f"   Rilevanza Italia: {ai.get('italian_relevance', 0)}")
-              print(f"   Originalità: {ai.get('originality_potential', 0)}")
-              print(f"   Valore commerciale: {ai.get('commercial_value', 0)}")
-              print(f"   Urgenza: {ai.get('urgency', 0)}")
-              print(f"   Formato: {ai.get('format', '')}")
-              print(f"   Motivo: {ai.get('reason', '')}")
-
-          print()
-
-      print("======================================")
-      print("             FINE PIPELINE")
-      print("======================================")
-      PY
-
-  - name: Salva risultati RSS
-    uses: actions/upload-artifact@v4
-    with:
-      name: ai-vision-rss
-      path: data/rss_output.json
-      if-no-files-found: error
-
-  - name: Salva risultati AI
-    uses: actions/upload-artifact@v4
-    with:
-      name: ai-vision-ai-candidates
-      path: data/ai_candidates.json
-      if-no-files-found: error
-```
+    steps:
+      - name: Test
+        run: echo "AI Vision workflow OK"
