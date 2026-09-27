@@ -13,10 +13,10 @@ import requests
 
 
 # ============================================================
-# AI VISION - RSS COLLECTOR 2.3.1
+# AI VISION - RSS COLLECTOR 2.3.2
 # ============================================================
 
-VERSION = "2.3.1"
+VERSION = "2.3.2"
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_FILE = BASE_DIR / "data/rss_output.json"
 
@@ -679,6 +679,51 @@ def canonical_url(value):
         return ""
 
 
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg")
+
+
+def is_probable_image_url(value):
+    """Evita di usare come articolo il link di un'immagine/enclosure."""
+
+    try:
+        parts = urlsplit(str(value).strip())
+    except ValueError:
+        return True
+
+    host = parts.netloc.lower()
+    path = parts.path.lower()
+
+    return path.endswith(IMAGE_EXTENSIONS) or host.startswith("images.")
+
+
+def extract_entry_url(entry):
+    """Restituisce il link HTML dell'articolo, non quello dell'immagine.
+
+    Alcuni feed Atom, in particolare DDay, espongono un ``link`` generico
+    che feedparser può valorizzare con l'enclosure immagine. Diamo quindi
+    priorità ai link ``rel=alternate`` e usiamo id/link solo come fallback.
+    """
+
+    links = entry.get("links") or []
+
+    if isinstance(links, list):
+        for link in links:
+            if not isinstance(link, dict):
+                continue
+            rel = str(link.get("rel") or "").lower()
+            href = link.get("href") or link.get("url") or link.get("value")
+            if rel == "alternate" and href and not is_probable_image_url(href):
+                return str(href).strip()
+
+    # Per feed che non dichiarano rel=alternate, preferiamo comunque un
+    # candidato non-immagine tra id e link.
+    for candidate in (entry.get("id"), entry.get("link")):
+        if candidate and not is_probable_image_url(candidate):
+            return str(candidate).strip()
+
+    return ""
+
+
 # ============================================================
 # RACCOLTA FEED
 # ============================================================
@@ -780,7 +825,7 @@ def collect_items():
 
             description = clean_html(entry.get("summary") or entry.get("description"))[:4000]
 
-            url = canonical_url(entry.get("link") or "")
+            url = canonical_url(extract_entry_url(entry))
 
             if not url:
                 continue
