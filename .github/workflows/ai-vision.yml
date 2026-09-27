@@ -49,7 +49,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m pip check
-          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py
+          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py
 
       - name: Raccogli notizie RSS
         run: python scripts/rss_collector.py
@@ -94,6 +94,26 @@ jobs:
               print(f"{i}. [{item['final_score']}] [{item['category']}] {item['title']}")
           PY
 
+      - name: Seleziona articoli giornalieri
+        run: python scripts/daily_selector.py
+
+      - name: Controlla selezione giornaliera
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("data/daily_articles.json").read_text(encoding="utf-8"))
+          items = data.get("items")
+          if data.get("status") != "ok" or not isinstance(items, list) or len(items) != 5:
+              raise SystemExit("ERRORE: la selezione giornaliera non contiene esattamente 5 articoli.")
+          ids = [item.get("article_id") for item in items]
+          if not all(ids) or len(ids) != len(set(ids)):
+              raise SystemExit("ERRORE: identificativi articolo mancanti o duplicati.")
+          if data.get("offer_count", 0) > 1:
+              raise SystemExit("ERRORE: la selezione giornaliera contiene più di un'offerta.")
+          print(f"OK: {len(items)} articoli giornalieri; offerte: {data.get('offer_count', 0)}")
+          PY
+
       - name: Salva risultati RSS anche in caso di errore
         if: ${{ always() && hashFiles('data/rss_output.json') != '' }}
         uses: actions/upload-artifact@v4
@@ -109,5 +129,14 @@ jobs:
         with:
           name: ai-vision-ai-candidates
           path: data/ai_candidates.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Salva selezione giornaliera anche in caso di errore
+        if: ${{ always() && hashFiles('data/daily_articles.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-vision-daily-articles
+          path: data/daily_articles.json
           if-no-files-found: error
           retention-days: 7
