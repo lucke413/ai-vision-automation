@@ -1302,6 +1302,19 @@ def main():
         candidates
     )
 
+    # Il bilanciamento sceglie le categorie in piu' passaggi; l'output
+    # deve comunque presentare i candidati dal punteggio piu' alto al piu'
+    # basso, senza modificare la composizione per categoria.
+    selected = sorted(
+        selected,
+        key=lambda item: (
+            item.get("final_score", 0),
+            item.get("ai_analysis", {}).get("ai_score", 0),
+            item.get("title", ""),
+        ),
+        reverse=True,
+    )
+
     # --------------------------------------------------------
     # Se qualche candidato approvato è rimasto fuori
     # --------------------------------------------------------
