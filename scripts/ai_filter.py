@@ -1,13 +1,38 @@
-import os
+"""
+AI VISION - AI FILTER 2.6
+Filtro editoriale intelligente con Gemini
+
+INPUT:
+    data/rss_output.json
+
+OUTPUT:
+    data/ai_candidates.json
+
+Versione 2.6:
+- filtro editoriale bilanciato
+- classificazione categorie
+- scoring AI
+- valore per il lettore
+- rilevanza italiana
+- originalità
+- valore commerciale
+- urgenza
+- selezione bilanciata per categoria
+- gestione intelligente del rate limit Gemini 429
+"""
+
 import json
-import time
+import os
 import re
-import requests
+import time
+import random
 from collections import Counter
+
+import requests
 
 
 # ============================================================
-# AI VISION - AI FILTER 2.6
+# CONFIGURAZIONE
 # ============================================================
 
 VERSION = "2.6"
@@ -17,20 +42,39 @@ OUTPUT_FILE = "data/ai_candidates.json"
 
 MODEL = "gemini-3.5-flash-lite"
 
-MAX_ARTICLES_TO_ANALYZE = 80
+MAX_ARTICLES = 80
 MAX_FINAL_CANDIDATES = 20
 
-REQUEST_DELAY = 1.0
+# ------------------------------------------------------------
+# RATE LIMIT GEMINI
+# ------------------------------------------------------------
 
-# Soglie principali
+# Il limite rilevato sul progetto è 15 richieste/minuto.
+# 6 secondi = circa 10 richieste/minuto.
+REQUEST_DELAY = 6.0
+
+# Numero massimo di tentativi per una singola richiesta
+MAX_RETRIES = 4
+
+# Piccolo margine aggiuntivo dopo il retryDelay di Gemini
+RETRY_BUFFER = 2.0
+
+# Timeout HTTP
+REQUEST_TIMEOUT = 60
+
+
+# ------------------------------------------------------------
+# SOGLIE EDITORIALI
+# ------------------------------------------------------------
+
 MIN_AI_SCORE = 55
 MIN_COLLECTOR_SCORE = 45
 MIN_READER_VALUE = 45
 
 
-# ============================================================
+# ------------------------------------------------------------
 # LIMITI PER CATEGORIA
-# ============================================================
+# ------------------------------------------------------------
 
 CATEGORY_LIMITS = {
     "Smartphone & Mobile": 5,
@@ -47,359 +91,402 @@ CATEGORY_LIMITS = {
 
 
 # ============================================================
-# HEADER
+# CATEGORIE E TIPI
 # ============================================================
 
-print()
-print("=" * 40)
-print()
-print("       AI VISION - AI FILTER 2.6")
-print()
-print("=" * 40)
-print()
-print("VERSIONE FILTRO:", VERSION)
-print("MODELLO:", MODEL)
-print("INPUT:", INPUT_FILE)
-print("OUTPUT:", OUTPUT_FILE)
-print()
+VALID_CATEGORIES = [
+    "Smartphone & Mobile",
+    "PC & Hardware",
+    "Gaming",
+    "Software & App",
+    "AI",
+    "Sicurezza",
+    "Gadget & Consumer Tech",
+    "Streaming & Entertainment",
+    "Offerte & Prezzi",
+    "Tecnologia",
+]
 
 
-# ============================================================
-# LETTURA API KEY
-# ============================================================
-
-API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-
-if not API_KEY:
-    print("ERRORE: GEMINI_API_KEY non presente.")
-    raise SystemExit(1)
-
-
-# ============================================================
-# LETTURA RSS
-# ============================================================
-
-if not os.path.exists(INPUT_FILE):
-    print(f"ERRORE: file non trovato: {INPUT_FILE}")
-    raise SystemExit(1)
-
-with open(INPUT_FILE, "r", encoding="utf-8") as f:
-    rss_data = json.load(f)
-
-
-items = rss_data.get("items", [])
-
-if not isinstance(items, list):
-    print("ERRORE: il campo 'items' non contiene una lista.")
-    raise SystemExit(1)
-
-
-items = items[:MAX_ARTICLES_TO_ANALYZE]
-
-print("Articoli ricevuti:", len(items))
-print("Modello:", MODEL)
-print()
-
-
-# ============================================================
-# URL GEMINI
-# ============================================================
-
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/"
-    f"models/{MODEL}:generateContent"
-    f"?key={API_KEY}"
-)
-
-
-# ============================================================
-# FUNZIONI DI SUPPORTO
-# ============================================================
-
-def clean_text(value, max_length=4000):
-    if value is None:
-        return ""
-
-    value = str(value)
-
-    value = re.sub(r"\s+", " ", value)
-
-    return value.strip()[:max_length]
-
-
-def safe_int(value, default=0):
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def normalize_category(category):
-    if not category:
-        return "Tecnologia"
-
-    category = str(category).strip()
-
-    aliases = {
-        "Smartphone": "Smartphone & Mobile",
-        "Mobile": "Smartphone & Mobile",
-        "PC": "PC & Hardware",
-        "Hardware": "PC & Hardware",
-        "Software": "Software & App",
-        "App": "Software & App",
-        "AI & Machine Learning": "AI",
-        "Artificial Intelligence": "AI",
-        "Security": "Sicurezza",
-        "Gadget": "Gadget & Consumer Tech",
-        "Consumer Tech": "Gadget & Consumer Tech",
-        "Streaming": "Streaming & Entertainment",
-        "Entertainment": "Streaming & Entertainment",
-        "Deals": "Offerte & Prezzi",
-        "Offerte": "Offerte & Prezzi",
-    }
-
-    if category in aliases:
-        category = aliases[category]
-
-    if category not in CATEGORY_LIMITS:
-        category = "Tecnologia"
-
-    return category
-
-
-def normalize_story_type(story_type):
-    allowed = {
-        "OFFERTA",
-        "RECENSIONE",
-        "GUIDA",
-        "SICUREZZA",
-        "RUMOR",
-        "SCIENZA",
-        "ANALISI",
-        "AZIENDALE",
-        "NEWS",
-    }
-
-    story_type = str(story_type or "NEWS").strip().upper()
-
-    if story_type not in allowed:
-        return "NEWS"
-
-    return story_type
+VALID_STORY_TYPES = [
+    "OFFERTA",
+    "RECENSIONE",
+    "GUIDA",
+    "SICUREZZA",
+    "RUMOR",
+    "SCIENZA",
+    "ANALISI",
+    "AZIENDALE",
+    "NEWS",
+]
 
 
 # ============================================================
 # PROMPT GEMINI
 # ============================================================
 
-def build_prompt(item):
+SYSTEM_PROMPT = """
+Sei il responsabile editoriale di AI Vision, un magazine italiano
+generalista dedicato a tecnologia, prodotti, servizi digitali,
+smartphone, PC, gaming, software, sicurezza, AI, gadget,
+streaming e offerte.
 
-    title = clean_text(
-        item.get("title")
-        or item.get("name")
-        or "",
-        500
-    )
+OBIETTIVO:
+Selezionare solo le notizie che possono diventare articoli utili,
+interessanti e leggibili per un pubblico italiano generalista.
 
-    description = clean_text(
-        item.get("description")
-        or item.get("summary")
-        or "",
-        2500
-    )
+AI Vision NON deve essere un sito dedicato esclusivamente all'AI.
 
-    source = clean_text(
-        item.get("source")
-        or item.get("source_name")
-        or "",
-        300
-    )
-
-    category = clean_text(
-        item.get("category")
-        or "",
-        100
-    )
-
-    story_type = clean_text(
-        item.get("story_type")
-        or "",
-        100
-    )
-
-    collector_score = safe_int(
-        item.get("score")
-        or item.get("collector_score")
-        or item.get("source_score")
-        or 0
-    )
-
-    prompt = f"""
-Sei il direttore editoriale di AI Vision, magazine italiano generalista dedicato alla tecnologia consumer.
-
-Devi valutare una notizia proveniente da un feed RSS e stabilire se può diventare un articolo utile per AI Vision.
-
-AI Vision tratta:
-- smartphone e mobile
+PRIORITÀ EDITORIALI:
+- novità tecnologiche concrete
+- nuovi prodotti
+- smartphone
 - PC e hardware
 - gaming
 - software e app
-- intelligenza artificiale
-- sicurezza
-- gadget e tecnologia consumer
-- streaming e entertainment
+- sicurezza informatica
+- gadget e consumer tech
+- streaming
 - offerte e prezzi
-- tecnologia generale
+- guide utili
+- cambiamenti che interessano realmente gli utenti
+- AI quando è realmente interessante o utile
+
+EVITARE:
+- comunicati aziendali privi di interesse per il lettore
+- notizie esclusivamente finanziarie
+- risultati trimestrali
+- contenuti autoreferenziali delle aziende
+- notizie troppo tecniche
+- articoli duplicati
+- rumor molto deboli
+- notizie senza conseguenze concrete per il lettore
+- contenuti generici e banali
+- contenuti che sembrano scritti solo per riempire il sito
+
+VALUTA OGNI ARTICOLO INDIPENDENTEMENTE.
 
 IMPORTANTE:
-AI Vision NON è un sito esclusivamente dedicato all'intelligenza artificiale.
+Non decidere in base alla fama della fonte.
+Una fonte meno famosa può contenere una notizia molto interessante.
 
-Preferisci contenuti:
-- utili al lettore italiano;
-- concreti;
-- interessanti per utenti consumer;
-- con un possibile valore pratico;
-- relativi a prodotti, servizi, software, sicurezza, gaming o tecnologia;
-- con informazioni sufficienti per sviluppare un articolo originale.
+CORREGGI LA CATEGORIA SOLO QUANDO È EVIDENTEMENTE SBAGLIATA.
+"""
 
-Evita:
-- comunicati aziendali puri;
-- contenuti finanziari;
-- risultati trimestrali;
-- notizie esclusivamente corporate;
-- contenuti troppo tecnici per un pubblico generalista;
-- articoli privi di interesse pratico;
-- notizie duplicate o estremamente simili a contenuti comuni;
-- contenuti palesemente promozionali;
-- rumor molto deboli;
-- contenuti politici non pertinenti alla tecnologia.
 
-Una notizia aziendale può essere accettata SOLO se ha un impatto concreto e interessante sulla tecnologia consumer.
+def build_prompt(article):
+    """
+    Costruisce il prompt per Gemini.
+    """
 
-Una notizia AI può essere accettata se ha un'utilità o un interesse concreto per il lettore. Non favorire automaticamente le notizie AI.
+    title = article.get("title", "")
+    description = article.get("description", "")
+    source = article.get("source", "")
+    category = article.get("category", "")
+    story_type = article.get("story_type", "")
 
-VALUTA:
+    return f"""
+{SYSTEM_PROMPT}
 
-1. publishable
-   true/false
+Analizza il seguente articolo.
 
-2. ai_score
-   0-100
-   Quanto la notizia è adatta editorialmente ad AI Vision.
-
-3. reader_value
-   0-100
-   Quanto è utile/interessante per un lettore italiano.
-
-4. italian_relevance
-   0-100
-   Quanto è rilevante per il pubblico italiano.
-
-5. originality
-   0-100
-   Quanto offre un angolo editoriale interessante e non banale.
-
-6. urgency
-   0-100
-   Quanto è importante pubblicarla rapidamente.
-
-7. commercial_value
-   0-100
-   Possibile valore commerciale/affiliate/consumer.
-
-8. format
-   Scegli tra:
-   NEWS
-   GUIDA
-   RECENSIONE
-   OFFERTA
-   SICUREZZA
-   RUMOR
-   SCIENZA
-   ANALISI
-
-9. suggested_category
-   Deve essere una delle categorie:
-   Smartphone & Mobile
-   PC & Hardware
-   Gaming
-   Software & App
-   AI
-   Sicurezza
-   Gadget & Consumer Tech
-   Streaming & Entertainment
-   Offerte & Prezzi
-   Tecnologia
-
-10. suggested_story_type
-
-11. classification_issue
-   true/false
-
-12. reason
-   Breve motivazione in italiano.
-
-REGOLE SPECIALI:
-
-- Le offerte devono avere un reale interesse commerciale.
-- I rumor devono essere trattati con cautela.
-- Le notizie aziendali devono avere un impatto concreto sul lettore.
-- Le notizie di sicurezza sono importanti se riguardano utenti, dispositivi, account, software o servizi realmente utilizzati.
-- Una recensione può essere interessante anche se riguarda un prodotto di nicchia, purché abbia valore per il consumatore.
-- Non classificare automaticamente un prodotto consumer come PC & Hardware solo perché contiene tecnologia.
-- Accessori, utensili smart, periferiche, wearable e prodotti consumer devono essere valutati anche per Gadget & Consumer Tech.
-- Non trasformare automaticamente ogni problema software in Sicurezza.
-- Un problema Windows senza vulnerabilità, malware, attacco o rischio per la sicurezza deve normalmente rimanere Software & App o PC & Hardware.
-- Non premiare automaticamente le notizie AI solo perché contengono la parola AI.
-
-DATI DELLA NOTIZIA
-
-Titolo:
+TITOLO:
 {title}
 
-Descrizione:
+DESCRIZIONE:
 {description}
 
-Fonte:
+FONTE:
 {source}
 
-Categoria assegnata dal collector:
+CATEGORIA ASSEGNATA DAL COLLECTOR:
 {category}
 
-Tipo assegnato dal collector:
+TIPO ASSEGNATO DAL COLLECTOR:
 {story_type}
 
-Punteggio collector:
-{collector_score}
-
-Rispondi ESCLUSIVAMENTE con JSON valido, senza markdown.
-
-Formato:
+Restituisci ESCLUSIVAMENTE un JSON valido con questa struttura:
 
 {{
   "publishable": true,
   "ai_score": 0,
-  "reader_value": 0,
+  "reason": "breve motivazione",
   "italian_relevance": 0,
   "originality": 0,
+  "reader_value": 0,
   "urgency": 0,
   "commercial_value": 0,
   "format": "NEWS",
   "suggested_category": "Tecnologia",
   "suggested_story_type": "NEWS",
-  "classification_issue": false,
-  "reason": "..."
+  "classification_issue": false
 }}
+
+REGOLE DEI PUNTEGGI:
+
+ai_score:
+0-100, qualità complessiva della notizia.
+
+italian_relevance:
+0-100, interesse per un pubblico italiano.
+
+originality:
+0-100, quanto la notizia aggiunge qualcosa rispetto a contenuti
+tecnologici già molto comuni.
+
+reader_value:
+0-100, utilità/interesse concreto per il lettore.
+
+urgency:
+0-100, quanto è importante pubblicarla rapidamente.
+
+commercial_value:
+0-100, potenziale interesse verso prodotti, servizi, offerte,
+confronti o acquisti.
+
+format deve essere uno tra:
+OFFERTA
+RECENSIONE
+GUIDA
+SICUREZZA
+RUMOR
+SCIENZA
+ANALISI
+AZIENDALE
+NEWS
+
+suggested_category deve essere una tra:
+Smartphone & Mobile
+PC & Hardware
+Gaming
+Software & App
+AI
+Sicurezza
+Gadget & Consumer Tech
+Streaming & Entertainment
+Offerte & Prezzi
+Tecnologia
+
+suggested_story_type deve essere uno tra:
+OFFERTA
+RECENSIONE
+GUIDA
+SICUREZZA
+RUMOR
+SCIENZA
+ANALISI
+AZIENDALE
+NEWS
+
+classification_issue deve essere true solo se la categoria o il tipo
+assegnato dal collector è evidentemente errato.
+
+publishable:
+true solo se la notizia merita realmente un articolo su AI Vision.
+
+Una notizia aziendale può essere pubblicabile solo se contiene
+qualcosa di concretamente interessante per il lettore.
+
+I rumor devono avere un motivo concreto per essere pubblicati.
+
+Non premiare automaticamente l'AI: deve competere con tutte le altre
+categorie del magazine.
 """
 
-    return prompt
+
+# ============================================================
+# UTILITÀ
+# ============================================================
+
+def load_json(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def clamp(value, minimum=0, maximum=100):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return minimum
+
+    return max(minimum, min(maximum, value))
+
+
+def normalize_text(value):
+    if value is None:
+        return ""
+
+    return str(value).strip()
+
+
+def extract_json(text):
+    """
+    Estrae JSON anche quando Gemini restituisce accidentalmente
+    markdown o testo extra.
+    """
+
+    if not text:
+        return None
+
+    text = text.strip()
+
+    # Caso ideale
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Rimuove eventuali blocchi markdown
+    text = re.sub(r"^```json\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"^```\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Cerca il primo oggetto JSON
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start != -1 and end != -1 and end > start:
+        candidate = text[start:end + 1]
+
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            return None
+
+    return None
 
 
 # ============================================================
-# CHIAMATA GEMINI
+# GEMINI API
 # ============================================================
 
-def call_gemini(prompt):
+def get_api_key():
+    """
+    Recupera la chiave dalle GitHub Secrets.
+    """
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+
+    if not api_key:
+        raise RuntimeError(
+            "Variabile GEMINI_API_KEY non trovata."
+        )
+
+    # Rimuove accidentalmente spazi/newline copiati nel secret.
+    api_key = api_key.strip()
+
+    return api_key
+
+
+def parse_retry_delay(error_response):
+    """
+    Cerca il tempo di attesa consigliato da Gemini.
+
+    Priorità:
+    1. details[].retryDelay
+    2. testo 'Please retry in Xs'
+    3. fallback None
+    """
+
+    # --------------------------------------------------------
+    # Tentativo 1: struttura JSON Gemini
+    # --------------------------------------------------------
+
+    try:
+        data = error_response.json()
+    except Exception:
+        data = {}
+
+    details = (
+        data
+        .get("error", {})
+        .get("details", [])
+    )
+
+    for detail in details:
+
+        if not isinstance(detail, dict):
+            continue
+
+        # Formato tipico:
+        # {
+        #   "@type": "...RetryInfo",
+        #   "retryDelay": "20s"
+        # }
+
+        retry_delay = detail.get("retryDelay")
+
+        if retry_delay:
+            match = re.search(
+                r"([0-9]+(?:\.[0-9]+)?)",
+                str(retry_delay)
+            )
+
+            if match:
+                return float(match.group(1))
+
+    # --------------------------------------------------------
+    # Tentativo 2: cerca nel messaggio
+    # --------------------------------------------------------
+
+    try:
+        message = (
+            data
+            .get("error", {})
+            .get("message", "")
+        )
+    except Exception:
+        message = ""
+
+    if not message:
+        try:
+            message = error_response.text
+        except Exception:
+            message = ""
+
+    match = re.search(
+        r"retry in\s+([0-9]+(?:\.[0-9]+)?)s",
+        message,
+        flags=re.IGNORECASE
+    )
+
+    if match:
+        return float(match.group(1))
+
+    return None
+
+
+def call_gemini(prompt, api_key):
+    """
+    Chiama Gemini con gestione intelligente del rate limit 429.
+
+    In caso di 429:
+    - legge retryDelay
+    - aspetta il tempo indicato
+    - aggiunge un piccolo margine
+    - riprova
+    """
+
+    url = (
+        f"https://generativelanguage.googleapis.com/"
+        f"v1beta/models/{MODEL}:generateContent"
+    )
+
+    headers = {
+        "Content-Type": "application/json"
+    }
 
     payload = {
         "contents": [
@@ -417,460 +504,539 @@ def call_gemini(prompt):
         }
     }
 
-    headers = {
-        "Content-Type": "application/json"
-    }
-
-    response = requests.post(
-        GEMINI_URL,
-        headers=headers,
-        json=payload,
-        timeout=60
-    )
-
-    # ========================================================
-    # DIAGNOSTICA SPECIFICA HTTP 429
-    # ========================================================
-
-    if response.status_code == 429:
-
-        print()
-        print("=" * 70)
-        print("⚠️  GEMINI HTTP 429 - TOO MANY REQUESTS")
-        print("=" * 70)
-
-        print("Status:", response.status_code)
-
-        print()
-        print("HEADERS RILEVANTI:")
-
-        found_header = False
-
-        for key, value in response.headers.items():
-
-            key_lower = key.lower()
-
-            if key_lower in (
-                "retry-after",
-                "x-ratelimit-limit",
-                "x-ratelimit-remaining",
-                "x-ratelimit-reset"
-            ):
-                print(f"  {key}: {value}")
-                found_header = True
-
-        if not found_header:
-            print("  Nessun header rate-limit disponibile.")
-
-        print()
-        print("RISPOSTA COMPLETA DI GEMINI:")
+    for attempt in range(1, MAX_RETRIES + 1):
 
         try:
-            error_json = response.json()
 
-            print(
-                json.dumps(
-                    error_json,
-                    indent=2,
-                    ensure_ascii=False
-                )
+            response = requests.post(
+                url,
+                params={"key": api_key},
+                headers=headers,
+                json=payload,
+                timeout=REQUEST_TIMEOUT
             )
 
-        except Exception:
-            print(response.text)
+            # ------------------------------------------------
+            # SUCCESSO
+            # ------------------------------------------------
 
-        print()
-        print("=" * 70)
-        print("FINE DIAGNOSTICA 429")
-        print("=" * 70)
-        print()
+            if response.status_code == 200:
 
-        raise RuntimeError(
-            "Gemini ha restituito HTTP 429 - "
-            "vedere diagnostica sopra."
-        )
+                data = response.json()
 
-    # ========================================================
-    # ALTRI ERRORI HTTP
-    # ========================================================
-
-    if response.status_code >= 400:
-
-        print()
-        print("=" * 70)
-        print("ERRORE HTTP GEMINI")
-        print("=" * 70)
-
-        print("Status:", response.status_code)
-
-        print("Risposta:")
-
-        try:
-            print(
-                json.dumps(
-                    response.json(),
-                    indent=2,
-                    ensure_ascii=False
-                )
-            )
-        except Exception:
-            print(response.text)
-
-        print("=" * 70)
-        print()
-
-        response.raise_for_status()
-
-    # ========================================================
-    # PARSING RISPOSTA
-    # ========================================================
-
-    data = response.json()
-
-    try:
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError, TypeError) as e:
-
-        print()
-        print("ERRORE: risposta Gemini inattesa.")
-        print(
-            json.dumps(
-                data,
-                indent=2,
-                ensure_ascii=False
-            )
-        )
-
-        raise RuntimeError(
-            f"Risposta Gemini non interpretabile: {e}"
-        )
-
-    text = text.strip()
-
-    # Rimuove eventuali blocchi markdown JSON
-    text = re.sub(
-        r"^```json\s*",
-        "",
-        text,
-        flags=re.IGNORECASE
-    )
-
-    text = re.sub(
-        r"\s*```$",
-        "",
-        text
-    )
-
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-
-        print()
-        print("ERRORE: Gemini non ha restituito JSON valido.")
-        print("Risposta ricevuta:")
-        print(text)
-        print()
-
-        raise
-
-
-# ============================================================
-# ANALISI ARTICOLI
-# ============================================================
-
-analyzed = []
-error_count = 0
-
-for index, item in enumerate(items, start=1):
-
-    title = clean_text(
-        item.get("title")
-        or item.get("name")
-        or "Senza titolo",
-        300
-    )
-
-    print(f"[{index}/{len(items)}] {title}")
-
-    prompt = build_prompt(item)
-
-    try:
-
-        result = call_gemini(prompt)
-
-        collector_score = safe_int(
-            item.get("score")
-            or item.get("collector_score")
-            or item.get("source_score")
-            or 0
-        )
-
-        ai_score = safe_int(
-            result.get("ai_score"),
-            0
-        )
-
-        reader_value = safe_int(
-            result.get("reader_value"),
-            0
-        )
-
-        italian_relevance = safe_int(
-            result.get("italian_relevance"),
-            0
-        )
-
-        originality = safe_int(
-            result.get("originality"),
-            0
-        )
-
-        urgency = safe_int(
-            result.get("urgency"),
-            0
-        )
-
-        commercial_value = safe_int(
-            result.get("commercial_value"),
-            0
-        )
-
-        publishable = bool(
-            result.get("publishable", False)
-        )
-
-        suggested_category = normalize_category(
-            result.get("suggested_category")
-        )
-
-        suggested_story_type = normalize_story_type(
-            result.get("suggested_story_type")
-        )
-
-        # ====================================================
-        # FINAL SCORE
-        # ====================================================
-
-        final_score = (
-            collector_score * 0.35
-            + ai_score * 0.25
-            + reader_value * 0.15
-            + italian_relevance * 0.10
-            + originality * 0.05
-            + commercial_value * 0.05
-            + urgency * 0.05
-        )
-
-        # ====================================================
-        # PICCOLE PENALITÀ EDITORIALI
-        # ====================================================
-
-        if suggested_story_type == "OFFERTA":
-            if commercial_value < 50:
-                final_score -= 8
-
-        if suggested_story_type == "RUMOR":
-            if ai_score < 75:
-                final_score -= 8
-
-        if suggested_story_type == "AZIENDALE":
-            if reader_value < 70:
-                final_score -= 10
-
-        if suggested_category == "AI":
-            if reader_value < 60:
-                final_score -= 5
-
-        final_score = max(
-            0,
-            min(100, round(final_score, 1))
-        )
-
-        # ====================================================
-        # DECISIONE DI PUBBLICABILITÀ
-        # ====================================================
-
-        exclusion_reason = None
-
-        if not publishable:
-            exclusion_reason = "AI non approva"
-
-        elif ai_score < MIN_AI_SCORE:
-            exclusion_reason = (
-                f"AI score troppo basso ({ai_score})"
-            )
-
-        elif collector_score < MIN_COLLECTOR_SCORE:
-            exclusion_reason = (
-                f"Collector score troppo basso ({collector_score})"
-            )
-
-        elif reader_value < MIN_READER_VALUE:
-            exclusion_reason = (
-                f"Reader value troppo basso ({reader_value})"
-            )
-
-        elif (
-            suggested_story_type == "RUMOR"
-            and ai_score < 75
-        ):
-            exclusion_reason = (
-                f"Rumor sotto soglia ({ai_score})"
-            )
-
-        elif (
-            suggested_story_type == "AZIENDALE"
-            and reader_value < 75
-        ):
-            exclusion_reason = (
-                f"Contenuto aziendale poco utile ({reader_value})"
-            )
-
-        elif (
-            suggested_story_type == "OFFERTA"
-            and commercial_value < 50
-        ):
-            exclusion_reason = (
-                f"Offerta con valore commerciale basso "
-                f"({commercial_value})"
-            )
-
-        # ====================================================
-        # RISULTATO
-        # ====================================================
-
-        enriched = dict(item)
-
-        enriched.update(
-            {
-                "ai_publishable": publishable,
-                "ai_score": ai_score,
-                "reader_value": reader_value,
-                "italian_relevance": italian_relevance,
-                "originality": originality,
-                "urgency": urgency,
-                "commercial_value": commercial_value,
-                "final_score": final_score,
-                "ai_reason": result.get("reason", ""),
-                "ai_format": result.get(
-                    "format",
-                    "NEWS"
-                ),
-                "suggested_category": suggested_category,
-                "suggested_story_type": suggested_story_type,
-                "classification_issue": bool(
-                    result.get(
-                        "classification_issue",
-                        False
+                try:
+                    text = (
+                        data["candidates"][0]
+                        ["content"]["parts"][0]["text"]
                     )
-                ),
-                "exclusion_reason": exclusion_reason,
-            }
-        )
+                except (KeyError, IndexError, TypeError):
+                    print(
+                        "    ERRORE: risposta Gemini senza contenuto valido"
+                    )
+                    return None
 
-        analyzed.append(enriched)
+                return extract_json(text)
 
-        if exclusion_reason:
+            # ------------------------------------------------
+            # RATE LIMIT 429
+            # ------------------------------------------------
+
+            if response.status_code == 429:
+
+                retry_delay = parse_retry_delay(response)
+
+                if retry_delay is None:
+                    # Fallback prudente se Gemini non comunica
+                    # esplicitamente il tempo.
+                    retry_delay = 30.0
+
+                wait_time = retry_delay + RETRY_BUFFER
+
+                print(
+                    f"    429 Gemini - tentativo "
+                    f"{attempt}/{MAX_RETRIES}"
+                )
+
+                print(
+                    f"    Attendo {wait_time:.1f}s "
+                    f"prima del nuovo tentativo..."
+                )
+
+                if attempt < MAX_RETRIES:
+                    time.sleep(wait_time)
+                    continue
+
+                print(
+                    "    ERRORE: numero massimo di tentativi 429 raggiunto."
+                )
+
+                return None
+
+            # ------------------------------------------------
+            # AUTENTICAZIONE
+            # ------------------------------------------------
+
+            if response.status_code in (400, 401, 403):
+
+                print(
+                    f"    ERRORE GEMINI HTTP {response.status_code}"
+                )
+
+                try:
+                    error_data = response.json()
+
+                    message = (
+                        error_data
+                        .get("error", {})
+                        .get("message", "")
+                    )
+
+                    if message:
+                        print(f"    {message}")
+
+                except Exception:
+                    print(response.text[:500])
+
+                return None
+
+            # ------------------------------------------------
+            # ALTRI ERRORI HTTP
+            # ------------------------------------------------
 
             print(
-                f"   ESCLUSO: {exclusion_reason}"
+                f"    ERRORE GEMINI HTTP {response.status_code}"
             )
 
-        else:
+            try:
+                print(response.text[:1000])
+            except Exception:
+                pass
+
+            # Per errori temporanei 5xx, proviamo nuovamente.
+            if 500 <= response.status_code < 600:
+
+                if attempt < MAX_RETRIES:
+
+                    # Backoff progressivo.
+                    wait_time = (
+                        (2 ** attempt) +
+                        random.uniform(0.5, 1.5)
+                    )
+
+                    print(
+                        f"    Nuovo tentativo tra "
+                        f"{wait_time:.1f}s..."
+                    )
+
+                    time.sleep(wait_time)
+                    continue
+
+            return None
+
+        except requests.exceptions.Timeout:
 
             print(
-                f"   APPROVATO AI | "
-                f"AI={ai_score} | "
-                f"Reader={reader_value} | "
-                f"Final={final_score} | "
-                f"Categoria={suggested_category}"
+                f"    Timeout Gemini - tentativo "
+                f"{attempt}/{MAX_RETRIES}"
             )
 
-    except Exception as e:
+            if attempt < MAX_RETRIES:
 
-        error_count += 1
+                wait_time = (
+                    3 +
+                    random.uniform(0.5, 1.5)
+                )
 
-        print(
-            f"   ERRORE Gemini: "
-            f"{type(e).__name__}: {e}"
-        )
+                print(
+                    f"    Nuovo tentativo tra "
+                    f"{wait_time:.1f}s..."
+                )
 
-    time.sleep(REQUEST_DELAY)
+                time.sleep(wait_time)
+                continue
+
+            return None
+
+        except requests.exceptions.RequestException as exc:
+
+            print(
+                f"    Errore connessione Gemini: {exc}"
+            )
+
+            if attempt < MAX_RETRIES:
+
+                wait_time = (
+                    3 +
+                    random.uniform(0.5, 1.5)
+                )
+
+                print(
+                    f"    Nuovo tentativo tra "
+                    f"{wait_time:.1f}s..."
+                )
+
+                time.sleep(wait_time)
+                continue
+
+            return None
+
+        except Exception as exc:
+
+            print(
+                f"    Errore inatteso Gemini: {exc}"
+            )
+
+            return None
+
+    return None
 
 
 # ============================================================
-# SELEZIONE CANDIDATI
+# CALCOLO FINAL SCORE
 # ============================================================
 
-approved = [
-    item
-    for item in analyzed
-    if item.get("exclusion_reason") is None
-]
+def calculate_final_score(article, ai):
+    """
+    Calcola il punteggio editoriale finale.
 
+    Collector:
+        35%
 
-# Ordina per final score
-approved.sort(
-    key=lambda x: x.get("final_score", 0),
-    reverse=True
-)
+    AI:
+        25%
 
+    Reader value:
+        15%
 
-selected = []
-category_counts = Counter()
+    Italian relevance:
+        10%
 
+    Originality:
+        5%
 
-# ============================================================
-# PRIMO PASSAGGIO
-# Garantisce almeno una categoria diversa quando possibile
-# ============================================================
+    Commercial:
+        5%
 
-categories_seen = set()
+    Urgency:
+        5%
+    """
 
-for item in approved:
-
-    category = item.get(
-        "suggested_category",
-        "Tecnologia"
+    collector_score = clamp(
+        article.get("score", 0)
     )
 
-    if category in categories_seen:
-        continue
+    ai_score = clamp(
+        ai.get("ai_score", 0)
+    )
 
-    if category_counts[category] >= CATEGORY_LIMITS.get(
-        category,
-        4
-    ):
-        continue
+    reader_value = clamp(
+        ai.get("reader_value", 0)
+    )
 
-    selected.append(item)
+    italian_relevance = clamp(
+        ai.get("italian_relevance", 0)
+    )
 
-    category_counts[category] += 1
-    categories_seen.add(category)
+    originality = clamp(
+        ai.get("originality", 0)
+    )
 
-    if len(selected) >= MAX_FINAL_CANDIDATES:
-        break
+    commercial_value = clamp(
+        ai.get("commercial_value", 0)
+    )
 
+    urgency = clamp(
+        ai.get("urgency", 0)
+    )
 
-# ============================================================
-# SECONDO PASSAGGIO
-# Riempimento fino a 20
-# ============================================================
+    final_score = (
+        collector_score * 0.35 +
+        ai_score * 0.25 +
+        reader_value * 0.15 +
+        italian_relevance * 0.10 +
+        originality * 0.05 +
+        commercial_value * 0.05 +
+        urgency * 0.05
+    )
 
-if len(selected) < MAX_FINAL_CANDIDATES:
-
-    selected_ids = {
-        id(item)
-        for item in selected
-    }
-
-    for item in approved:
-
-        if id(item) in selected_ids:
-            continue
-
-        category = item.get(
+    category = normalize_text(
+        ai.get(
             "suggested_category",
+            article.get("category", "Tecnologia")
+        )
+    )
+
+    story_type = normalize_text(
+        ai.get(
+            "suggested_story_type",
+            article.get("story_type", "NEWS")
+        )
+    )
+
+    # --------------------------------------------------------
+    # Piccole penalizzazioni editoriali
+    # --------------------------------------------------------
+
+    # Offerte con basso valore commerciale:
+    # probabilmente non sono vere offerte utili.
+    if category == "Offerte & Prezzi" and commercial_value < 50:
+        final_score -= 10
+
+    # Rumor deboli.
+    if story_type == "RUMOR" and ai_score < 75:
+        final_score -= 8
+
+    # AI aziendale / enterprise con poco valore per il lettore.
+    if category == "AI" and commercial_value < 35 and reader_value < 60:
+        final_score -= 5
+
+    return round(
+        max(0, min(100, final_score)),
+        2
+    )
+
+
+# ============================================================
+# CONTROLLO EDITORIALE
+# ============================================================
+
+def evaluate_article(article, ai):
+    """
+    Applica le regole editoriali 2.6.
+    """
+
+    reasons = []
+
+    publishable = bool(
+        ai.get("publishable", False)
+    )
+
+    ai_score = clamp(
+        ai.get("ai_score", 0)
+    )
+
+    collector_score = clamp(
+        article.get("score", 0)
+    )
+
+    reader_value = clamp(
+        ai.get("reader_value", 0)
+    )
+
+    italian_relevance = clamp(
+        ai.get("italian_relevance", 0)
+    )
+
+    commercial_value = clamp(
+        ai.get("commercial_value", 0)
+    )
+
+    story_type = normalize_text(
+        ai.get(
+            "suggested_story_type",
+            article.get("story_type", "NEWS")
+        )
+    )
+
+    if not publishable:
+        reasons.append("AI non approva")
+
+    if ai_score < MIN_AI_SCORE:
+        reasons.append(
+            f"AI score troppo basso ({int(ai_score)})"
+        )
+
+    if collector_score < MIN_COLLECTOR_SCORE:
+        reasons.append(
+            f"Collector score troppo basso ({int(collector_score)})"
+        )
+
+    if reader_value < MIN_READER_VALUE:
+        reasons.append(
+            f"Reader value troppo basso ({int(reader_value)})"
+        )
+
+    # --------------------------------------------------------
+    # RUMOR
+    # --------------------------------------------------------
+
+    if story_type == "RUMOR":
+
+        if ai_score < 75:
+            reasons.append("Rumor con score insufficiente")
+
+        if italian_relevance < 50:
+            reasons.append(
+                "Rumor con bassa rilevanza italiana"
+            )
+
+    # --------------------------------------------------------
+    # AZIENDALE
+    # --------------------------------------------------------
+
+    if story_type == "AZIENDALE":
+
+        if ai_score < 75:
+            reasons.append(
+                "Contenuto aziendale con score insufficiente"
+            )
+
+        if reader_value < 60:
+            reasons.append(
+                "Contenuto aziendale con basso valore per il lettore"
+            )
+
+    # --------------------------------------------------------
+    # OFFERTE
+    # --------------------------------------------------------
+
+    category = normalize_text(
+        ai.get(
+            "suggested_category",
+            article.get("category", "Tecnologia")
+        )
+    )
+
+    if category == "Offerte & Prezzi":
+
+        if commercial_value < 50:
+            reasons.append(
+                "Offerta con valore commerciale insufficiente"
+            )
+
+    return (
+        len(reasons) == 0,
+        reasons
+    )
+
+
+# ============================================================
+# NORMALIZZAZIONE RISPOSTA GEMINI
+# ============================================================
+
+def normalize_ai_response(ai, article):
+
+    if not isinstance(ai, dict):
+        return None
+
+    result = {}
+
+    result["publishable"] = bool(
+        ai.get("publishable", False)
+    )
+
+    result["ai_score"] = int(
+        clamp(ai.get("ai_score", 0))
+    )
+
+    result["reason"] = normalize_text(
+        ai.get("reason", "")
+    )
+
+    result["italian_relevance"] = int(
+        clamp(ai.get("italian_relevance", 0))
+    )
+
+    result["originality"] = int(
+        clamp(ai.get("originality", 0))
+    )
+
+    result["reader_value"] = int(
+        clamp(ai.get("reader_value", 0))
+    )
+
+    result["urgency"] = int(
+        clamp(ai.get("urgency", 0))
+    )
+
+    result["commercial_value"] = int(
+        clamp(ai.get("commercial_value", 0))
+    )
+
+    story_type = normalize_text(
+        ai.get(
+            "suggested_story_type",
+            article.get("story_type", "NEWS")
+        )
+    )
+
+    if story_type not in VALID_STORY_TYPES:
+        story_type = article.get(
+            "story_type",
+            "NEWS"
+        )
+
+    result["suggested_story_type"] = story_type
+
+    category = normalize_text(
+        ai.get(
+            "suggested_category",
+            article.get("category", "Tecnologia")
+        )
+    )
+
+    if category not in VALID_CATEGORIES:
+        category = article.get(
+            "category",
+            "Tecnologia"
+        )
+
+    if category not in VALID_CATEGORIES:
+        category = "Tecnologia"
+
+    result["suggested_category"] = category
+
+    result["format"] = normalize_text(
+        ai.get("format", story_type)
+    )
+
+    result["classification_issue"] = bool(
+        ai.get("classification_issue", False)
+    )
+
+    return result
+
+
+# ============================================================
+# SELEZIONE BILANCIATA
+# ============================================================
+
+def balanced_selection(candidates):
+    """
+    Seleziona massimo MAX_FINAL_CANDIDATES articoli evitando
+    che una singola categoria domini il risultato.
+
+    Prima fase:
+    almeno un articolo per categoria quando disponibile.
+
+    Seconda fase:
+    riempimento per punteggio rispettando i limiti.
+
+    Terza fase:
+    fallback nel caso rimangano posti liberi.
+    """
+
+    if not candidates:
+        return []
+
+    candidates = sorted(
+        candidates,
+        key=lambda x: x.get("final_score", 0),
+        reverse=True
+    )
+
+    selected = []
+    category_counts = Counter()
+
+    # --------------------------------------------------------
+    # FASE 1
+    # Un articolo per categoria
+    # --------------------------------------------------------
+
+    for article in candidates:
+
+        category = article.get(
+            "category",
             "Tecnologia"
         )
 
@@ -882,219 +1048,556 @@ if len(selected) < MAX_FINAL_CANDIDATES:
         if category_counts[category] >= limit:
             continue
 
-        selected.append(item)
+        if category_counts[category] == 0:
 
+            selected.append(article)
+            category_counts[category] += 1
+
+            if len(selected) >= MAX_FINAL_CANDIDATES:
+                return selected
+
+    # --------------------------------------------------------
+    # FASE 2
+    # Riempimento per punteggio
+    # --------------------------------------------------------
+
+    for article in candidates:
+
+        if article in selected:
+            continue
+
+        category = article.get(
+            "category",
+            "Tecnologia"
+        )
+
+        limit = CATEGORY_LIMITS.get(
+            category,
+            4
+        )
+
+        if category_counts[category] >= limit:
+            continue
+
+        selected.append(article)
         category_counts[category] += 1
 
         if len(selected) >= MAX_FINAL_CANDIDATES:
-            break
+            return selected
+
+    # --------------------------------------------------------
+    # FASE 3
+    # Fallback
+    # --------------------------------------------------------
+
+    if len(selected) < MAX_FINAL_CANDIDATES:
+
+        for article in candidates:
+
+            if article in selected:
+                continue
+
+            selected.append(article)
+
+            if len(selected) >= MAX_FINAL_CANDIDATES:
+                break
+
+    return selected
 
 
 # ============================================================
-# ORDINAMENTO FINALE
+# MAIN
 # ============================================================
 
-selected.sort(
-    key=lambda x: x.get("final_score", 0),
-    reverse=True
-)
+def main():
 
+    print("=" * 70)
+    print("AI VISION - AI FILTER 2.6")
+    print("=" * 70)
+    print(f"VERSIONE FILTRO: {VERSION}")
+    print(f"MODELLO: {MODEL}")
+    print(f"INPUT: {INPUT_FILE}")
+    print(f"OUTPUT: {OUTPUT_FILE}")
+    print(f"ATTESA TRA RICHIESTE: {REQUEST_DELAY}s")
+    print(f"MAX RETRY 429: {MAX_RETRIES}")
+    print("=" * 70)
 
-# ============================================================
-# ESCLUSIONI
-# ============================================================
+    # --------------------------------------------------------
+    # API KEY
+    # --------------------------------------------------------
 
-exclusion_counter = Counter()
+    try:
+        api_key = get_api_key()
+    except Exception as exc:
 
-for item in analyzed:
+        print(f"ERRORE: {exc}")
+        return 1
 
-    reason = item.get("exclusion_reason")
+    # --------------------------------------------------------
+    # INPUT
+    # --------------------------------------------------------
 
-    if reason:
-        exclusion_counter[reason] += 1
-
-
-if error_count:
-    exclusion_counter[
-        "Errore Gemini"
-    ] += error_count
-
-
-# ============================================================
-# DISTRIBUZIONE
-# ============================================================
-
-distribution = Counter(
-    item.get(
-        "suggested_category",
-        "Tecnologia"
-    )
-    for item in selected
-)
-
-
-# ============================================================
-# OUTPUT
-# ============================================================
-
-output = {
-    "filter_version": VERSION,
-    "model": MODEL,
-
-    "total_received": len(items),
-    "total_analyzed": len(analyzed),
-
-    "total_passed_ai": len(approved),
-
-    "total_final_candidates": len(selected),
-
-    "error_count": error_count,
-
-    "exclusion_summary": dict(
-        exclusion_counter
-    ),
-
-    "category_distribution": dict(
-        distribution
-    ),
-
-    "items": selected,
-
-    "all_analyzed": analyzed,
-}
-
-
-os.makedirs(
-    os.path.dirname(OUTPUT_FILE),
-    exist_ok=True
-)
-
-
-with open(
-    OUTPUT_FILE,
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        output,
-        f,
-        ensure_ascii=False,
-        indent=2
-    )
-
-
-# ============================================================
-# RISULTATO
-# ============================================================
-
-print()
-print("=" * 40)
-print()
-print("       RISULTATO AI VISION 2.6")
-print()
-print("=" * 40)
-print()
-
-print(
-    "Articoli ricevuti:",
-    len(items)
-)
-
-print(
-    "Articoli analizzati:",
-    len(analyzed)
-)
-
-print(
-    "Approvati dall'AI:",
-    len(approved)
-)
-
-print(
-    "Candidati finali:",
-    len(selected)
-)
-
-print()
-print("ESCLUSIONI")
-print("-" * 40)
-
-if exclusion_counter:
-
-    for reason, count in exclusion_counter.most_common():
+    if not os.path.exists(INPUT_FILE):
 
         print(
-            f"- {reason}: {count}"
+            f"ERRORE: file non trovato: {INPUT_FILE}"
         )
 
-else:
+        return 1
 
-    print("- Nessuna")
+    try:
+        data = load_json(INPUT_FILE)
+    except Exception as exc:
 
+        print(
+            f"ERRORE lettura JSON: {exc}"
+        )
 
-print()
-print("DISTRIBUZIONE CATEGORIE")
-print("-" * 40)
+        return 1
 
-if distribution:
+    # --------------------------------------------------------
+    # SUPPORTO AI DIVERSI FORMATI COLLECTOR
+    # --------------------------------------------------------
 
-    for category, count in distribution.most_common():
+    if isinstance(data, dict):
+
+        articles = data.get(
+            "items",
+            data.get(
+                "articles",
+                data.get(
+                    "stories",
+                    []
+                )
+            )
+        )
+
+    elif isinstance(data, list):
+
+        articles = data
+
+    else:
+
+        articles = []
+
+    if not isinstance(articles, list):
+        articles = []
+
+    # Limite massimo
+    articles = articles[:MAX_ARTICLES]
+
+    print(
+        f"Articoli ricevuti: {len(articles)}"
+    )
+
+    # --------------------------------------------------------
+    # CONTATORI
+    # --------------------------------------------------------
+
+    analyzed = 0
+    approved_ai = 0
+
+    candidates = []
+
+    exclusion_summary = Counter()
+
+    all_analyzed = []
+
+    # --------------------------------------------------------
+    # ANALISI
+    # --------------------------------------------------------
+
+    for index, article in enumerate(articles, start=1):
+
+        if not isinstance(article, dict):
+            continue
+
+        title = normalize_text(
+            article.get("title", "")
+        )
+
+        if not title:
+            exclusion_summary["Titolo mancante"] += 1
+            continue
+
+        print()
+        print(
+            f"[{index}/{len(articles)}] {title}"
+        )
+
+        # ----------------------------------------------------
+        # Chiamata Gemini
+        # ----------------------------------------------------
+
+        prompt = build_prompt(article)
+
+        ai_raw = call_gemini(
+            prompt,
+            api_key
+        )
+
+        # ----------------------------------------------------
+        # Errore Gemini
+        # ----------------------------------------------------
+
+        if ai_raw is None:
+
+            print(
+                "    -> ERRORE Gemini dopo i retry"
+            )
+
+            exclusion_summary["Errore Gemini"] += 1
+
+            all_analyzed.append({
+                **article,
+                "analysis_status": "gemini_error"
+            })
+
+            # Piccola pausa anche dopo un errore definitivo.
+            time.sleep(REQUEST_DELAY)
+
+            continue
+
+        analyzed += 1
+
+        # ----------------------------------------------------
+        # Normalizzazione
+        # ----------------------------------------------------
+
+        ai = normalize_ai_response(
+            ai_raw,
+            article
+        )
+
+        if ai is None:
+
+            print(
+                "    -> Risposta Gemini non valida"
+            )
+
+            exclusion_summary[
+                "Risposta Gemini non valida"
+            ] += 1
+
+            all_analyzed.append({
+                **article,
+                "analysis_status": "invalid_ai_response"
+            })
+
+            time.sleep(REQUEST_DELAY)
+
+            continue
+
+        # ----------------------------------------------------
+        # Score
+        # ----------------------------------------------------
+
+        final_score = calculate_final_score(
+            article,
+            ai
+        )
+
+        approved, reasons = evaluate_article(
+            article,
+            ai
+        )
+
+        # ----------------------------------------------------
+        # Categoria finale
+        # ----------------------------------------------------
+
+        original_category = article.get(
+            "category",
+            "Tecnologia"
+        )
+
+        final_category = ai.get(
+            "suggested_category",
+            original_category
+        )
+
+        if final_category not in VALID_CATEGORIES:
+
+            final_category = original_category
+
+        if final_category not in VALID_CATEGORIES:
+
+            final_category = "Tecnologia"
+
+        final_story_type = ai.get(
+            "suggested_story_type",
+            article.get("story_type", "NEWS")
+        )
+
+        if final_story_type not in VALID_STORY_TYPES:
+
+            final_story_type = article.get(
+                "story_type",
+                "NEWS"
+            )
+
+        # ----------------------------------------------------
+        # Log
+        # ----------------------------------------------------
+
+        print(
+            f"    AI score: {ai['ai_score']}"
+        )
+
+        print(
+            f"    Collector score: "
+            f"{int(clamp(article.get('score', 0)))}"
+        )
+
+        print(
+            f"    Reader value: "
+            f"{ai['reader_value']}"
+        )
+
+        print(
+            f"    Categoria: {final_category}"
+        )
+
+        print(
+            f"    Tipo: {final_story_type}"
+        )
+
+        print(
+            f"    Final score: {final_score}"
+        )
+
+        # ----------------------------------------------------
+        # Salvataggio analisi completa
+        # ----------------------------------------------------
+
+        analyzed_article = {
+            **article,
+            "ai_analysis": ai,
+            "category": final_category,
+            "story_type": final_story_type,
+            "final_score": final_score,
+            "analysis_status": (
+                "approved"
+                if approved
+                else "excluded"
+            ),
+        }
+
+        if reasons:
+
+            analyzed_article["exclusion_reasons"] = reasons
+
+        all_analyzed.append(
+            analyzed_article
+        )
+
+        # ----------------------------------------------------
+        # APPROVAZIONE
+        # ----------------------------------------------------
+
+        if not approved:
+
+            for reason in reasons:
+                exclusion_summary[reason] += 1
+
+            print(
+                "    -> ESCLUSO"
+            )
+
+            time.sleep(REQUEST_DELAY)
+
+            continue
+
+        approved_ai += 1
+
+        candidate = {
+            **article,
+
+            "category": final_category,
+            "story_type": final_story_type,
+
+            "ai_analysis": ai,
+
+            "final_score": final_score,
+
+            "editorial_reason": ai.get(
+                "reason",
+                ""
+            ),
+        }
+
+        candidates.append(
+            candidate
+        )
+
+        print(
+            "    -> APPROVATO"
+        )
+
+        time.sleep(REQUEST_DELAY)
+
+    # --------------------------------------------------------
+    # SELEZIONE FINALE
+    # --------------------------------------------------------
+
+    selected = balanced_selection(
+        candidates
+    )
+
+    # --------------------------------------------------------
+    # Se qualche candidato approvato è rimasto fuori
+    # --------------------------------------------------------
+
+    selected_ids = {
+        str(
+            item.get(
+                "url",
+                item.get(
+                    "title",
+                    ""
+                )
+            )
+        )
+        for item in selected
+    }
+
+    for candidate in candidates:
+
+        candidate_id = str(
+            candidate.get(
+                "url",
+                candidate.get(
+                    "title",
+                    ""
+                )
+            )
+        )
+
+        if candidate_id not in selected_ids:
+
+            exclusion_summary[
+                "Escluso per bilanciamento categorie"
+            ] += 1
+
+    # --------------------------------------------------------
+    # DISTRIBUZIONE CATEGORIE
+    # --------------------------------------------------------
+
+    category_distribution = Counter(
+        item.get(
+            "category",
+            "Tecnologia"
+        )
+        for item in selected
+    )
+
+    # --------------------------------------------------------
+    # OUTPUT
+    # --------------------------------------------------------
+
+    output = {
+        "filter_version": VERSION,
+
+        "model": MODEL,
+
+        "total_received": len(articles),
+
+        "total_analyzed": analyzed,
+
+        "total_passed_ai": approved_ai,
+
+        "total_final_candidates": len(selected),
+
+        "request_delay_seconds": REQUEST_DELAY,
+
+        "max_retries": MAX_RETRIES,
+
+        "category_distribution": dict(
+            category_distribution
+        ),
+
+        "exclusion_summary": dict(
+            exclusion_summary
+        ),
+
+        "items": selected,
+
+        "all_analyzed": all_analyzed,
+    }
+
+    try:
+        save_json(
+            OUTPUT_FILE,
+            output
+        )
+    except Exception as exc:
+
+        print(
+            f"ERRORE salvataggio output: {exc}"
+        )
+
+        return 1
+
+    # --------------------------------------------------------
+    # SUMMARY
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 70)
+    print("RISULTATO AI FILTER")
+    print("=" * 70)
+
+    print(
+        f"Articoli ricevuti: {len(articles)}"
+    )
+
+    print(
+        f"Articoli analizzati: {analyzed}"
+    )
+
+    print(
+        f"Approvati dall'AI: {approved_ai}"
+    )
+
+    print(
+        f"Candidati finali: {len(selected)}"
+    )
+
+    print()
+    print("DISTRIBUZIONE CATEGORIE")
+
+    for category, count in sorted(
+        category_distribution.items(),
+        key=lambda x: (-x[1], x[0])
+    ):
 
         print(
             f"- {category}: {count}"
         )
 
-else:
+    print()
 
-    print("- Nessuna categoria")
+    if exclusion_summary:
 
+        print("ESCLUSIONI")
 
-print()
-print("CANDIDATI FINALI")
-print("-" * 40)
+        for reason, count in exclusion_summary.most_common():
 
-for index, item in enumerate(
-    selected,
-    start=1
-):
+            print(
+                f"- {reason}: {count}"
+            )
 
-    title = clean_text(
-        item.get("title")
-        or item.get("name")
-        or "Senza titolo",
-        150
-    )
-
-    category = item.get(
-        "suggested_category",
-        "Tecnologia"
-    )
-
-    story_type = item.get(
-        "suggested_story_type",
-        "NEWS"
-    )
-
-    final_score = item.get(
-        "final_score",
-        0
-    )
-
+    print()
     print(
-        f"{index}. [{category}] "
-        f"[{story_type}] "
-        f"[score {final_score}] "
-        f"{title}"
+        f"Output salvato: {OUTPUT_FILE}"
     )
 
+    print("=" * 70)
 
-print()
-print("=" * 40)
-print()
-print(
-    "Output salvato in:",
-    OUTPUT_FILE
-)
-print()
-print("=" * 40)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(
+        main()
+    )
