@@ -1,5 +1,5 @@
 """
-AI VISION - AI FILTER 2.6.1
+AI VISION - AI FILTER 2.7.0
 Filtro editoriale intelligente con Gemini
 
 INPUT:
@@ -8,7 +8,7 @@ INPUT:
 OUTPUT:
     data/ai_candidates.json
 
-Versione 2.6:
+Versione 2.7:
 - filtro editoriale bilanciato
 - classificazione categorie
 - scoring AI
@@ -19,6 +19,7 @@ Versione 2.6:
 - urgenza
 - selezione bilanciata per categoria
 - gestione intelligente del rate limit Gemini 429
+- tolleranza controllata agli errori transitori per singolo articolo
 """
 
 import json
@@ -38,7 +39,7 @@ import requests
 # CONFIGURAZIONE
 # ============================================================
 
-VERSION = "2.6.1"
+VERSION = "2.7.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data/rss_output.json"
@@ -59,6 +60,12 @@ REQUEST_DELAY = 6.0
 
 # Numero massimo di tentativi per una singola richiesta
 MAX_RETRIES = 4
+
+# Un errore transitorio su un singolo articolo non deve annullare
+# l'intera giornata. Gli articoli non analizzati restano esclusi;
+# il workflow verifica poi che restino abbastanza candidati per
+# la selezione giornaliera.
+MAX_TOLERATED_ITEM_ERRORS = 3
 
 # Piccolo margine aggiuntivo dopo il retryDelay di Gemini
 RETRY_BUFFER = 2.0
@@ -953,7 +960,7 @@ def main():
     OUTPUT_FILE.unlink(missing_ok=True)
 
     print("=" * 70)
-    print("AI VISION - AI FILTER 2.6.1")
+    print("AI VISION - AI FILTER 2.7.0")
     print("=" * 70)
     print(f"VERSIONE FILTRO: {VERSION}")
     print(f"MODELLO: {MODEL}")
@@ -1366,6 +1373,37 @@ def main():
     # OUTPUT
     # --------------------------------------------------------
 
+    total_errors = len(all_analyzed) - analyzed
+    total_unprocessed = len(articles) - len(all_analyzed)
+
+    warnings = []
+
+    if total_errors:
+        warnings.append(
+            f"{total_errors} articolo/i non analizzato/i da Gemini; "
+            "escluso/i dalla selezione."
+        )
+
+    if total_unprocessed:
+        warnings.append(
+            f"{total_unprocessed} articolo/i non elaborato/i prima dell'interruzione."
+        )
+
+    if fatal_error:
+        status = "error"
+    elif total_unprocessed:
+        status = "error"
+    elif total_errors > MAX_TOLERATED_ITEM_ERRORS:
+        fatal_error = (
+            f"Errori Gemini oltre la soglia tollerata "
+            f"({total_errors}>{MAX_TOLERATED_ITEM_ERRORS})."
+        )
+        status = "error"
+    elif total_errors:
+        status = "ok_with_warnings"
+    else:
+        status = "ok"
+
     output = {
         "filter_version": VERSION,
 
@@ -1375,11 +1413,12 @@ def main():
 
         "total_requested": len(articles),
         "total_attempted": len(all_analyzed),
-        "total_errors": len(all_analyzed) - analyzed,
-        "total_unprocessed": len(articles) - len(all_analyzed),
+        "total_errors": total_errors,
+        "total_unprocessed": total_unprocessed,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "status": "error" if fatal_error or analyzed != len(articles) else "ok",
+        "status": status,
         "error": fatal_error,
+        "warnings": warnings,
 
         "total_analyzed": analyzed,
 
@@ -1473,7 +1512,7 @@ def main():
 
     print("=" * 70)
 
-    return 1 if output["status"] != "ok" else 0
+    return 1 if output["status"] == "error" else 0
 
 
 if __name__ == "__main__":
