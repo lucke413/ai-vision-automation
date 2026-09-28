@@ -82,14 +82,25 @@ jobs:
           import json
           from pathlib import Path
           data = json.loads(Path("data/ai_candidates.json").read_text(encoding="utf-8"))
-          if data.get("status") != "ok":
-              raise SystemExit("ERRORE: analisi AI incompleta.")
+          status = data.get("status")
+          allowed_statuses = {"ok", "ok_with_warnings"}
+          if status not in allowed_statuses:
+              raise SystemExit("ERRORE: analisi AI non utilizzabile.")
+          if data.get("total_unprocessed", 0) != 0:
+              raise SystemExit("ERRORE: alcuni articoli non sono stati elaborati.")
+          if data.get("total_errors", 0) > 3:
+              raise SystemExit("ERRORE: troppi errori Gemini nello stesso run.")
           if data.get("total_final_candidates") != len(data.get("items", [])):
               raise SystemExit("ERRORE: conteggio candidati incoerente.")
+          if data.get("total_final_candidates", 0) < 5:
+              raise SystemExit("ERRORE: candidati insufficienti per i 5 articoli giornalieri.")
           print(f"Articoli ricevuti: {data['total_received']}")
           print(f"Articoli analizzati: {data['total_analyzed']}")
+          print(f"Errori Gemini tollerati: {data.get('total_errors', 0)}")
           print(f"Approvati: {data['total_passed_ai']}")
           print(f"Candidati finali: {data['total_final_candidates']}")
+          if status == "ok_with_warnings":
+              print("AVVISO: il run prosegue con articoli esclusi per errori transitori.")
           for i, item in enumerate(data["items"], 1):
               print(f"{i}. [{item['final_score']}] [{item['category']}] {item['title']}")
           PY
