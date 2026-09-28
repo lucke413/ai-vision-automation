@@ -32,7 +32,7 @@ MAX_RETRIES = 4
 REQUEST_DELAY = 6.0
 RETRY_BUFFER = 2.0
 REQUEST_TIMEOUT = 90
-MIN_BODY_WORDS = 450
+MIN_BODY_WORDS = 350
 MAX_BODY_WORDS = 700
 MAX_REPAIR_ATTEMPTS = 1
 MAX_EXCERPT_CHARS = 200
@@ -267,7 +267,7 @@ Restituisci esattamente questo schema:
 {{
   "title": "titolo originale in italiano",
   "excerpt": "riassunto di massimo duecento caratteri",
-  "body_markdown": "articolo originale di 450-700 parole in Markdown",
+  "body_markdown": "articolo originale di {MIN_BODY_WORDS}-{MAX_BODY_WORDS} parole in Markdown",
   "seo_title": "titolo SEO di massimo 60 caratteri",
   "seo_description": "descrizione SEO di massimo 155 caratteri",
   "slug": "slug-in-minuscolo-con-trattini",
