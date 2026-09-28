@@ -13,7 +13,7 @@ concurrency:
 jobs:
   ai-pipeline:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       PYTHONUNBUFFERED: "1"
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
