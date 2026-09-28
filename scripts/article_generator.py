@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "1.3"
+VERSION = "1.4"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 MAX_ITEMS = 5
 MAX_RETRIES = 4
@@ -33,15 +33,17 @@ REQUEST_DELAY = 6.0
 RETRY_BUFFER = 2.0
 REQUEST_TIMEOUT = 90
 TARGET_BODY_WORDS = 350
-# Soglia tecnica assoluta: sotto questo valore il testo è troppo breve per
-# essere utilizzato. Una bozza tra 200 e 249 parole viene mantenuta soltanto
-# come fallback, con un avviso esplicito, dopo i tentativi di espansione.
-MIN_BODY_WORDS = 200
+# Soglia tecnica assoluta: sotto questo valore il testo non è un articolo
+# utilizzabile. Una news breve ma completa viene mantenuta con un avviso,
+# perché la fonte potrebbe non contenere dati sufficienti per 350 parole.
+MIN_BODY_WORDS = 150
 # Soglia di qualità richiesta normalmente. Il modello deve puntare a 350
 # parole; questa soglia serve per decidere se chiedere una riscrittura.
 QUALITY_MIN_BODY_WORDS = 250
 MAX_BODY_WORDS = 700
-MAX_REPAIR_ATTEMPTS = 2
+# Una sola espansione: se la fonte è breve, non consumiamo quota in tentativi
+# ripetuti e non costringiamo Gemini a inventare dettagli.
+MAX_REPAIR_ATTEMPTS = 1
 MAX_EXCERPT_CHARS = 200
 MAX_SEO_TITLE_CHARS = 60
 MAX_SEO_DESCRIPTION_CHARS = 155
@@ -263,11 +265,11 @@ TIPO: {item.get('story_type', 'NEWS')}
 PUNTEGGIO EDITORIALE: {item.get('final_score', 0)}
 
 Il campo body_markdown deve puntare a circa {TARGET_BODY_WORDS} parole,
-con almeno {QUALITY_MIN_BODY_WORDS} parole e senza superare {MAX_BODY_WORDS}.
-Prima di rispondere conta le parole del solo body_markdown: non restituire un
-testo breve per errore. Se la fonte è sintetica, amplia il contesto usando
-soltanto informazioni già presenti nella fonte, senza riempitivi né invenzioni.
-Usa 4-7 paragrafi leggibili.
+senza superare {MAX_BODY_WORDS}. La soglia di qualità indicativa è
+{QUALITY_MIN_BODY_WORDS} parole, ma la fonte potrebbe essere sintetica: in tal
+caso scrivi un testo più breve ma completo. Non aggiungere riempitivi e non
+inventare dettagli per raggiungere una lunghezza prestabilita. Usa 3-7
+paragrafi leggibili e conta le parole del solo body_markdown prima di rispondere.
 Usa sempre una forma neutra e attribuisci alla fonte eventuali prove,
 recensioni, dichiarazioni o risultati. Non usare "abbiamo provato",
 "la nostra prova", "nel nostro test" o formule equivalenti.
@@ -276,7 +278,7 @@ Restituisci esattamente questo schema:
 {{
   "title": "titolo originale in italiano",
   "excerpt": "riassunto di massimo duecento caratteri",
-  "body_markdown": "articolo originale di circa {TARGET_BODY_WORDS} parole, almeno {QUALITY_MIN_BODY_WORDS}, in Markdown",
+  "body_markdown": "articolo originale di circa {TARGET_BODY_WORDS} parole, in Markdown",
   "seo_title": "titolo SEO di massimo 60 caratteri",
   "seo_description": "descrizione SEO di massimo 155 caratteri",
   "slug": "slug-in-minuscolo-con-trattini",
