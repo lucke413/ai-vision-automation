@@ -1,5 +1,5 @@
 """
-AI VISION - AI FILTER 2.7.0
+AI VISION - AI FILTER 2.8.0
 Filtro editoriale intelligente con Gemini
 
 INPUT:
@@ -8,7 +8,7 @@ INPUT:
 OUTPUT:
     data/ai_candidates.json
 
-Versione 2.7:
+Versione 2.8:
 - filtro editoriale bilanciato
 - classificazione categorie
 - scoring AI
@@ -39,7 +39,7 @@ import requests
 # CONFIGURAZIONE
 # ============================================================
 
-VERSION = "2.7.0"
+VERSION = "2.8.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data/rss_output.json"
@@ -47,7 +47,10 @@ OUTPUT_FILE = BASE_DIR / "data/ai_candidates.json"
 
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite"
 
-MAX_ARTICLES = 80
+# Il collector prepara una rosa più ampia, ma per il filtro AI analizziamo
+# solo i primi 40 articoli già ordinati editorialmente. In questo modo il
+# run resta entro pochi minuti e non dipende da 80 chiamate consecutive.
+MAX_ARTICLES = 40
 MAX_FINAL_CANDIDATES = 20
 
 # ------------------------------------------------------------
@@ -61,11 +64,13 @@ REQUEST_DELAY = 6.0
 # Numero massimo di tentativi per una singola richiesta
 MAX_RETRIES = 4
 
-# Un errore transitorio su un singolo articolo non deve annullare
-# l'intera giornata. Gli articoli non analizzati restano esclusi;
-# il workflow verifica poi che restino abbastanza candidati per
-# la selezione giornaliera.
-MAX_TOLERATED_ITEM_ERRORS = 3
+# Gli errori transitori non devono annullare un run che ha già prodotto
+# abbastanza candidati validi. La soglia evita comunque di mascherare un
+# problema prolungato del servizio.
+MAX_TOLERATED_ITEM_ERRORS = 8
+
+# Candidati minimi per preparare la giornata.
+MIN_REQUIRED_CANDIDATES = 5
 
 # Piccolo margine aggiuntivo dopo il retryDelay di Gemini
 RETRY_BUFFER = 2.0
@@ -960,7 +965,7 @@ def main():
     OUTPUT_FILE.unlink(missing_ok=True)
 
     print("=" * 70)
-    print("AI VISION - AI FILTER 2.7.0")
+    print("AI VISION - AI FILTER 2.8.0")
     print("=" * 70)
     print(f"VERSIONE FILTRO: {VERSION}")
     print(f"MODELLO: {MODEL}")
@@ -1038,6 +1043,7 @@ def main():
     articles = articles[:MAX_ARTICLES]
     print(f"Articoli ricevuti: {total_received}; da analizzare: {len(articles)}")
     fatal_error = None
+    partial_stop_reason = None
     consecutive_errors = 0
 
     # --------------------------------------------------------
@@ -1109,7 +1115,10 @@ def main():
 
             consecutive_errors += 1
             if consecutive_errors >= 3:
-                fatal_error = "Tre errori Gemini consecutivi: esecuzione interrotta."
+                partial_stop_reason = (
+                    "Tre errori Gemini consecutivi: analisi fermata "
+                    "dopo aver mantenuto i candidati già validati."
+                )
                 break
 
             # Piccola pausa anche dopo un errore definitivo.
@@ -1144,7 +1153,10 @@ def main():
 
             consecutive_errors += 1
             if consecutive_errors >= 3:
-                fatal_error = "Tre risposte Gemini non valide consecutive."
+                partial_stop_reason = (
+                    "Tre risposte Gemini non valide consecutive: analisi "
+                    "fermata dopo aver mantenuto i candidati già validati."
+                )
                 break
             time.sleep(REQUEST_DELAY)
 
@@ -1389,9 +1401,10 @@ def main():
             f"{total_unprocessed} articolo/i non elaborato/i prima dell'interruzione."
         )
 
+    if partial_stop_reason:
+        warnings.append(partial_stop_reason)
+
     if fatal_error:
-        status = "error"
-    elif total_unprocessed:
         status = "error"
     elif total_errors > MAX_TOLERATED_ITEM_ERRORS:
         fatal_error = (
@@ -1399,7 +1412,13 @@ def main():
             f"({total_errors}>{MAX_TOLERATED_ITEM_ERRORS})."
         )
         status = "error"
-    elif total_errors:
+    elif (total_errors or total_unprocessed) and len(selected) < MIN_REQUIRED_CANDIDATES:
+        fatal_error = (
+            f"Candidati insufficienti per la selezione giornaliera "
+            f"({len(selected)}<{MIN_REQUIRED_CANDIDATES})."
+        )
+        status = "error"
+    elif total_errors or total_unprocessed:
         status = "ok_with_warnings"
     else:
         status = "ok"
