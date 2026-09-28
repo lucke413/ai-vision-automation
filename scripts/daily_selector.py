@@ -70,9 +70,10 @@ def score_key(item: dict) -> tuple[float, float, str]:
 
 
 def valid_candidates(data: dict) -> list[dict]:
-    if data.get("status") not in {"ok", "ok_with_warnings"}:
+    status = data.get("status")
+    if status not in {"ok", "ok_with_warnings"}:
         raise RuntimeError("Il risultato AI non è utilizzabile.")
-    if data.get("total_unprocessed", 0) != 0:
+    if status == "ok" and data.get("total_unprocessed", 0) != 0:
         raise RuntimeError("Il risultato AI contiene articoli non elaborati.")
     items = data.get("items")
     if not isinstance(items, list) or not items:
