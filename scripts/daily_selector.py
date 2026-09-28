@@ -20,7 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "1.0"
+VERSION = "1.1"
 DAILY_LIMIT = 5
 MAX_OFFERS = 1
 MAX_PER_CATEGORY = 1
@@ -70,8 +70,10 @@ def score_key(item: dict) -> tuple[float, float, str]:
 
 
 def valid_candidates(data: dict) -> list[dict]:
-    if data.get("status") != "ok":
-        raise RuntimeError("Il risultato AI non è completo.")
+    if data.get("status") not in {"ok", "ok_with_warnings"}:
+        raise RuntimeError("Il risultato AI non è utilizzabile.")
+    if data.get("total_unprocessed", 0) != 0:
+        raise RuntimeError("Il risultato AI contiene articoli non elaborati.")
     items = data.get("items")
     if not isinstance(items, list) or not items:
         raise RuntimeError("Nessun candidato AI disponibile.")
