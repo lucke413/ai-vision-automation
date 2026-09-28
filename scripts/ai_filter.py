@@ -1,5 +1,5 @@
 """
-AI VISION - AI FILTER 2.8.0
+    AI VISION - AI FILTER 2.9.0
 Filtro editoriale intelligente con Gemini
 
 INPUT:
@@ -8,7 +8,7 @@ INPUT:
 OUTPUT:
     data/ai_candidates.json
 
-Versione 2.8:
+Versione 2.9:
 - filtro editoriale bilanciato
 - classificazione categorie
 - scoring AI
@@ -18,7 +18,7 @@ Versione 2.8:
 - valore commerciale
 - urgenza
 - selezione bilanciata per categoria
-- gestione intelligente del rate limit Gemini 429
+- stop controllato al rate limit Gemini 429
 - tolleranza controllata agli errori transitori per singolo articolo
 """
 
@@ -39,7 +39,7 @@ import requests
 # CONFIGURAZIONE
 # ============================================================
 
-VERSION = "2.8.0"
+VERSION = "2.9.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data/rss_output.json"
@@ -71,9 +71,6 @@ MAX_TOLERATED_ITEM_ERRORS = 8
 
 # Candidati minimi per preparare la giornata.
 MIN_REQUIRED_CANDIDATES = 5
-
-# Piccolo margine aggiuntivo dopo il retryDelay di Gemini
-RETRY_BUFFER = 2.0
 
 # Timeout HTTP
 REQUEST_TIMEOUT = 60
@@ -413,86 +410,12 @@ def get_api_key():
     return api_key
 
 
-def parse_retry_delay(error_response):
-    """
-    Cerca il tempo di attesa consigliato da Gemini.
-
-    Priorità:
-    1. details[].retryDelay
-    2. testo 'Please retry in Xs'
-    3. fallback None
-    """
-
-    # --------------------------------------------------------
-    # Tentativo 1: struttura JSON Gemini
-    # --------------------------------------------------------
-
-    try:
-        data = error_response.json()
-    except Exception:
-        data = {}
-
-    details = (
-        data
-        .get("error", {})
-        .get("details", [])
-    ) or []
-
-    for detail in details:
-
-        if not isinstance(detail, dict):
-            continue
-
-        # Formato tipico:
-        # {
-        #   "@type": "...RetryInfo",
-        #   "retryDelay": "20s"
-        # }
-
-        retry_delay = detail.get("retryDelay")
-
-        if retry_delay:
-            match = re.search(
-                r"([0-9]+(?:\.[0-9]+)?)",
-                str(retry_delay)
-            )
-
-            if match:
-                return float(match.group(1))
-
-    # --------------------------------------------------------
-    # Tentativo 2: cerca nel messaggio
-    # --------------------------------------------------------
-
-    try:
-        message = (
-            data
-            .get("error", {})
-            .get("message", "")
-        )
-    except Exception:
-        message = ""
-
-    if not message:
-        try:
-            message = error_response.text
-        except Exception:
-            message = ""
-
-    match = re.search(
-        r"retry in\s+([0-9]+(?:\.[0-9]+)?)s",
-        message,
-        flags=re.IGNORECASE
-    )
-
-    if match:
-        return float(match.group(1))
-
-    return None
-
-
 class GeminiFatalError(RuntimeError):
-    """Errore di configurazione o quota: interrompe l'intera analisi."""
+    """Errore di configurazione o richiesta non recuperabile."""
+
+
+class GeminiRateLimitError(RuntimeError):
+    """Rate limit raggiunto: il lotto può proseguire con candidati parziali."""
 
 
 def call_gemini(prompt, api_key):
@@ -524,19 +447,14 @@ def call_gemini(prompt, api_key):
                     f"Gemini HTTP {response.status_code}: verificare chiave, permessi, modello e richiesta."
                 )
             if response.status_code == 429:
-                delay = parse_retry_delay(response)
-                if delay is None:
-                    try:
-                        delay = float(response.headers.get("Retry-After", "30"))
-                    except ValueError:
-                        delay = 30.0
-                if not math.isfinite(delay) or delay > 120 or attempt == MAX_RETRIES:
-                    raise GeminiFatalError("Quota Gemini esaurita o rate limit persistente (429).")
-                wait_time = max(0, delay) + RETRY_BUFFER
+                raise GeminiRateLimitError(
+                    "Gemini HTTP 429: rate limit raggiunto; analisi fermata "
+                    "per evitare retry che consumano altra quota."
+                )
             elif not 500 <= response.status_code < 600:
                 raise GeminiFatalError(f"Gemini HTTP {response.status_code}: richiesta interrotta.")
             print(f"    Gemini HTTP {response.status_code}, tentativo {attempt}/{MAX_RETRIES}.")
-        except GeminiFatalError:
+        except (GeminiFatalError, GeminiRateLimitError):
             raise
         except requests.exceptions.RequestException:
             # Non stampare l'eccezione: potrebbe contenere dettagli della richiesta.
@@ -965,14 +883,14 @@ def main():
     OUTPUT_FILE.unlink(missing_ok=True)
 
     print("=" * 70)
-    print("AI VISION - AI FILTER 2.8.0")
+    print("AI VISION - AI FILTER 2.9.0")
     print("=" * 70)
     print(f"VERSIONE FILTRO: {VERSION}")
     print(f"MODELLO: {MODEL}")
     print(f"INPUT: {INPUT_FILE}")
     print(f"OUTPUT: {OUTPUT_FILE}")
     print(f"ATTESA TRA RICHIESTE: {REQUEST_DELAY}s")
-    print(f"MAX RETRY 429: {MAX_RETRIES}")
+    print(f"MAX RETRY ERRORI TRANSITORI: {MAX_RETRIES}")
     print("=" * 70)
 
     # --------------------------------------------------------
@@ -1089,6 +1007,15 @@ def main():
 
         try:
             ai_raw = call_gemini(prompt, api_key)
+        except GeminiRateLimitError as exc:
+            partial_stop_reason = str(exc)
+            print(f"AVVISO: {partial_stop_reason}")
+            exclusion_summary["Rate limit Gemini"] += 1
+            all_analyzed.append({
+                **article,
+                "analysis_status": "gemini_rate_limit",
+            })
+            break
         except GeminiFatalError as exc:
             fatal_error = str(exc)
             print(f"ERRORE: {fatal_error}")
