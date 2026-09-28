@@ -25,14 +25,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "1.1"
+VERSION = "1.2"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 MAX_ITEMS = 5
 MAX_RETRIES = 4
 REQUEST_DELAY = 6.0
 RETRY_BUFFER = 2.0
 REQUEST_TIMEOUT = 90
-MIN_BODY_WORDS = 350
+TARGET_BODY_WORDS = 350
+MIN_BODY_WORDS = 250
 MAX_BODY_WORDS = 700
 MAX_REPAIR_ATTEMPTS = 1
 MAX_EXCERPT_CHARS = 200
@@ -255,10 +256,11 @@ CATEGORIA: {item.get('category', 'Tecnologia')}
 TIPO: {item.get('story_type', 'NEWS')}
 PUNTEGGIO EDITORIALE: {item.get('final_score', 0)}
 
-Il campo body_markdown deve contenere tra {MIN_BODY_WORDS} e {MAX_BODY_WORDS}
-parole effettive, in 5-7 paragrafi leggibili. Conta le parole prima di
-rispondere. Se il testo è troppo breve, amplia il contesto usando soltanto
-informazioni già presenti nella fonte: non riempire con dati inventati.
+Il campo body_markdown dovrebbe puntare a circa {TARGET_BODY_WORDS} parole,
+senza superare {MAX_BODY_WORDS}. Il limite minimo tecnico è {MIN_BODY_WORDS}
+parole: se non puoi raggiungere l'obiettivo, mantieni comunque un testo
+completo e informativo, senza riempitivi. Usa 4-7 paragrafi leggibili e amplia
+il contesto usando soltanto informazioni già presenti nella fonte.
 Usa sempre una forma neutra e attribuisci alla fonte eventuali prove,
 recensioni, dichiarazioni o risultati. Non usare "abbiamo provato",
 "la nostra prova", "nel nostro test" o formule equivalenti.
@@ -267,7 +269,7 @@ Restituisci esattamente questo schema:
 {{
   "title": "titolo originale in italiano",
   "excerpt": "riassunto di massimo duecento caratteri",
-  "body_markdown": "articolo originale di {MIN_BODY_WORDS}-{MAX_BODY_WORDS} parole in Markdown",
+  "body_markdown": "articolo originale di circa {TARGET_BODY_WORDS} parole, minimo tecnico {MIN_BODY_WORDS}, in Markdown",
   "seo_title": "titolo SEO di massimo 60 caratteri",
   "seo_description": "descrizione SEO di massimo 155 caratteri",
   "slug": "slug-in-minuscolo-con-trattini",
@@ -292,11 +294,16 @@ def normalize_draft(raw: dict, item: dict) -> dict:
     if len(title) < 10:
         raise GeneratorFatalError("Bozza senza titolo valido.")
     body_words = count_words(body)
-    if not MIN_BODY_WORDS <= body_words <= MAX_BODY_WORDS:
+    if body_words < MIN_BODY_WORDS or body_words > MAX_BODY_WORDS:
         raise GeneratorFatalError(
             f"Bozza di {body_words} parole; richieste {MIN_BODY_WORDS}-{MAX_BODY_WORDS}."
         )
     validate_editorial_body(body)
+    quality_warnings = []
+    if body_words < TARGET_BODY_WORDS:
+        quality_warnings.append(
+            f"Testo di {body_words} parole, sotto l'obiettivo editoriale di {TARGET_BODY_WORDS}."
+        )
 
     source_url = str(item.get("url") or "").strip()
     parsed_source_url = urlsplit(source_url)
@@ -338,6 +345,7 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         "excerpt": truncate_at_word_boundary(raw["excerpt"], MAX_EXCERPT_CHARS),
         "body_markdown": body,
         "body_word_count": body_words,
+        "quality_warnings": quality_warnings,
         "seo_title": truncate_at_word_boundary(raw["seo_title"], MAX_SEO_TITLE_CHARS),
         "seo_description": truncate_at_word_boundary(raw["seo_description"], MAX_SEO_DESCRIPTION_CHARS),
         "slug": re.sub(r"[^a-z0-9-]", "", str(raw["slug"]).lower().replace(" ", "-")).strip("-"),
@@ -394,6 +402,9 @@ def main() -> int:
         "error": fatal_error,
         "total_requested": len(items),
         "total_generated": len(drafts),
+        "drafts_with_quality_warnings": sum(
+            1 for draft in drafts if draft.get("quality_warnings")
+        ),
         "items": drafts,
     }
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
