@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "1.2"
+VERSION = "1.3"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 MAX_ITEMS = 5
 MAX_RETRIES = 4
@@ -33,9 +33,15 @@ REQUEST_DELAY = 6.0
 RETRY_BUFFER = 2.0
 REQUEST_TIMEOUT = 90
 TARGET_BODY_WORDS = 350
-MIN_BODY_WORDS = 250
+# Soglia tecnica assoluta: sotto questo valore il testo è troppo breve per
+# essere utilizzato. Una bozza tra 200 e 249 parole viene mantenuta soltanto
+# come fallback, con un avviso esplicito, dopo i tentativi di espansione.
+MIN_BODY_WORDS = 200
+# Soglia di qualità richiesta normalmente. Il modello deve puntare a 350
+# parole; questa soglia serve per decidere se chiedere una riscrittura.
+QUALITY_MIN_BODY_WORDS = 250
 MAX_BODY_WORDS = 700
-MAX_REPAIR_ATTEMPTS = 1
+MAX_REPAIR_ATTEMPTS = 2
 MAX_EXCERPT_CHARS = 200
 MAX_SEO_TITLE_CHARS = 60
 MAX_SEO_DESCRIPTION_CHARS = 155
@@ -256,11 +262,12 @@ CATEGORIA: {item.get('category', 'Tecnologia')}
 TIPO: {item.get('story_type', 'NEWS')}
 PUNTEGGIO EDITORIALE: {item.get('final_score', 0)}
 
-Il campo body_markdown dovrebbe puntare a circa {TARGET_BODY_WORDS} parole,
-senza superare {MAX_BODY_WORDS}. Il limite minimo tecnico è {MIN_BODY_WORDS}
-parole: se non puoi raggiungere l'obiettivo, mantieni comunque un testo
-completo e informativo, senza riempitivi. Usa 4-7 paragrafi leggibili e amplia
-il contesto usando soltanto informazioni già presenti nella fonte.
+Il campo body_markdown deve puntare a circa {TARGET_BODY_WORDS} parole,
+con almeno {QUALITY_MIN_BODY_WORDS} parole e senza superare {MAX_BODY_WORDS}.
+Prima di rispondere conta le parole del solo body_markdown: non restituire un
+testo breve per errore. Se la fonte è sintetica, amplia il contesto usando
+soltanto informazioni già presenti nella fonte, senza riempitivi né invenzioni.
+Usa 4-7 paragrafi leggibili.
 Usa sempre una forma neutra e attribuisci alla fonte eventuali prove,
 recensioni, dichiarazioni o risultati. Non usare "abbiamo provato",
 "la nostra prova", "nel nostro test" o formule equivalenti.
@@ -269,7 +276,7 @@ Restituisci esattamente questo schema:
 {{
   "title": "titolo originale in italiano",
   "excerpt": "riassunto di massimo duecento caratteri",
-  "body_markdown": "articolo originale di circa {TARGET_BODY_WORDS} parole, minimo tecnico {MIN_BODY_WORDS}, in Markdown",
+  "body_markdown": "articolo originale di circa {TARGET_BODY_WORDS} parole, almeno {QUALITY_MIN_BODY_WORDS}, in Markdown",
   "seo_title": "titolo SEO di massimo 60 caratteri",
   "seo_description": "descrizione SEO di massimo 155 caratteri",
   "slug": "slug-in-minuscolo-con-trattini",
@@ -300,6 +307,11 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         )
     validate_editorial_body(body)
     quality_warnings = []
+    if body_words < QUALITY_MIN_BODY_WORDS:
+        quality_warnings.append(
+            f"Testo breve di {body_words} parole: sotto la soglia qualità "
+            f"di {QUALITY_MIN_BODY_WORDS}; verificare prima della pubblicazione."
+        )
     if body_words < TARGET_BODY_WORDS:
         quality_warnings.append(
             f"Testo di {body_words} parole, sotto l'obiettivo editoriale di {TARGET_BODY_WORDS}."
@@ -360,14 +372,25 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
 
     for attempt in range(MAX_REPAIR_ATTEMPTS + 1):
         try:
-            return normalize_draft(raw, item)
+            draft = normalize_draft(raw, item)
+            if (
+                draft["body_word_count"] >= QUALITY_MIN_BODY_WORDS
+                or attempt >= MAX_REPAIR_ATTEMPTS
+            ):
+                return draft
+
+            print(
+                f"    Bozza breve ({draft['body_word_count']} parole); "
+                "espansione automatica."
+            )
         except GeneratorFatalError as exc:
             message = str(exc)
             if "URL originale non valido" in message or attempt >= MAX_REPAIR_ATTEMPTS:
                 raise
             print(f"    Bozza non conforme ({message}); riscrittura automatica.")
-            time.sleep(2.0)
-            raw = call_gemini(build_prompt(item, previous=raw), api_key)
+
+        time.sleep(2.0)
+        raw = call_gemini(build_prompt(item, previous=raw), api_key)
 
     raise GeneratorFatalError("Generazione bozza non completata.")
 
