@@ -201,12 +201,14 @@ jobs:
           PY
 
       - name: Pubblica o pianifica su WordPress
-        if: ${{ vars.WP_PUBLISH_MODE == 'dry-run' || vars.WP_PUBLISH_MODE == 'live' }}
+        # Il publisher viene eseguito anche se la variabile non è visibile
+        # al run: in quel caso WP_DRY_RUN resta true e non pubblica nulla.
+        if: ${{ always() && hashFiles('data/article_drafts.json') != '' }}
         env:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-          WP_DRY_RUN: ${{ vars.WP_PUBLISH_MODE != 'live' && 'true' || 'false' }}
+          WP_DRY_RUN: ${{ vars.WP_PUBLISH_MODE == 'live' && 'false' || 'true' }}
           WP_TIMEZONE: Europe/Rome
         run: python scripts/wp_publisher.py
 
