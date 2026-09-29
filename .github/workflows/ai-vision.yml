@@ -2,9 +2,13 @@ name: AI Vision Automation
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '17 11 * * *'
+      timezone: Europe/Rome
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ai-vision-${{ github.ref }}
@@ -49,6 +53,7 @@ jobs:
               "scripts/rss_collector.py",
               "scripts/ai_filter.py",
               "scripts/daily_selector.py",
+              "scripts/history_filter.py",
               "scripts/article_generator.py",
               "scripts/wp_publisher.py",
               "requirements.txt",
@@ -61,7 +66,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m pip check
-          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/article_generator.py scripts/wp_publisher.py
+          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/article_generator.py scripts/wp_publisher.py
 
       - name: Verifica versioni progetto
         run: |
@@ -145,6 +150,11 @@ jobs:
               print(f"{i}. [{item['final_score']}] [{item['category']}] {item['title']}")
           PY
 
+      - name: Escludi notizie già pubblicate o pianificate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/history_filter.py
+
       - name: Seleziona articoli giornalieri
         run: python scripts/daily_selector.py
 
@@ -201,14 +211,12 @@ jobs:
           PY
 
       - name: Pubblica o pianifica su WordPress
-        # Il publisher viene eseguito anche se la variabile non è visibile
-        # al run: in quel caso WP_DRY_RUN resta true e non pubblica nulla.
-        if: ${{ always() && hashFiles('data/article_drafts.json') != '' }}
+        if: ${{ vars.WP_PUBLISH_MODE == 'dry-run' || vars.WP_PUBLISH_MODE == 'live' }}
         env:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-          WP_DRY_RUN: ${{ vars.WP_PUBLISH_MODE == 'live' && 'false' || 'true' }}
+          WP_DRY_RUN: ${{ vars.WP_PUBLISH_MODE != 'live' && 'true' || 'false' }}
           WP_TIMEZONE: Europe/Rome
         run: python scripts/wp_publisher.py
 
