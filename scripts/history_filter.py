@@ -13,6 +13,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,6 +26,20 @@ LOOKBACK_DAYS = 7  # I feed RSS ammettono notizie degli ultimi due giorni.
 API_ROOT = "https://api.github.com"
 
 
+class ArtifactRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Non inoltra il token GitHub al server dell'archivio firmato."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None:
+            old = urlsplit(req.full_url)
+            new = urlsplit(redirected.full_url)
+            if (old.scheme, old.netloc) != (new.scheme, new.netloc):
+                for name in ("Authorization", "Accept", "X-github-api-version"):
+                    redirected.remove_header(name)
+        return redirected
+
+
 def api_get(url: str, token: str) -> bytes:
     request = urllib.request.Request(
         url,
@@ -35,7 +50,8 @@ def api_get(url: str, token: str) -> bytes:
             "User-Agent": "AI-Vision-History-Filter",
         },
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
+    opener = urllib.request.build_opener(ArtifactRedirectHandler())
+    with opener.open(request, timeout=30) as response:
         return response.read()
 
 
