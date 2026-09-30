@@ -1,0 +1,71 @@
+name: AI Vision - Recupero SEO 4 articoli
+on:
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: ai-vision-seo-recovery
+  cancel-in-progress: false
+jobs:
+  recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Recupera solo i metadati dei quattro post esistenti
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, base64, urllib.request, urllib.error
+          from urllib.parse import urlsplit
+
+          TARGETS = [{'post_id': 483, 'slug': 'ecoflow-delta-3-classic-offerta-minimo-storico', 'seo': {'focus_keyphrase': 'EcoFlow DELTA 3 Classic', 'seo_title': 'EcoFlow DELTA 3 Classic in offerta al minimo storico', 'seo_description': 'EcoFlow DELTA 3 Classic in offerta su Amazon al minimo storico: costa 519 euro invece di 599 euro con il 13% di sconto.'}}, {'post_id': 486, 'slug': 'safari-funzione-avvisami-monitorare-prezzi', 'seo': {'focus_keyphrase': 'Safari funzione Avvisami', 'seo_title': 'Safari funzione Avvisami: monitora prezzi e contenuti', 'seo_description': 'Scopri la funzione Avvisami di Safari in macOS 27 Golden Gate: monitora i prezzi e i contenuti web senza bisogno di lasciare schede aperte.'}}, {'post_id': 489, 'slug': 'lg-ultragear-evo-gx9-recensione', 'seo': {'focus_keyphrase': 'LG UltraGear evo GX9', 'seo_title': 'LG UltraGear evo GX9: caratteristiche del monitor OLED', 'seo_description': 'LG UltraGear evo GX9: le caratteristiche del monitor OLED ultrawide da 39 pollici con risoluzione 5K2K.'}}, {'post_id': 492, 'slug': 'falla-su-iphone-aggiornare-subito', 'seo': {'focus_keyphrase': 'falla su iPhone', 'seo_title': 'Falla su iPhone: perché aggiornare subito iOS', 'seo_description': "Apple distribuisce un nuovo aggiornamento per correggere una vulnerabilità di sicurezza su iPhone legata all'elaborazione dei contenuti visivi."}}]
+          base = os.environ['WP_BASE_URL'].rstrip('/')
+          if urlsplit(base).scheme != 'https' or urlsplit(base).hostname != 'aivision.altervista.org':
+              raise SystemExit('WP_BASE_URL inatteso: nessuna modifica.')
+          if base.endswith('/wp-json'):
+              base = base[:-8]
+          credentials = (os.environ['WP_USERNAME'] + ':' + os.environ['WP_APP_PASSWORD']).encode()
+          headers = {'Authorization': 'Basic ' + base64.b64encode(credentials).decode(),
+                     'Content-Type': 'application/json'}
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs):
+                  return None
+          opener = urllib.request.build_opener(NoRedirect())
+          def api(post_id, payload=None):
+              url = base + '/wp-json/wp/v2/posts/' + str(post_id) + '?context=edit'
+              request = urllib.request.Request(url, headers=headers,
+                  data=None if payload is None else json.dumps(payload).encode(),
+                  method='GET' if payload is None else 'POST')
+              try:
+                  with opener.open(request, timeout=30) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  raise RuntimeError('HTTP ' + str(error.code)) from None
+              except (urllib.error.URLError, TimeoutError):
+                  raise RuntimeError('Connessione non riuscita') from None
+          # Controllo di tutti i post prima di iniziare: niente creazioni o cambi orario.
+          checked = []
+          for target in TARGETS:
+              post = api(target['post_id'])
+              if post.get('slug') != target['slug'] or not isinstance(post.get('aivision_seo'), dict):
+                  raise SystemExit('Identità post o SEO Bridge non confermati: interrotto prima delle modifiche.')
+              checked.append((target, post))
+          errors = 0
+          for target, post in checked:
+              try:
+                  # Conserva i campi eventualmente già compilati a mano.
+                  fields = {k:v for k,v in target['seo'].items() if not post['aivision_seo'].get(k)}
+                  if fields:
+                      api(target['post_id'], {'aivision_seo':fields})
+                  actual = api(target['post_id']).get('aivision_seo', {})
+                  if not all(actual.get(k) == v for k,v in fields.items()):
+                      raise RuntimeError('Salvataggio non confermato')
+                  print('Post', target['post_id'], ': SEO salvato/verificato; campi esistenti conservati.')
+              except Exception as error:
+                  errors += 1
+                  print('Post', target['post_id'], ':', type(error).__name__)
+          if errors:
+              raise SystemExit('Recupero parziale: controllare i post segnalati. Nessun nuovo articolo creato.')
+          PYTHON
