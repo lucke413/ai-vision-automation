@@ -78,8 +78,8 @@ jobs:
               "scripts/rss_collector.py": "2.3.2",
               "scripts/ai_filter.py": "3.0.0",
               "scripts/daily_selector.py": "2.0",
-              "scripts/article_generator.py": "2.1",
-              "scripts/wp_publisher.py": "1.0",
+              "scripts/article_generator.py": "2.2",
+              "scripts/wp_publisher.py": "1.1",
           }
 
           for filename, wanted in expected.items():
@@ -203,6 +203,11 @@ jobs:
                   raise SystemExit("ERRORE: bozza senza contenuto.")
               if item.get("publication_slot") not in {"today", "reserve"}:
                   raise SystemExit("ERRORE: slot di pubblicazione mancante.")
+              if item.get("publication_slot") == "today":
+                  if int(item.get("body_word_count", 0)) < 550:
+                      raise SystemExit("ERRORE: articolo giornaliero sotto 550 parole.")
+                  if item.get("quality_warnings"):
+                      raise SystemExit("ERRORE: articolo giornaliero con quality warning.")
           daily = sum(1 for item in items if item.get("publication_slot") == "today")
           reserve = sum(1 for item in items if item.get("publication_slot") == "reserve")
           print(f"OK: {len(items)} bozze generate; oggi: {daily}; riserve: {reserve}.")
