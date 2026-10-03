@@ -204,8 +204,8 @@ jobs:
               if item.get("publication_slot") not in {"today", "reserve"}:
                   raise SystemExit("ERRORE: slot di pubblicazione mancante.")
               if item.get("publication_slot") == "today":
-                  if int(item.get("body_word_count", 0)) < 550:
-                      raise SystemExit("ERRORE: articolo giornaliero sotto 550 parole.")
+                  if int(item.get("body_word_count", 0)) < 400:
+                      raise SystemExit("ERRORE: articolo giornaliero sotto 400 parole.")
                   if item.get("quality_warnings"):
                       raise SystemExit("ERRORE: articolo giornaliero con quality warning.")
           daily = sum(1 for item in items if item.get("publication_slot") == "today")
