@@ -1,0 +1,37 @@
+name: AI Vision Instagram
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-vision-instagram
+  cancel-in-progress: false
+
+jobs:
+  instagram:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Scarica repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Configura Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verifica publisher
+        run: python -m py_compile scripts/instagram_publisher.py
+
+      - name: Sincronizza Instagram
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
+        run: python scripts/instagram_publisher.py
