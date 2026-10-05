@@ -127,7 +127,7 @@ def caption(post):
     blocks = [title]
     if excerpt:
         blocks.append(excerpt)
-    blocks.append("🔗 Articolo completo su AI Vision — link cliccabile nel profilo @aivision_tech")
+    blocks.append("💬 Vuoi aprire l'articolo completo? Commenta LINK e ricevi il collegamento diretto in DM.")
     blocks.append("#AIVision #Tecnologia #IntelligenzaArtificiale #TechNews")
     return shorten("\n\n".join(blocks), CAPTION_LIMIT)
 
@@ -386,6 +386,10 @@ def sync(store, published, base, instagram):
         key = str(post["id"])
         record = data["posts"].get(key)
         if record:
+            article_url = str(post.get("link") or "").strip()
+            if article_url and record.get("article_url") != article_url:
+                record["article_url"] = article_url
+                store.save(data)
             if record.get("status") == "pending":
                 print(
                     f"::warning::Post {key}: pubblicazione incerta. "
@@ -409,6 +413,8 @@ def sync(store, published, base, instagram):
             "status": "pending",
             "at": datetime.now(timezone.utc).isoformat(),
             "image_url": image_url,
+            "article_url": str(post.get("link") or "").strip(),
+            "private_replies": {},
         }
         store.save(data)
 
@@ -437,6 +443,8 @@ def sync(store, published, base, instagram):
                 "status": "sent",
                 "media_id": media_id,
                 "published_at": datetime.now(timezone.utc).isoformat(),
+                "article_url": str(post.get("link") or "").strip(),
+                "private_replies": data["posts"][key].get("private_replies", {}),
             }
         )
         store.save(data)
@@ -444,6 +452,109 @@ def sync(store, published, base, instagram):
         print(f"OK: articolo {key} pubblicato su Instagram, media {media_id}.")
 
     print(f"Controllo Instagram completato. Nuovi post pubblicati: {sent}.")
+
+
+
+def link_request(text):
+    return bool(re.search(r"\\blink\\b", str(text or ""), flags=re.IGNORECASE))
+
+
+def process_link_comments(store, instagram):
+    """Invia in DM il link esatto dell'articolo a chi commenta LINK.
+
+    Usiamo il private reply ufficiale di Instagram. Ogni commento viene gestito
+    una sola volta e solo sui post pubblicati negli ultimi 7 giorni.
+    """
+    data = store.load()
+    if data is None:
+        return
+
+    now = datetime.now(timezone.utc)
+    candidates = []
+    for post_id, record in data.get("posts", {}).items():
+        if not isinstance(record, dict) or record.get("status") != "sent":
+            continue
+        media_id = str(record.get("media_id") or "").strip()
+        article_url = str(record.get("article_url") or "").strip()
+        published_at = str(record.get("published_at") or "").strip()
+        if not media_id or not article_url or not published_at:
+            continue
+        try:
+            when = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if (now - when).total_seconds() > 7 * 24 * 3600:
+            continue
+        candidates.append((when, post_id, record))
+
+    candidates.sort(reverse=True, key=lambda row: row[0])
+    handled = 0
+    for _, post_id, record in candidates[:15]:
+        media_id = str(record["media_id"])
+        article_url = str(record["article_url"])
+        replies = record.setdefault("private_replies", {})
+
+        query = urllib.parse.urlencode({
+            "fields": "id,text,timestamp",
+            "limit": 50,
+        })
+        try:
+            result = instagram.api(f"{media_id}/comments?{query}")
+        except APIError as exc:
+            print(
+                f"::warning::Commenti Instagram non disponibili per media {media_id}: {exc}"
+            )
+            continue
+
+        comments = result.get("data", []) if isinstance(result, dict) else []
+        if not isinstance(comments, list):
+            continue
+
+        for comment in comments:
+            if not isinstance(comment, dict):
+                continue
+            comment_id = str(comment.get("id") or "").strip()
+            if not comment_id or comment_id in replies:
+                continue
+            if not link_request(comment.get("text")):
+                continue
+
+            message = (
+                "Ecco il link diretto all'articolo AI Vision che hai richiesto:\n"
+                + article_url
+            )
+            try:
+                response = instagram.api(
+                    f"{instagram.user_id}/messages",
+                    "POST",
+                    {
+                        "recipient": {"comment_id": comment_id},
+                        "message": {"text": message},
+                    },
+                )
+            except APIError as exc:
+                print(
+                    f"::warning::Private reply non inviato al commento {comment_id}: {exc}"
+                )
+                continue
+
+            replies[comment_id] = {
+                "status": "sent",
+                "at": datetime.now(timezone.utc).isoformat(),
+                "message_id": (
+                    str(response.get("message_id") or "")
+                    if isinstance(response, dict)
+                    else ""
+                ),
+            }
+            store.save(data)
+            handled += 1
+            print(
+                f"OK: link diretto dell'articolo {post_id} inviato in DM "
+                f"per il commento {comment_id}."
+            )
+
+    print(f"Richieste LINK gestite in questo controllo: {handled}.")
 
 
 def main():
@@ -468,6 +579,7 @@ def main():
     store = State(env["GITHUB_REPOSITORY"], env["GITHUB_TOKEN"])
     instagram = InstagramClient(env["INSTAGRAM_ACCESS_TOKEN"], version)
     sync(store, wordpress_posts(base), base, instagram)
+    process_link_comments(store, instagram)
 
 
 if __name__ == "__main__":
