@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "2.7"
+VERSION = "2.8"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 5
 RESERVE_LIMIT = 3
@@ -33,7 +33,12 @@ MAX_DAILY_OFFERS = 1
 MAX_ITEMS = DAILY_LIMIT + RESERVE_LIMIT
 MAX_RETRIES = 3
 REQUEST_DELAY = 6.0
+# Intervallo globale tra TUTTE le chiamate Gemini, comprese le riscritture
+# dello stesso articolo. Prima il delay era applicato solo tra articoli:
+# 2-3 chiamate ravvicinate per una bozza corta potevano causare HTTP 429.
+GEMINI_MIN_INTERVAL = 7.0
 REQUEST_TIMEOUT = 90
+_LAST_GEMINI_REQUEST_AT = 0.0
 TARGET_BODY_WORDS = 650
 # Soglia minima di pubblicazione: sotto questo valore la bozza viene riscritta
 # una volta e, se resta troppo breve, viene scartata.
@@ -221,6 +226,7 @@ def extract_json(text: str) -> dict | None:
 
 
 def call_gemini(prompt: str, api_key: str) -> dict:
+    global _LAST_GEMINI_REQUEST_AT
     if not api_key:
         raise GeneratorFatalError("GEMINI_API_KEY non presente.")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
@@ -238,6 +244,11 @@ def call_gemini(prompt: str, api_key: str) -> dict:
     for attempt in range(1, MAX_RETRIES + 1):
         wait_time = min(60.0, (2**attempt) + random.uniform(0.5, 1.5))
         try:
+            # Throttle globale: vale anche per i tentativi di espansione/repair.
+            elapsed = time.monotonic() - _LAST_GEMINI_REQUEST_AT
+            if elapsed < GEMINI_MIN_INTERVAL:
+                time.sleep(GEMINI_MIN_INTERVAL - elapsed)
+            _LAST_GEMINI_REQUEST_AT = time.monotonic()
             response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 data = response.json()
@@ -255,7 +266,23 @@ def call_gemini(prompt: str, api_key: str) -> dict:
             if response.status_code in (400, 401, 403, 404):
                 raise GeneratorFatalError(f"Gemini HTTP {response.status_code}: richiesta non autorizzata o non valida.")
             if response.status_code == 429:
-                raise GeneratorRateLimitError("Limite Gemini raggiunto (429); bozze già generate conservate.")
+                if attempt >= MAX_RETRIES:
+                    raise GeneratorRateLimitError(
+                        "Limite Gemini persistente (429) dopo i tentativi di recupero; "
+                        "bozze già generate conservate."
+                    )
+                retry_after = response.headers.get("Retry-After", "").strip()
+                try:
+                    retry_wait = float(retry_after)
+                except ValueError:
+                    retry_wait = min(90.0, 30.0 * attempt)
+                retry_wait = max(GEMINI_MIN_INTERVAL, min(90.0, retry_wait))
+                print(
+                    f"    Limite Gemini 429, attendo {retry_wait:.0f}s "
+                    f"prima del tentativo {attempt + 1}/{MAX_RETRIES}."
+                )
+                time.sleep(retry_wait)
+                continue
             elif not 500 <= response.status_code < 600:
                 raise GeneratorFatalError(f"Gemini HTTP {response.status_code}.")
             print(f"    Gemini HTTP {response.status_code}, tentativo {attempt}/{MAX_RETRIES}.")
