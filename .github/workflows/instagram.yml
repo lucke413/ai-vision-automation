@@ -28,7 +28,14 @@ jobs:
           python-version: "3.12"
 
       - name: Verifica publisher
-        run: python -m py_compile scripts/instagram_publisher.py
+        run: python -m py_compile scripts/instagram_publisher.py scripts/instagram_landing.py
+
+      - name: Aggiorna pagina link in bio
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/instagram_landing.py
 
       - name: Sincronizza Instagram
         env:
