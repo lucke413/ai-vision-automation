@@ -460,7 +460,72 @@ def link_request(text):
     return bool(re.search(r"\blink\b", str(text or ""), flags=re.IGNORECASE))
 
 
-def process_link_comments(store, instagram):
+def normalized_title(value):
+    return re.sub(r"[^a-z0-9]+", " ", plain(value).casefold()).strip()
+
+
+def current_instagram_media(instagram):
+    """Legge i media correnti direttamente dall'account collegato.
+
+    Questo evita di dipendere da media_id storici che Meta può non rendere
+    più caricabili nello stesso contesto di autorizzazione.
+    """
+    query = urllib.parse.urlencode({
+        "fields": "id,caption,timestamp,permalink",
+        "limit": 50,
+    })
+    result = instagram.api(f"{instagram.user_id}/media?{query}")
+    items = result.get("data", []) if isinstance(result, dict) else []
+    return items if isinstance(items, list) else []
+
+
+def repair_media_ids(store, data, instagram, published):
+    """Riallinea i media_id salvati usando titolo/caption del feed corrente."""
+    by_title = {}
+    for post in published:
+        if not isinstance(post, dict):
+            continue
+        title = normalized_title(post.get("title", {}).get("rendered", ""))
+        if title:
+            by_title[title] = str(post.get("id") or "")
+
+    try:
+        media_items = current_instagram_media(instagram)
+    except APIError as exc:
+        print(f"::warning::Impossibile leggere il feed media Instagram: {exc}")
+        return []
+
+    changed = 0
+    for media in media_items:
+        if not isinstance(media, dict):
+            continue
+        media_id = str(media.get("id") or "").strip()
+        caption_text = str(media.get("caption") or "")
+        first_line = caption_text.splitlines()[0].strip() if caption_text else ""
+        title_key = normalized_title(first_line)
+        post_id = by_title.get(title_key)
+        if not media_id or not post_id:
+            continue
+        record = data.get("posts", {}).get(post_id)
+        if not isinstance(record, dict) or record.get("status") != "sent":
+            continue
+        if str(record.get("media_id") or "") != media_id:
+            old = str(record.get("media_id") or "")
+            record["media_id"] = media_id
+            record["media_id_repaired_at"] = datetime.now(timezone.utc).isoformat()
+            changed += 1
+            print(
+                f"Riallineato media Instagram articolo {post_id}: "
+                f"{old or 'nessuno'} -> {media_id}."
+            )
+
+    if changed:
+        store.save(data)
+        print(f"Media ID Instagram riallineati: {changed}.")
+    return media_items
+
+
+def process_link_comments(store, instagram, published):
     """Invia in DM il link esatto dell'articolo a chi commenta LINK.
 
     Oltre all'invio, produce diagnostica esplicita: se Meta rifiuta la lettura
@@ -470,6 +535,11 @@ def process_link_comments(store, instagram):
     data = store.load()
     if data is None:
         return
+
+    # Prima riallineiamo i post con l'elenco media restituito oggi da Meta.
+    # In questo modo anche i post creati durante una precedente autorizzazione
+    # restano gestibili quando l'ID esposto dall'API cambia.
+    repair_media_ids(store, data, instagram, published)
 
     now = datetime.now(timezone.utc)
     candidates = []
@@ -618,8 +688,9 @@ def main():
     )
     store = State(env["GITHUB_REPOSITORY"], env["GITHUB_TOKEN"])
     instagram = InstagramClient(env["INSTAGRAM_ACCESS_TOKEN"], version)
-    sync(store, wordpress_posts(base), base, instagram)
-    process_link_comments(store, instagram)
+    published = wordpress_posts(base)
+    sync(store, published, base, instagram)
+    process_link_comments(store, instagram, published)
 
 
 if __name__ == "__main__":
