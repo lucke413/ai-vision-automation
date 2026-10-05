@@ -457,7 +457,7 @@ def sync(store, published, base, instagram):
 
 
 def link_request(text):
-    return bool(re.search(r"\\blink\\b", str(text or ""), flags=re.IGNORECASE))
+    return bool(re.search(r"\blink\b", str(text or ""), flags=re.IGNORECASE))
 
 
 def process_link_comments(store, instagram):
