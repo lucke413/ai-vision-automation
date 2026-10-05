@@ -313,12 +313,14 @@
       "published_at": "2026-10-05T12:13:56.727106+00:00"
     },
     "681": {
-      "status": "pending",
+      "status": "sent",
       "at": "2026-10-05T14:33:18.007187+00:00",
       "image_url": "https://aivision.altervista.org/wp-content/uploads/2026/10/l-unione-europea-sperimenta-element-pro-ma-i-dipendenti-bocciano-la-piattaforma.jpg",
       "article_url": "https://aivision.altervista.org/alternativa-sovrana-microsoft-teams-ue-element-pro/",
       "private_replies": {},
-      "container_id": "18132369397624261"
+      "container_id": "18132369397624261",
+      "media_id": "18150681478537036",
+      "published_at": "2026-10-05T14:33:28.342547+00:00"
     }
   },
   "instagram_username": "aivision_tech"
