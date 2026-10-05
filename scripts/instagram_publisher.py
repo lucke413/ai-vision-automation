@@ -463,8 +463,9 @@ def link_request(text):
 def process_link_comments(store, instagram):
     """Invia in DM il link esatto dell'articolo a chi commenta LINK.
 
-    Usiamo il private reply ufficiale di Instagram. Ogni commento viene gestito
-    una sola volta e solo sui post pubblicati negli ultimi 7 giorni.
+    Oltre all'invio, produce diagnostica esplicita: se Meta rifiuta la lettura
+    commenti o il private reply il workflow fallisce, invece di restare verde
+    nascondendo il problema.
     """
     data = store.load()
     if data is None:
@@ -490,6 +491,12 @@ def process_link_comments(store, instagram):
 
     candidates.sort(reverse=True, key=lambda row: row[0])
     handled = 0
+    readable_media = 0
+    total_comments = 0
+    matching_comments = 0
+    comment_errors = []
+    dm_errors = []
+
     for _, post_id, record in candidates[:15]:
         media_id = str(record["media_id"])
         article_url = str(record["article_url"])
@@ -501,7 +508,9 @@ def process_link_comments(store, instagram):
         })
         try:
             result = instagram.api(f"{media_id}/comments?{query}")
+            readable_media += 1
         except APIError as exc:
+            comment_errors.append(f"media {media_id}: {exc}")
             print(
                 f"::warning::Commenti Instagram non disponibili per media {media_id}: {exc}"
             )
@@ -509,7 +518,9 @@ def process_link_comments(store, instagram):
 
         comments = result.get("data", []) if isinstance(result, dict) else []
         if not isinstance(comments, list):
-            continue
+            comments = []
+        total_comments += len(comments)
+        matches_here = 0
 
         for comment in comments:
             if not isinstance(comment, dict):
@@ -520,6 +531,8 @@ def process_link_comments(store, instagram):
             if not link_request(comment.get("text")):
                 continue
 
+            matching_comments += 1
+            matches_here += 1
             message = (
                 "Ecco il link diretto all'articolo AI Vision che hai richiesto:\n"
                 + article_url
@@ -534,8 +547,9 @@ def process_link_comments(store, instagram):
                     },
                 )
             except APIError as exc:
+                dm_errors.append(f"commento {comment_id}: {exc}")
                 print(
-                    f"::warning::Private reply non inviato al commento {comment_id}: {exc}"
+                    f"::error::Private reply non inviato al commento {comment_id}: {exc}"
                 )
                 continue
 
@@ -554,6 +568,31 @@ def process_link_comments(store, instagram):
                 f"OK: link diretto dell'articolo {post_id} inviato in DM "
                 f"per il commento {comment_id}."
             )
+
+        print(
+            f"Media {media_id}: commenti letti {len(comments)}, "
+            f"richieste LINK nuove {matches_here}."
+        )
+
+    print(
+        f"Diagnostica commenti: media leggibili {readable_media}/{len(candidates[:15])}, "
+        f"commenti letti {total_comments}, richieste LINK {matching_comments}, "
+        f"DM inviati {handled}."
+    )
+
+    if candidates and readable_media == 0 and comment_errors:
+        raise RuntimeError(
+            "Meta non consente di leggere i commenti. Verificare che il token "
+            "includa instagram_business_manage_comments e rigenerarlo dopo "
+            "l'abilitazione del permesso. Primo errore: " + comment_errors[0]
+        )
+    if matching_comments and dm_errors:
+        raise RuntimeError(
+            "Trovato almeno un commento LINK ma Meta ha rifiutato il DM. "
+            "Verificare che il token includa instagram_business_manage_messages "
+            "e rigenerarlo dopo l'abilitazione del permesso. Primo errore: "
+            + dm_errors[0]
+        )
 
     print(f"Richieste LINK gestite in questo controllo: {handled}.")
 
