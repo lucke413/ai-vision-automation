@@ -201,10 +201,12 @@
       "published_at": "2026-10-05T09:45:21.108581+00:00"
     },
     "678": {
-      "status": "pending",
+      "status": "sent",
       "at": "2026-10-05T09:51:47.601105+00:00",
       "image_url": "https://aivision.altervista.org/wp-content/uploads/2026/10/star-wars-galactic-racer-l-unione-tra-burnout-e-roguelite-su-playstation-5.jpg",
-      "container_id": "18132308944624261"
+      "container_id": "18132308944624261",
+      "media_id": "17933368335147616",
+      "published_at": "2026-10-05T09:51:59.430188+00:00"
     }
   },
   "instagram_username": "aivision_tech"
