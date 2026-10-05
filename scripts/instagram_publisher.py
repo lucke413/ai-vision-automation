@@ -127,7 +127,8 @@ def caption(post):
     blocks = [title]
     if excerpt:
         blocks.append(excerpt)
-    blocks.append("💬 Vuoi aprire l'articolo completo? Commenta LINK e ricevi il collegamento diretto in DM.")
+    blocks.append("🌐 Sito AI Vision: https://aivision.altervista.org/")
+    blocks.append("💬 Vuoi il link diretto a questo articolo? Commenta LINK e lo ricevi in DM.")
     blocks.append("#AIVision #Tecnologia #IntelligenzaArtificiale #TechNews")
     return shorten("\n\n".join(blocks), CAPTION_LIMIT)
 
