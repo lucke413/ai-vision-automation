@@ -525,6 +525,45 @@ def repair_media_ids(store, data, instagram, published):
     return media_items
 
 
+def diagnose_link_test(instagram, data, media_items):
+    """Diagnostica di sola lettura per il post della prova LINK."""
+    target_code = "DeG_56XFaub"
+    record = data.get("posts", {}).get("690", {})
+    media_id = str(record.get("media_id") or "").strip()
+    print("DIAG LINK: versione controllo permalink 1.")
+    print(f"DIAG LINK: API {instagram.version}; media nel feed {len(media_items)}.")
+    print(f"DIAG LINK: post atteso https://www.instagram.com/p/{target_code}/")
+    print(f"DIAG LINK: ID nel registro per articolo 690: {media_id or 'assente'}.")
+    found = False
+    for item in media_items:
+        if not isinstance(item, dict):
+            continue
+        permalink = str(item.get("permalink") or "")
+        item_id = str(item.get("id") or "")
+        if target_code in urllib.parse.urlsplit(permalink).path.split("/"):
+            found = True
+            print(f"DIAG LINK: post atteso trovato nel feed, ID {item_id}; permalink {permalink}")
+            print(f"DIAG LINK: ID feed uguale al registro: {item_id == media_id}.")
+    if not found:
+        print("DIAG LINK: permalink atteso non trovato nella prima pagina del feed.")
+    if not media_id:
+        return
+    query = urllib.parse.urlencode({"fields": "id,permalink,caption"})
+    try:
+        detail = instagram.api(f"{media_id}?{query}")
+        if not isinstance(detail, dict):
+            print("DIAG LINK: metadati del post in formato inatteso.")
+            return
+        permalink = str(detail.get("permalink") or "")
+        title = str(detail.get("caption") or "").splitlines()
+        print(f"DIAG LINK: permalink dell'ID controllato: {permalink or 'assente'}")
+        print(f"DIAG LINK: titolo: {shorten(title[0], 200) if title else 'assente'}")
+        matches = target_code in urllib.parse.urlsplit(permalink).path.split("/")
+        print(f"DIAG LINK: permalink corrisponde alla prova: {matches}.")
+    except (APIError, RuntimeError) as exc:
+        print(f"DIAG LINK: lettura metadati non riuscita: {exc}")
+
+
 def process_link_comments(store, instagram, published):
     """Invia in DM il link esatto dell'articolo a chi commenta LINK.
 
@@ -539,7 +578,8 @@ def process_link_comments(store, instagram, published):
     # Prima riallineiamo i post con l'elenco media restituito oggi da Meta.
     # In questo modo anche i post creati durante una precedente autorizzazione
     # restano gestibili quando l'ID esposto dall'API cambia.
-    repair_media_ids(store, data, instagram, published)
+    media_items = repair_media_ids(store, data, instagram, published)
+    diagnose_link_test(instagram, data, media_items)
 
     now = datetime.now(timezone.utc)
     candidates = []
