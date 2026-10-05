@@ -35,5 +35,6 @@ jobs:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           GITHUB_TOKEN: ${{ github.token }}
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_EXPECTED_USERNAME: aivision_tech
           INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
         run: python scripts/instagram_publisher.py
