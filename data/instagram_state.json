@@ -193,10 +193,12 @@
       "status": "baseline"
     },
     "675": {
-      "status": "pending",
+      "status": "sent",
       "at": "2026-10-05T09:45:10.018831+00:00",
       "image_url": "https://aivision.altervista.org/wp-content/uploads/2026/10/kindle-in-offerta-sconti-sui-modelli-base-e-kindle-colorsoft.jpg",
-      "container_id": "18132307834624261"
+      "container_id": "18132307834624261",
+      "media_id": "18030185393683431",
+      "published_at": "2026-10-05T09:45:21.108581+00:00"
     }
   },
   "instagram_username": "aivision_tech"
