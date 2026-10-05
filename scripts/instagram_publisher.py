@@ -333,6 +333,7 @@ def sync(store, published, base, instagram):
             "version": 1,
             "site": base,
             "instagram_user_id": user_id,
+            "instagram_username": username,
             "posts": {
                 str(post["id"]): {"status": "baseline"}
                 for post in published
@@ -348,8 +349,33 @@ def sync(store, published, base, instagram):
 
     if data.get("site") != base:
         raise RuntimeError("Sito diverso dal registro Instagram: verificare configurazione.")
-    if str(data.get("instagram_user_id") or "") != user_id:
+
+    expected_username = os.environ.get("INSTAGRAM_EXPECTED_USERNAME", "").strip().lstrip("@")
+    if expected_username and username.casefold() != expected_username.casefold():
+        raise RuntimeError(
+            f"Account Instagram inatteso: collegato @{username}, atteso @{expected_username}."
+        )
+
+    stored_username = str(data.get("instagram_username") or "").strip().lstrip("@")
+    stored_user_id = str(data.get("instagram_user_id") or "").strip()
+
+    if stored_username and username and stored_username.casefold() != username.casefold():
         raise RuntimeError("Account Instagram diverso dal registro: verificare il token configurato.")
+
+    # Con Instagram Login l'ID restituito dal token può cambiare dopo una nuova
+    # autorizzazione/token. Lo username è invece univoco e identifica l'account
+    # che vogliamo pubblicare. Se lo username coincide, aggiorniamo l'ID salvato
+    # invece di bloccare l'automazione con un falso positivo.
+    if stored_user_id != user_id:
+        if not username:
+            raise RuntimeError("ID Instagram cambiato e username non disponibile: controllo interrotto.")
+        print("AVVISO: ID Instagram aggiornato per lo stesso account; sincronizzo il registro.")
+        data["instagram_user_id"] = user_id
+        data["instagram_username"] = username
+        store.save(data)
+    elif not stored_username and username:
+        data["instagram_username"] = username
+        store.save(data)
 
     print(
         f"WordPress: {len(published)} articoli pubblicati. "
