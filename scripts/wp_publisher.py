@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "1.3"
+VERSION = "1.4"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -52,6 +52,9 @@ MACRO_CATEGORIES = (
     "AI pratica",
     "Tool e Servizi",
     "Tecnologia e prodotti",
+    "Gaming e console",
+    "Casa smart",
+    "Accessori e postazioni",
     "Sicurezza",
     "Guide",
     "Confronti",
@@ -65,7 +68,9 @@ SOURCE_CATEGORY_MAP = {
     "Offerte & Prezzi": "Offerte",
     "Smartphone & Mobile": "Tecnologia e prodotti",
     "PC & Hardware": "Tecnologia e prodotti",
-    "Gaming": "Tecnologia e prodotti",
+    "Gaming": "Gaming e console",
+    "Casa smart": "Casa smart",
+    "Accessori e postazioni": "Accessori e postazioni",
     "Gadget & Consumer Tech": "Tecnologia e prodotti",
     "Streaming & Entertainment": "Tecnologia e prodotti",
     "Tecnologia": "Tecnologia e prodotti",
@@ -565,6 +570,13 @@ def publish_one(
 
     category_name = category_for(draft)
     category = client.get_or_create_term("categories", category_name)
+    category_ids = [category["id"]] if category.get("id") else []
+    # Guide, Confronti e Offerte restano primarie; aggiunge la sezione tematica.
+    topic = SOURCE_CATEGORY_MAP.get(str(draft.get("category") or ""))
+    if topic in {"Gaming e console", "Casa smart", "Accessori e postazioni"} and topic != category_name:
+        topic_term = client.get_or_create_term("categories", topic)
+        if topic_term.get("id") and topic_term["id"] not in category_ids:
+            category_ids.append(topic_term["id"])
     related = client.related_link(draft, category.get("id"))
     if related:
         body += "\n" + related
@@ -629,7 +641,7 @@ def publish_one(
         "status": "future",
         "date": local_date,
         "date_gmt": utc_date,
-        "categories": [category["id"]] if category.get("id") else [],
+        "categories": category_ids,
         "tags": [tag["id"] for tag in tags if tag.get("id")],
         "featured_media": media.get("id") or 0,
     }
