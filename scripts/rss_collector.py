@@ -16,7 +16,7 @@ import requests
 # AI VISION - RSS COLLECTOR 2.3.2
 # ============================================================
 
-VERSION = "2.3.2"
+VERSION = "2.3.3"
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_FILE = BASE_DIR / "data/rss_output.json"
 
@@ -45,6 +45,11 @@ USER_AGENT = f"AI-Vision-RSS-Collector/{VERSION}"
 # ============================================================
 
 FEEDS = {
+    "PlayStation Blog Italia": {
+        "url": "https://blog.it.playstation.com/feed/",
+        "country": "Italia",
+        "type": "gaming"
+    },
     "TechCrunch": {
         "url": "https://techcrunch.com/feed/",
         "country": "USA",
@@ -183,6 +188,21 @@ CATEGORY_KEYWORDS = {
         "hacker", "hacking", "vulnerabilità", "vulnerability",
         "password", "account rubato", "data breach",
         "attacco informatico", "virus", "spyware"
+    ],
+
+    "Casa smart": [
+        "casa smart", "smart home", "domotica", "home assistant",
+        "robot aspirapolvere", "robot vacuum", "termostato smart",
+        "presa smart", "prese smart", "smart plug", "smart plugs",
+        "lampadine smart", "smart lighting", "videocitofono", "smart lock"
+    ],
+
+    "Accessori e postazioni": [
+        "hub usb", "hub usb-c", "docking station", "dock usb-c",
+        "webcam", "microfono usb", "braccio monitor", "supporto monitor",
+        "tastiera", "keyboard", "mouse", "powerbank", "power bank",
+        "caricatore", "charger", "cuffie", "headset", "auricolari",
+        "postazione", "scrivania", "desk setup"
     ],
 
     "Gadget & Consumer Tech": [
@@ -501,6 +521,11 @@ def classify_category(title, description, feed_type):
     )
 
     best_score = scores[best_category]
+    if best_category not in {"AI", "Sicurezza", "Gaming", "Offerte & Prezzi"}:
+        headline = f" {normalize_text(title)} "
+        for topic in ("Casa smart", "Accessori e postazioni"):
+            if any(f" {normalize_text(word)} " in headline for word in CATEGORY_KEYWORDS[topic]):
+                return topic
 
     # Se non abbiamo trovato segnali specifici
     if best_score == 0:

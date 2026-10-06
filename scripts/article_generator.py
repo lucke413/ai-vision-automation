@@ -20,12 +20,14 @@ from html.parser import HTMLParser
 
 import requests
 
+from daily_selector import expansion_room
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "2.8"
+VERSION = "2.9"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 5
 RESERVE_LIMIT = 3
@@ -68,6 +70,8 @@ VALID_CATEGORIES = {
     "AI",
     "Sicurezza",
     "Gadget & Consumer Tech",
+    "Casa smart",
+    "Accessori e postazioni",
     "Streaming & Entertainment",
     "Offerte & Prezzi",
     "Tecnologia",
@@ -121,6 +125,13 @@ REGOLE EDITORIALI:
   "la fonte riporta/segnala", "come riportato dalla fonte" e formule simili;
 - non inserire link affiliati, codici tracking o pubblicità nel testo;
 - non presentare la bozza come verifica indipendente dei fatti.
+
+GUIDE E CONFRONTI DI PRODOTTI:
+- spiega compatibilità, requisiti e limiti solo se documentati nella fonte;
+- non inventare prove dirette, classifiche "migliori", giudizi o raccomandazioni;
+- non dedurre compatibilità di un accessorio dalla sola somiglianza del nome;
+- non inventare disponibilità su Amazon, prezzi, sconti o link di acquisto;
+- casa smart, accessori e gaming affiancano la linea tecnologica esistente.
 
 CONTROLLO ANTI-RIEMPITIVO:
 - ogni paragrafo deve aggiungere un fatto o una conseguenza esplicitamente
@@ -678,7 +689,9 @@ def main() -> int:
         remaining_reserves = []
         for draft in reserve_drafts:
             is_offer = draft.get("category") == "Offerte & Prezzi" or draft.get("story_type") == "OFFERTA"
-            if len(promoted) < missing_daily and (not is_offer or current_offers < MAX_DAILY_OFFERS):
+            if (len(promoted) < missing_daily
+                    and expansion_room(daily_drafts + promoted, draft)
+                    and (not is_offer or current_offers < MAX_DAILY_OFFERS)):
                 draft["publication_slot"] = "today"
                 draft["promoted_from_reserve"] = True
                 promoted.append(draft)

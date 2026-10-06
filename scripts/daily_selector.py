@@ -21,10 +21,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.1"
+VERSION = "2.2"
 DAILY_LIMIT = 5
 RESERVE_LIMIT = 3
 MAX_OFFERS = 1
+# Espansione graduale: al massimo un articolo nuovo su cinque, mai obbligatorio.
+EXPANSION_CATEGORIES = {"Casa smart", "Accessori e postazioni"}
+MAX_EXPANSION_ARTICLES = 1
+
+
+def expansion_room(selected: list[dict], candidate: dict) -> bool:
+    return (candidate.get("category") not in EXPANSION_CATEGORIES or
+            sum(item.get("category") in EXPANSION_CATEGORIES for item in selected)
+            < MAX_EXPANSION_ARTICLES)
+
 
 
 def canonical_url(value: object) -> str:
@@ -125,6 +135,8 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
         identifier = item["article_id"]
         if identifier in selected_ids:
             continue
+        if not expansion_room(selected, item):
+            continue
         offer = is_offer(item)
         category = str(item.get("category") or "Tecnologia")
         if offer and offers >= MAX_OFFERS:
@@ -143,6 +155,8 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
             break
         identifier = item["article_id"]
         if identifier in selected_ids:
+            continue
+        if not expansion_room(selected, item):
             continue
         offer = is_offer(item)
         if offer and offers >= MAX_OFFERS:

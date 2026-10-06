@@ -39,7 +39,7 @@ import requests
 # CONFIGURAZIONE
 # ============================================================
 
-VERSION = "3.1.0"
+VERSION = "3.1.1"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data/rss_output.json"
@@ -91,6 +91,8 @@ VALID_CATEGORIES = [
     "AI",
     "Sicurezza",
     "Gadget & Consumer Tech",
+    "Casa smart",
+    "Accessori e postazioni",
     "Streaming & Entertainment",
     "Offerte & Prezzi",
     "Tecnologia",
@@ -135,6 +137,8 @@ PRIORITÀ EDITORIALI:
 - software e app
 - sicurezza informatica
 - gadget e consumer tech
+- casa smart e accessori utili, senza privilegiarli rispetto alle altre categorie
+- compatibilità e guide agli acquisti solo con dati concreti dalla fonte
 - streaming
 - offerte e prezzi
 - guide utili
@@ -253,6 +257,8 @@ Software & App
 AI
 Sicurezza
 Gadget & Consumer Tech
+Casa smart
+Accessori e postazioni
 Streaming & Entertainment
 Offerte & Prezzi
 Tecnologia
