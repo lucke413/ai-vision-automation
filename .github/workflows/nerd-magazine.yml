@@ -1,0 +1,91 @@
+name: Nerd Magazine - articoli
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Pubblica sul sito configurato (false = simulazione)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: nerd-magazine
+  cancel-in-progress: false
+jobs:
+  magazine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PYTHONUNBUFFERED: '1'
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Dipendenze e controlli locali
+        run: |
+          python -m pip install -r requirements.txt
+          python -m unittest discover -s tests -p 'test_nerd*.py'
+      - name: Controlla configurazione
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LIVE: ${{ inputs.publish }}
+          NERD_TARGET_URL: ${{ vars.NERD_TARGET_URL }}
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: |
+          python - <<'PY'
+          import os
+          if not os.getenv('GEMINI_API_KEY'):
+              raise SystemExit('Secret GEMINI_API_KEY mancante.')
+          if os.getenv('LIVE') == 'true':
+              for key in ('NERD_TARGET_URL','WP_BASE_URL','WP_USERNAME','WP_APP_PASSWORD'):
+                  if not os.getenv(key):
+                      raise SystemExit(f'Configurazione mancante: {key}')
+              if os.environ['NERD_TARGET_URL'].rstrip('/') != os.environ['WP_BASE_URL'].rstrip('/'):
+                  raise SystemExit('Il sito configurato non coincide con la destinazione del nuovo magazine.')
+          PY
+      - name: Raccogli fonti
+        run: python scripts/nerd_pipeline.py collect
+      - name: Seleziona argomenti
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/nerd_pipeline.py filter
+      - name: Escludi articoli già pubblicati
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/nerd_pipeline.py history
+      - name: Componi lotto di cinque articoli
+        run: python scripts/nerd_pipeline.py select
+      - name: Genera articoli
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/nerd_pipeline.py generate
+      - name: Pubblica o simula
+        env:
+          WP_DRY_RUN: ${{ inputs.publish && 'false' || 'true' }}
+          NERD_TARGET_URL: ${{ vars.NERD_TARGET_URL }}
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          WP_TIMEZONE: Europe/Rome
+        run: python scripts/nerd_pipeline.py publish
+      - name: Salva materiali
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nerd-materiali
+          path: data/nerd/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Salva registro pubblicazioni
+        if: ${{ always() && hashFiles('data/nerd/wp_publish_report.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nerd-wp-publish-report
+          path: data/nerd/wp_publish_report.json
+          retention-days: 14

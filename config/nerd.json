@@ -1,0 +1,42 @@
+{
+  "name": "Nerd Magazine",
+  "categories": [
+    "Videogiochi",
+    "Manga e fumetti",
+    "Anime e serie",
+    "Fiere ed eventi",
+    "Giochi da tavolo e collezionismo"
+  ],
+  "feeds": {
+    "PlayStation Blog Italia": {
+      "url": "https://blog.it.playstation.com/feed/",
+      "country": "Italia",
+      "type": "Videogiochi"
+    },
+    "Xbox Wire": {
+      "url": "https://news.xbox.com/en-us/feed/",
+      "country": "USA",
+      "type": "Videogiochi"
+    },
+    "Nintendo Life": {
+      "url": "https://www.nintendolife.com/feeds/latest",
+      "country": "UK",
+      "type": "Videogiochi"
+    },
+    "PC Gamer": {
+      "url": "https://www.pcgamer.com/rss/",
+      "country": "UK",
+      "type": "Videogiochi"
+    },
+    "Comicus": {
+      "url": "https://www.comicus.it/mainmenu-news/itemlist?format=feed",
+      "country": "Italia",
+      "type": "Manga e fumetti"
+    },
+    "MangaForever": {
+      "url": "https://www.mangaforever.net/feed",
+      "country": "Italia",
+      "type": "Manga e fumetti"
+    }
+  }
+}
