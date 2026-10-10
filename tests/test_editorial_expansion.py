@@ -68,6 +68,21 @@ class EditorialExpansionTests(unittest.TestCase):
             daily=[x for x in result['items'] if x['publication_slot']=='today']
             self.assertEqual({x['category'] for x in daily}, {'Casa smart','Sicurezza'})
 
+    def test_rejects_misleading_first_hand_review_title(self):
+        with self.assertRaises(generator.GeneratorFatalError):
+            generator.validate_editorial_title("Sony WH-CH730N in prova: la nostra recensione")
+        generator.validate_editorial_title("Sony WH-CH730N: caratteristiche e analisi delle informazioni disponibili")
+
+    def test_rejects_first_hand_experience_claims(self):
+        with self.assertRaises(generator.GeneratorFatalError):
+            generator.validate_editorial_body("Durante il nostro ascolto abbiamo notato bassi molto presenti.")
+
+    def test_evidence_gate_counts_source_material(self):
+        weak = {"title": "Titolo breve", "description": "pochi dati", "source_text": ""}
+        rich = {"title": "Titolo", "description": " ".join(["dato"] * 150), "source_text": ""}
+        self.assertLess(generator.evidence_word_count(weak), generator.MIN_EVIDENCE_WORDS)
+        self.assertGreaterEqual(generator.evidence_word_count(rich), generator.MIN_EVIDENCE_WORDS)
+
     def test_guide_keeps_format_and_adds_topic(self):
         client=MagicMock();client.dry_run=True
         client.get_or_create_term.side_effect=lambda kind,name: {'id':{'Guide':1,'Casa smart':2}[name]}
