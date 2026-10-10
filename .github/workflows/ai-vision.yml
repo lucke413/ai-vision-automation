@@ -81,7 +81,7 @@ jobs:
               "scripts/rss_collector.py": "2.3.3",
               "scripts/ai_filter.py": "3.1.1",
               "scripts/daily_selector.py": "2.2",
-              "scripts/article_generator.py": "2.9",
+              "scripts/article_generator.py": "3.0",
               "scripts/wp_publisher.py": "1.4",
           }
 
