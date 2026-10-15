@@ -1,0 +1,34 @@
+name: AIVision Traffic Booster - Facebook
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '12,42 * * * *'
+permissions:
+  contents: write
+concurrency:
+  group: aivision-facebook-growth
+  cancel-in-progress: false
+jobs:
+  facebook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+      SOCIAL_PUBLISH_MODE: ${{ vars.SOCIAL_PUBLISH_MODE || 'dry-run' }}
+      SOCIAL_FB_PAGE_ID: ${{ vars.SOCIAL_FB_PAGE_ID }}
+      SOCIAL_FB_PAGE_TOKEN: ${{ secrets.SOCIAL_FB_PAGE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - run: python -m py_compile scripts/social_growth.py
+      - run: python scripts/social_growth.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: facebook-growth-report
+          path: social_growth_report.json
+          retention-days: 14
