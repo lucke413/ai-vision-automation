@@ -207,7 +207,8 @@ def make_candidate(topic: tuple) -> dict:
     }
 
 def wp_post_exists(session: requests.Session, base_url: str, slug: str) -> bool:
-    endpoint = base_url.rstrip("/") + "/wp-json/wp/v2/posts"
+    root = base_url.rstrip("/")
+    endpoint = root + ("/wp/v2/posts" if root.endswith("/wp-json") else "/wp-json/wp/v2/posts")
     for status in ("publish", "future"):
         response = session.get(
             endpoint,
