@@ -21,10 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.4"
+VERSION = "2.5"
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
 MAX_OFFERS = 1
+MAX_GUIDES_PER_DAY = 2
+MAX_TUTORIALS_PER_DAY = 1
 # Espansione graduale: al massimo un articolo nuovo su sei, mai obbligatorio.
 EXPANSION_CATEGORIES = {"Casa smart", "Accessori e postazioni"}
 MAX_EXPANSION_ARTICLES = 1
@@ -104,6 +106,15 @@ def valid_candidates(data: dict) -> list[dict]:
     return sorted(result, key=score_key, reverse=True)
 
 
+def editorial_room(selected: list[dict], candidate: dict) -> bool:
+    """Limits practical content, leaving at least three places for news."""
+    kind = candidate.get("editorial_kind")
+    limits = {"GUIDA": MAX_GUIDES_PER_DAY, "TUTORIAL": MAX_TUTORIALS_PER_DAY}
+    return kind not in limits or sum(
+        x.get("editorial_kind") == kind for x in selected
+    ) < limits[kind]
+
+
 def is_offer(item: dict) -> bool:
     return (
         item.get("category") == "Offerte & Prezzi"
@@ -133,7 +144,7 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
         identifier = item["article_id"]
         if identifier in selected_ids or not offer_ok(item):
             return False
-        if not expansion_room(selected, item):
+        if not expansion_room(selected, item) or not editorial_room(selected, item):
             return False
         if len(selected) >= DAILY_LIMIT:
             return False
@@ -148,9 +159,9 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
     news = [x for x in items if x.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}]
 
     # Le guide pratiche sono vere rubriche e hanno precedenza, non sono RSS.
-    for item in guides[:2]:
+    for item in guides[:MAX_GUIDES_PER_DAY]:
         add(item)
-    for item in tutorials[:1]:
+    for item in tutorials[:MAX_TUTORIALS_PER_DAY]:
         add(item)
 
     # La cronaca tecnologica resta centrale; prima privilegiamo categorie diverse.
@@ -164,14 +175,10 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
             break
         add(item)
 
-    # Se le fonti RSS non bastano, usiamo le altre schede disponibili.
-    for item in guides[2:] + tutorials[1:]:
-        if len(selected) >= DAILY_LIMIT:
-            break
-        add(item)
-
+    # Never replace failed news with an extra tutorial or guide.
+    # Reserve candidates come from RSS only, and retain their quality gates.
     reserves: list[dict] = []
-    for item in items:
+    for item in news:
         if len(reserves) >= RESERVE_LIMIT:
             break
         if item["article_id"] in selected_ids:
