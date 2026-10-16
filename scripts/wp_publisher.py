@@ -333,7 +333,7 @@ def guide_inline_diagram(draft: dict, style: str) -> bytes:
                      "3. Correggi eventuali errori"]
         steps = [(f"PASSAGGIO {i + 1}", str(line)) for i, line in enumerate(lines[:3])]
     pen.text((56, 52), title, font=heading_font, fill="#174b75")
-    subject = str(draft.get("title") or "Guida pratica")
+    subject = str(draft.get("title") or "Guida pratica") if style == "prompt" else str(demo.get("heading") or "Esempio concreto")
     pen.text((58, 103), textwrap.shorten(subject, width=61, placeholder="..."),
              font=small_font, fill="#46647b")
     for i, (label, description) in enumerate(steps):
