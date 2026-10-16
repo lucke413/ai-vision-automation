@@ -116,4 +116,50 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(publisher.category_for(item(1,'Gaming')), 'Gaming e console')
         self.assertEqual(publisher.category_for(item(2,'Casa smart','OFFERTA')), 'Offerte')
 
+
+    def test_practical_guides_have_unique_sources(self):
+        import practical_guides
+        self.assertGreaterEqual(len(practical_guides.TOPICS), 20)
+        result = practical_guides.inject(
+            {"status": "ok", "items": []},
+            "2026-10-17", lambda slug: False,
+        )
+        self.assertEqual(result["practical_guide_candidates"], 6)
+        self.assertEqual(len({c["article_id"] for c in result["items"]}), 6)
+        self.assertEqual(sum(x["editorial_kind"] == "GUIDA" for x in result["items"]), 4)
+        self.assertEqual(sum(x["editorial_kind"] == "TUTORIAL" for x in result["items"]), 2)
+        for candidate in result["items"]:
+            self.assertGreaterEqual(generator.evidence_word_count(candidate), 140)
+            self.assertIn("GUIDA DIDATTICA ORIGINALE", generator.build_prompt(candidate))
+            self.assertEqual(generator.enrich_source(candidate)["source_text"], candidate["source_text"])
+
+    def test_practical_guides_are_not_reused_when_existing(self):
+        import practical_guides
+        used = {x[0] for x in practical_guides.TOPICS}
+        result = practical_guides.inject(
+            {"status": "ok", "items": []},
+            "2026-10-17", lambda slug: slug in used,
+        )
+        self.assertEqual(result["items"], [])
+
+    def test_balanced_news_guides_and_tutorials(self):
+        import practical_guides
+        news = [{**item(i, cat), "url": "https://example.com/article-" + str(i)}
+                for i, cat in enumerate(["AI", "Gaming", "Sicurezza", "Software & App", "Tecnologia", "PC & Hardware"])]
+        guide_items = [practical_guides.make_candidate(x) for x in practical_guides.TOPICS]
+        candidates = selector.valid_candidates({"status": "ok", "items": news + guide_items})
+        chosen, reserves = selector.select_daily(candidates)
+        self.assertEqual(len(chosen), 6)
+        self.assertEqual(sum(x.get("editorial_kind") == "GUIDA" for x in chosen), 2)
+        self.assertEqual(sum(x.get("editorial_kind") == "TUTORIAL" for x in chosen), 1)
+        self.assertEqual(sum(not x.get("editorial_kind") for x in chosen), 3)
+
+    def test_practical_guides_have_links_lists_and_original_diagrams(self):
+        import practical_guides
+        draft = practical_guides.make_candidate(practical_guides.TOPICS[0])
+        self.assertIn("<ol>", publisher.markdown_to_html("## Procedura\n\n1. Prepara i dati\n2. Controlla il risultato"))
+        self.assertIn("Risorse ufficiali", publisher.guide_resources(draft))
+        self.assertTrue(publisher.guide_infographic(draft).startswith(b"\x89PNG\r\n\x1a\n"))
+
+
 if __name__=='__main__': unittest.main()
