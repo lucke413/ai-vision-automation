@@ -22,7 +22,7 @@ from requests.auth import HTTPBasicAuth
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CANDIDATES_PATH = BASE_DIR / "data" / "ai_candidates.json"
-VERSION = "1.1"
+VERSION = "1.2"
 MAX_INJECTED = 6
 MAX_GUIDES = 4
 MAX_TUTORIALS = 2
@@ -231,6 +231,43 @@ def editorial_brief(topic: tuple) -> str:
     ])
     return "\n".join(lines)
 
+
+# Example output to illustrate a real learning step, never a screenshot or
+# a claim that the service produced the output. Each sector has concrete data.
+def visual_demo(slug: str, audience: str, kind: str, steps: list[str]) -> dict:
+    if "matematica" in slug:
+        return {"heading": "Esempio svolto: 3x + 5 = 20",
+                "lines": ["1. Sottrai 5: 3x = 15", "2. Dividi per 3: x = 5",
+                          "3. Verifica: 3 × 5 + 5 = 20"]}
+    if "spesa" in slug:
+        return {"heading": "Esempio: lista della spesa",
+                "lines": ["Ortofrutta: pomodori, mele", "Dispensa: pasta, legumi",
+                          "Freschi: latte, yogurt"]}
+    if "quiz" in slug or "interrogazione" in slug:
+        return {"heading": "Esempio: quiz di ripasso",
+                "lines": ["D: Qual è l'idea principale?", "R: Spiegala con parole tue",
+                          "Controllo: confronta con il libro"]}
+    if "excel" in slug or "dati" in slug:
+        return {"heading": "Esempio: tabella di verifica",
+                "lines": ["Voce A: 10 → 15", "Variazione: (15 − 10)/10 = 50%",
+                          "Controllo: verifica i valori"]}
+    if kind == "TUTORIAL":
+        return {"heading": "Esempio di composizione visiva",
+                "lines": ["Soggetto: scrivania creativa", "Luce: naturale e morbida",
+                          "Formato: orizzontale, senza loghi"]}
+    if audience == "Lavoro":
+        return {"heading": "Esempio: risultato organizzato",
+                "lines": ["Obiettivo: comunicare con chiarezza", "Bozza: struttura in 3 sezioni",
+                          "Controllo: fatti, nomi e scadenze"]}
+    if audience == "Scuola":
+        return {"heading": "Esempio: apprendimento guidato",
+                "lines": ["1. Leggi e comprendi il testo", "2. Rispondi senza suggerimenti",
+                          "3. Confronta con la fonte"]}
+    return {"heading": "Esempio: risultato pratico",
+            "lines": ["Input: indica cosa ti serve", "Output: elenco ordinato per temi",
+                      "Controllo: rivedi i dati reali"]}
+
+
 def make_candidate(topic: tuple) -> dict:
     slug, audience, kind, title, objective, steps, example, caution, reference = topic
     label, url = OFFICIAL[reference]
@@ -245,7 +282,7 @@ def make_candidate(topic: tuple) -> dict:
         "source_text_status": "editorial_brief",
         "source_text_word_count": len(editorial_brief(topic).split()),
         "source": "AIVision - scheda editoriale originale",
-        "url": url,
+        "url": beginner_link(reference)["url"],
         "image": "",
         "image_license": "not_applicable",
         "category": "AI",
@@ -259,6 +296,7 @@ def make_candidate(topic: tuple) -> dict:
         "advanced_prompt": advanced_example(topic),
         "prompt_goal": objective,
         "result_check": caution,
+        "visual_demo": visual_demo(slug, audience, kind, steps),
         "final_score": 82 if kind == "GUIDA" else 80,
         "ai_analysis": {"ai_score": 80},
         "affiliate_candidate": False,
