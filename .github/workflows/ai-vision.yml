@@ -145,8 +145,8 @@ jobs:
           print(f"Articoli non elaborati: {data.get('total_unprocessed', 0)}")
           print(f"Approvati: {data['total_passed_ai']}")
           print(f"Candidati finali: {data['total_final_candidates']}")
-          if data.get("total_final_candidates", 0) < 5:
-              print("AVVISO: meno di 5 candidati; il workflow prosegue con il lotto disponibile.")
+          if data.get("total_final_candidates", 0) < 6:
+              print("AVVISO: meno di 6 candidati; il workflow prosegue con il lotto disponibile.")
           if status == "ok_with_warnings":
               print("AVVISO: il run prosegue con articoli esclusi per errori transitori.")
           for i, item in enumerate(data["items"], 1):
@@ -168,7 +168,7 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/daily_articles.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 5:
+          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 6:
               raise SystemExit("ERRORE: selezione giornaliera non valida.")
           ids = [item.get("article_id") for item in items]
           if not all(ids) or len(ids) != len(set(ids)):
@@ -196,7 +196,7 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/article_drafts.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 8:
+          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 9:
               raise SystemExit("ERRORE: output bozze non valido.")
           ids = [item.get("draft_id") for item in items]
           if not all(ids) or len(ids) != len(set(ids)):
