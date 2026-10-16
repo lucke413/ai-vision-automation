@@ -822,6 +822,7 @@ def main() -> int:
             if (len(promoted) < missing_daily
                     and expansion_room(daily_drafts + promoted, draft)
                     and editorial_room(daily_drafts + promoted, draft)
+                    and not draft.get("editorial_kind")
                     and (not is_offer or current_offers < MAX_DAILY_OFFERS)):
                 draft["publication_slot"] = "today"
                 draft["promoted_from_reserve"] = True
