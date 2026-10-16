@@ -158,8 +158,30 @@ class EditorialExpansionTests(unittest.TestCase):
         import practical_guides
         draft = practical_guides.make_candidate(practical_guides.TOPICS[0])
         self.assertIn("<ol>", publisher.markdown_to_html("## Procedura\n\n1. Prepara i dati\n2. Controlla il risultato"))
-        self.assertIn("Risorse ufficiali", publisher.guide_resources(draft))
+        self.assertIn("Prova lo strumento", publisher.guide_resources(draft))
         self.assertTrue(publisher.guide_infographic(draft).startswith(b"\x89PNG\r\n\x1a\n"))
 
+
+
+    def test_practical_prompts_and_illustrations_are_guide_only(self):
+        import practical_guides
+        sample = practical_guides.make_candidate(practical_guides.TOPICS[0])
+        self.assertTrue(sample["example_prompt"])
+        self.assertTrue(sample["advanced_prompt"])
+        self.assertIn("[", sample["advanced_prompt"])
+        self.assertIn("chatgpt.com", sample["official_links"][0]["url"])
+        self.assertNotIn("help.openai.com/en", publisher.guide_resources(sample))
+        html = publisher.guide_prompt_blocks(sample)
+        self.assertIn("Prompt semplice da copiare", html)
+        self.assertIn("Prompt avanzato", html)
+        self.assertIn("<pre", html)
+        self.assertTrue(publisher.guide_inline_diagram(sample, "prompt").startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+        self.assertTrue(publisher.guide_inline_diagram(sample, "check").startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+        standard_news = {"title": "Notizia tech", "category": "Tecnologia", "story_type": "NEWS"}
+        self.assertEqual(publisher.guide_prompt_blocks(standard_news), "")
+        self.assertEqual(publisher.guide_resources(standard_news), "")
+        client = MagicMock()
+        self.assertEqual(publisher.guide_inline_figures(standard_news, client, "news"), "")
+        client.upload_media.assert_not_called()
 
 if __name__=='__main__': unittest.main()
