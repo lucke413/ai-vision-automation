@@ -81,8 +81,8 @@ jobs:
           expected = {
               "scripts/rss_collector.py": "2.3.3",
               "scripts/ai_filter.py": "3.1.1",
-              "scripts/daily_selector.py": "2.4",
-              "scripts/article_generator.py": "3.4",
+              "scripts/daily_selector.py": "2.5",
+              "scripts/article_generator.py": "3.5",
               "scripts/wp_publisher.py": "1.8",
               "scripts/practical_guides.py": "1.2",
           }
