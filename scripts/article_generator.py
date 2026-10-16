@@ -20,14 +20,14 @@ from html.parser import HTMLParser
 
 import requests
 
-from daily_selector import expansion_room
+from daily_selector import expansion_room, editorial_room, MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.4"
+VERSION = "3.5"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
@@ -821,6 +821,7 @@ def main() -> int:
             is_offer = draft.get("category") == "Offerte & Prezzi" or draft.get("story_type") == "OFFERTA"
             if (len(promoted) < missing_daily
                     and expansion_room(daily_drafts + promoted, draft)
+                    and editorial_room(daily_drafts + promoted, draft)
                     and (not is_offer or current_offers < MAX_DAILY_OFFERS)):
                 draft["publication_slot"] = "today"
                 draft["promoted_from_reserve"] = True
@@ -830,6 +831,10 @@ def main() -> int:
                 remaining_reserves.append(draft)
         daily_drafts.extend(promoted)
         reserve_drafts = remaining_reserves
+    # Ensure no more than three practical articles replace news.
+    practical = [d for d in daily_drafts if d.get("editorial_kind") in {"GUIDA", "TUTORIAL"}]
+    if len(practical) > MAX_GUIDES_PER_DAY + MAX_TUTORIALS_PER_DAY:
+        raise RuntimeError("Limite guide/tutorial superato.")
     if stopped_reason:
         warnings = [stopped_reason]
     else:
