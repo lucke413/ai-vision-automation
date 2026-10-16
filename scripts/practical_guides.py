@@ -227,7 +227,7 @@ def editorial_brief(topic: tuple) -> str:
         "Inserire un esempio personalizzabile, rendere esplicite le incertezze e offrire un metodo di controllo da parte del lettore.",
         "Se i materiali non dimostrano una funzione specifica, non attribuirla al programma.",
         "Il materiale di riferimento ufficiale serve per descrivere lo strumento in modo prudente, non è licenza per copiarne i contenuti.",
-        f"Riferimento ufficiale del servizio: {OFFICIAL[reference][1]}",
+        f"Strumento usato: {OFFICIAL[reference][0]}. Per i lettori usare esclusivamente il collegamento italiano di accesso diretto al servizio.",
     ])
     return "\n".join(lines)
 
