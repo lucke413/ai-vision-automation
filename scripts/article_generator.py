@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.1"
+VERSION = "3.2"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
@@ -378,6 +378,10 @@ class SourceArticleParser(HTMLParser):
 def enrich_source(item: dict) -> dict:
     """Recupero limitato, senza autenticazione; errori = ripiego RSS."""
     result = dict(item)
+    if item.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
+        # La scheda è originale, non va sostituita con il corpo HTML delle
+        # pagine ufficiali che spesso contengono solo menu e navigazione.
+        return result
     result['source_text_status'] = 'rss_fallback'
     result['source_text'] = ''
     url = str(item.get('url') or '')
@@ -429,6 +433,59 @@ def enrich_source(item: dict) -> dict:
 
 
 def build_prompt(item: dict, previous: dict | None = None) -> str:
+    if item.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
+        return f"""
+Sei il redattore di AI Vision, sito italiano di tecnologia e AI.
+Scrivi una GUIDA DIDATTICA ORIGINALE sulla base della seguente scheda
+editoriale preparata per AI Vision. Il contenuto della scheda è materiale
+redazionale da elaborare, non un test effettivamente eseguito.
+Non copiare intere frasi; crea una spiegazione originale in italiano.
+
+TITOLO OBIETTIVO: {str(item.get('title') or '')[:300]}
+RUBRICA: {item.get('topic_audience')}
+FORMATO: {item.get('editorial_kind')}
+BRIEF VERIFICABILE:
+{str(item.get('source_text') or '')[:14000]}
+FINE BRIEF
+
+REGOLE OBBLIGATORIE:
+- Nessuna pretesa che AI Vision abbia provato app, creato video o verificato
+  pulsanti specifici senza una prova documentata. Mai usare "abbiamo testato".
+- Non inventare disponibilità, prezzi, crediti gratuiti, interfacce, nomi
+  di comandi o istruzioni di navigazione nelle schermate: le funzioni variano.
+- La guida deve spiegare COME agire con preparazione, passaggi numerati
+  concretamente utili, esempi di input, controllo finale e limiti.
+- Sviluppa esempi originali, non semplice ripetizione della scheda e non
+  consigli generici; evita formule senza sostanza.
+- Indica di non caricare documenti riservati, password o dati personali.
+- Inserisci almeno tre sezioni Markdown ##, fra cui "Procedura pratica",
+  "Esempio da adattare" e "Verifica del risultato".
+- Nella procedura usa elenco numerato tipo "1. Testo", "2. Testo".
+- I collegamenti alle fonti ufficiali saranno aggiunti automaticamente:
+  non inventare nuovi URL e non inserire marcatori Markdown di link.
+- Non presentare la guida come una recensione, un articolo di attualità
+  o una pubblicità del servizio.
+- Il testo finale deve avere da {MIN_BODY_WORDS} a {MAX_BODY_WORDS} parole,
+  idealmente circa {TARGET_BODY_WORDS}; NON aggiungere riempitivi.
+- Non scrivere note redazionali nel corpo; elenca eventuali limiti di
+  verifica solo in fact_check_notes.
+
+Restituisci esclusivamente JSON con i campi:
+{{
+ "title": "titolo utile e chiaro, senza promesse inventate",
+ "excerpt": "sintesi utile entro 200 caratteri",
+ "body_markdown": "guida originale in Markdown",
+ "focus_keyphrase": "frase SEO di 2-5 parole",
+ "seo_title": "titolo SEO entro 60 caratteri",
+ "seo_description": "metadescrizione entro 155 caratteri",
+ "slug": "{item.get('topic_slug')}",
+ "tags": ["guida AI", "AI pratica", "tutorial"],
+ "fact_check_notes": [],
+ "affiliate_candidate": false,
+ "needs_review": true
+}}
+{("Riscrivi perché la bozza precedente era troppo breve o non conforme; non inventare dettagli. Bozza: " + json.dumps(previous, ensure_ascii=False)) if previous else ""}
+"""
     title = str(item.get("title") or "")[:500]
     description = str(item.get("description") or "")[:5000]
     repair = ""
@@ -606,6 +663,14 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         if isinstance(note, str)
     ):
         notes.append("Prezzo, disponibilità e condizioni sono dati variabili nel tempo.")
+    if item.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
+        expected_slug = str(item.get("topic_slug") or "").strip()
+        if not expected_slug or not re.fullmatch(r"[a-z0-9-]+", expected_slug):
+            raise GeneratorFatalError("Slug guida editoriale non valido.")
+        raw["slug"] = expected_slug
+        # Le guide sono orientate alla pratica, non offerte o recensioni.
+        story_type = "GUIDA"
+        category = "AI"
     source_id = str(item.get("article_id") or "")
     draft_id = hashlib.sha256(source_id.encode("utf-8")).hexdigest()[:20]
     return {
@@ -623,6 +688,11 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         "image_license": item.get("image_license", "unknown"),
         "category": category,
         "story_type": story_type,
+        "editorial_kind": item.get("editorial_kind"),
+        "topic_slug": item.get("topic_slug"),
+        "topic_audience": item.get("topic_audience"),
+        "official_links": item.get("official_links", []),
+        "illustration_steps": item.get("illustration_steps", []),
         "title": title,
         "excerpt": truncate_at_word_boundary(raw["excerpt"], MAX_EXCERPT_CHARS),
         "body_markdown": body,
