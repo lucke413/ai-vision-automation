@@ -222,7 +222,7 @@ def markdown_to_html(markdown_text: str) -> str:
             value = html.escape(heading_match.group(2).strip())
             html_blocks.append(f"<h{level}>{value}</h{level}>")
             continue
-        numbered = [re.match(r"^\\d+[.)]\\s+(.+)$", line) for line in lines]
+        numbered = [re.match(r"^\d+[.)]\s+(.+)$", line) for line in lines]
         if numbered and all(numbered):
             html_blocks.append("<ol>" + "".join(f"<li>{html.escape(m.group(1))}</li>" for m in numbered) + "</ol>")
             continue
@@ -238,6 +238,40 @@ def markdown_to_html(markdown_text: str) -> str:
         html_blocks.append(f"<p>{escaped}</p>")
     return "\n".join(html_blocks)
 
+
+
+def guide_infographic(draft: dict) -> bytes:
+    """Original three-step infographic, not a simulated screenshot."""
+    import io
+    import textwrap
+    from PIL import Image, ImageDraw, ImageFont
+    canvas = Image.new("RGB", (1200, 675), "#10223e")
+    draw = ImageDraw.Draw(canvas)
+    def font(size):
+        try:
+            return ImageFont.truetype("DejaVuSans.ttf", size)
+        except OSError:
+            return ImageFont.load_default()
+    title_font, step_font, note_font = font(38), font(26), font(22)
+    draw.rounded_rectangle((34, 32, 1166, 642), radius=22, outline="#5279a0", width=3)
+    draw.text((74, 65), "AI VISION | GUIDA PRATICA", font=note_font, fill="#9febde")
+    for index, line in enumerate(textwrap.wrap(str(draft.get("title") or "Guida AI"), width=44)[:2]):
+        draw.text((74, 118+50*index), line, font=title_font, fill="white")
+    steps = draft.get("illustration_steps")
+    stages = [str(x)[:75] for x in steps[:3]] if isinstance(steps, list) else []
+    while len(stages) < 3:
+        stages.append(("Preparazione", "Esempio", "Verifica")[len(stages)])
+    for index, stage in enumerate(stages):
+        x = 52 + 382*index
+        draw.rounded_rectangle((x, 285, x+360, 525), radius=18, fill="#244567")
+        draw.ellipse((x+16, 302, x+62, 348), fill="#6ce1cc")
+        draw.text((x+31, 308), str(index+1), font=note_font, fill="#10223e")
+        for line_index, line in enumerate(textwrap.wrap(stage, width=22)[:4]):
+            draw.text((x+20, 370+35*line_index), line, font=step_font, fill="white")
+    draw.text((74, 571), "Schema originale, non screenshot del servizio.", font=note_font, fill="#bfd0e3")
+    result = io.BytesIO()
+    canvas.save(result, format="PNG", optimize=True)
+    return result.getvalue()
 
 def guide_resources(draft: dict) -> str:
     if draft.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}:
@@ -617,11 +651,11 @@ def publish_one(
     if client.dry_run:
         # Il dry-run non deve fare richieste esterne né scaricare immagini:
         # usa una copertina simulata e registra se una fonte era disponibile.
-        image_origin = "dry_run_source" if image_url else "dry_run_fallback"
-        downloaded = (fallback_png(category_name), ".png")
+        image_origin = "dry_run_guide" if draft.get("editorial_kind") else ("dry_run_source" if image_url else "dry_run_fallback")
+        downloaded = (guide_infographic(draft), ".png") if draft.get("editorial_kind") else (fallback_png(category_name), ".png")
     else:
-        image_origin = "rss_or_draft"
-        downloaded = download_image(image_url, session) if image_url else None
+        image_origin = "original_guide_infographic" if draft.get("editorial_kind") else "rss_or_draft"
+        downloaded = (guide_infographic(draft), ".png") if draft.get("editorial_kind") else (download_image(image_url, session) if image_url else None)
         if downloaded is None and source_url and not draft.get("editorial_kind"):
             image_url = extract_og_image(source_url, session)
             image_origin = "open_graph"
