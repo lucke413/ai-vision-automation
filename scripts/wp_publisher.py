@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "1.7"
+VERSION = "1.8"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -300,79 +300,114 @@ def guide_prompt_blocks(draft: dict) -> str:
 
 
 def guide_inline_diagram(draft: dict, style: str) -> bytes:
-    """Original diagrams illustrating prompt structure and result checks.
-
-    These are NOT screenshots of third-party apps or fabricated outputs.
-    """
+    """Two topic-specific editorial demonstrations, not third-party screenshots."""
     import io
     import textwrap
     from PIL import Image, ImageDraw, ImageFont
-    image = Image.new("RGB", (1080, 570), "#f4f8fd")
+
+    image = Image.new("RGB", (1100, 625), "#f4f8fd")
     pen = ImageDraw.Draw(image)
     def font(size):
         try:
             return ImageFont.truetype("DejaVuSans.ttf", size)
         except OSError:
             return ImageFont.load_default()
-    title = font(36)
-    body = font(27)
-    small = font(21)
-    pen.rounded_rectangle((25, 25, 1055, 545), 18, outline="#8cb1d0", width=3)
+
+    heading_font, body_font, small_font = font(35), font(27), font(23)
+    pen.rounded_rectangle((20, 20, 1080, 600), radius=20, outline="#74a1cb", width=3)
+    demo = draft.get("visual_demo") or {}
+    if not isinstance(demo, dict):
+        demo = {}
     if style == "prompt":
-        pen.text((60, 55), "COME COSTRUIRE IL PROMPT", font=title, fill="#1b3e61")
-        labels = [
-            ("1  OBIETTIVO", str(draft.get("prompt_goal") or "Che cosa vuoi ottenere?")),
-            ("2  CONTENUTO", "Aggiungi dati ed esempi concreti, senza informazioni riservate."),
-            ("3  DETTAGLI", "Indica formato, stile e vincoli del risultato."),
+        title = "ESEMPIO: COSA SCRIVERE ALL'AI"
+        steps = [
+            ("ATTIVITÀ", str(draft.get("prompt_goal") or "Definisci l'obiettivo")),
+            ("PROMPT REALE", str(draft.get("example_prompt") or "Fornisci un esempio concreto")),
+            ("PERSONALIZZA", "Sostituisci i dati tra [parentesi] con i tuoi esempi."),
         ]
     else:
-        pen.text((60, 55), "COME VERIFICARE IL RISULTATO", font=title, fill="#1b3e61")
-        labels = [
-            ("1  CONTROLLA", "Confronta il risultato con l'obiettivo iniziale."),
-            ("2  CORREGGI", "Chiedi una modifica mirata, senza ricominciare da zero."),
-            ("3  CONFERMA", "Verifica informazioni, dettagli visivi e limiti."),
-        ]
-    for i, (heading, detail) in enumerate(labels):
-        top = 122 + i*128
-        pen.rounded_rectangle((55, top, 1025, top+108), 12, fill="#e1edf7")
-        pen.text((78, top+10), heading, font=body, fill="#144b70")
-        for n, line in enumerate(textwrap.wrap(detail, width=65)[:2]):
-            pen.text((78, top+48+n*28), line, font=small, fill="#243e53")
+        title = "ESEMPIO DI RISULTATO DA VERIFICARE"
+        lines = demo.get("lines")
+        if not isinstance(lines, list) or len(lines) != 3:
+            lines = ["1. Prepara il contenuto", "2. Controlla il risultato",
+                     "3. Correggi eventuali errori"]
+        steps = [(f"PASSAGGIO {i + 1}", str(line)) for i, line in enumerate(lines[:3])]
+    pen.text((56, 52), title, font=heading_font, fill="#174b75")
+    subject = str(draft.get("title") or "Guida pratica") if style == "prompt" else str(demo.get("heading") or "Esempio concreto")
+    pen.text((58, 103), textwrap.shorten(subject, width=61, placeholder="..."),
+             font=small_font, fill="#46647b")
+    for i, (label, description) in enumerate(steps):
+        y = 157 + i * 137
+        pen.rounded_rectangle((55, y, 1045, y+117), radius=16, fill="#e0edf8")
+        pen.text((80, y+12), label, font=small_font, fill="#1a547b")
+        # Wrap by rendered pixel width, not merely number of characters.
+        wrapped = textwrap.wrap(description, width=72, break_long_words=False,
+                                break_on_hyphens=False)[:2]
+        for j, line in enumerate(wrapped):
+            pen.text((80, y+49+j*32), line, font=body_font, fill="#1d3245")
+    pen.text((60, 584), "Esempio illustrativo AIVision: non è una schermata del servizio.",
+             font=small_font, fill="#536e81")
     output = io.BytesIO()
     image.save(output, format="PNG", optimize=True)
     return output.getvalue()
 
 
-def guide_inline_figures(draft: dict, client, slug: str) -> str:
-    """Two explanatory images inside each guide; graceful fallback if upload fails."""
+def guide_inline_figures(draft: dict, client, slug: str) -> list[str]:
+    """Return two real uploaded illustrations or abort this guide publication.
+
+    An article must never claim to contain illustrated steps when WordPress
+    did not actually accept the image uploads.
+    """
     if draft.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}:
-        return ""
-    parts = []
-    for kind, title in (
-        ("prompt", "Esempio visivo: come costruire un prompt"),
-        ("check", "Esempio visivo: come controllare il risultato"),
+        return []
+    if client.dry_run:
+        # Still exercise image rendering in tests / dry runs.
+        guide_inline_diagram(draft, "prompt")
+        guide_inline_diagram(draft, "check")
+        return ['<!-- immagine 1 simulata -->', '<!-- immagine 2 simulata -->']
+    figures = []
+    for kind, caption in (
+        ("prompt", "Esempio pratico: come impostare la richiesta all'AI"),
+        ("check", "Esempio pratico: risultato atteso e controlli"),
     ):
-        try:
-            picture = guide_inline_diagram(draft, kind)
-            media = client.upload_media(picture, slug + "-schema-" + kind + ".png",
-                                        "image/png", title, title)
-            url = str(media.get("source_url") or "")
-            if client.dry_run:
-                continue
-            if not url.startswith("https://"):
-                continue
-            parts.append('<figure class="av-guide-example" style="margin:26px auto">'
-                         '<img src="' + html.escape(url, quote=True) +
-                         '" alt="' + html.escape(title, quote=True) +
-                         '" loading="lazy" style="width:100%;max-width:850px;height:auto;'
-                         'border-radius:8px" />'
-                         '<figcaption style="font-size:.91em;text-align:center">' +
-                         html.escape(title) + ' — schema originale AIVision, non schermata del servizio.'
-                         '</figcaption></figure>')
-        except (requests.RequestException, ValueError, OSError, KeyError) as exc:
-            print("    AVVISO immagine didattica interna:", type(exc).__name__)
-    return ('<section class="av-practical-visuals"><h2>Due esempi visivi</h2>' +
-            "".join(parts) + '</section>') if parts else ""
+        picture = guide_inline_diagram(draft, kind)
+        media = client.upload_media(picture, slug + "-esempio-" + kind + ".png",
+                                    "image/png", caption, caption)
+        url = str(media.get("source_url") or "")
+        parts = urlsplit(url)
+        if parts.scheme != "https" or not parts.netloc or not media.get("id"):
+            raise PublisherError("Immagine didattica non caricata correttamente.")
+        print("    Illustrazione interna caricata:", kind, media.get("id"))
+        figures.append(
+            '<figure class="av-guide-example" style="margin:24px auto;max-width:900px">'
+            '<img src="' + html.escape(url, quote=True) +
+            '" alt="' + html.escape(caption, quote=True) +
+            '" loading="lazy" decoding="async" style="display:block;width:100%;'
+            'max-width:900px;height:auto;border-radius:10px" />'
+            '<figcaption style="font-size:.91em;text-align:center">' +
+            html.escape(caption) + '. Illustrazione AIVision, non screenshot del servizio.'
+            '</figcaption></figure>'
+        )
+    return figures
+
+
+def guide_place_figures(body: str, figures: list[str]) -> str:
+    """Place images *inside* the relevant explanation, rather than at the end."""
+    if not figures:
+        return body
+    if len(figures) != 2:
+        raise PublisherError("La guida richiede due illustrazioni valide.")
+    # First image follows the practical steps; second comes before final checks.
+    if "</ol>" in body:
+        body = body.replace("</ol>", "</ol>\n" + figures[0], 1)
+    else:
+        body += "\n" + figures[0]
+    heading = re.search(r"<h2>Verifica del risultato</h2>", body, flags=re.IGNORECASE)
+    if heading:
+        body = body[:heading.start()] + figures[1] + "\n" + body[heading.start():]
+    else:
+        body += "\n" + figures[1]
+    return body
 
 
 def guide_resources(draft: dict) -> str:
@@ -708,8 +743,9 @@ def publish_one(
     raw_body = str(draft.get("body_markdown") or "").strip()
     body = markdown_to_html(raw_body)
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
+        figures = guide_inline_figures(draft, client, slugify(str(draft.get("slug") or title)))
+        body = guide_place_figures(body, figures)
         body += guide_prompt_blocks(draft)
-        body += guide_inline_figures(draft, client, slugify(str(draft.get("slug") or title)))
     body += guide_resources(draft)
     if not body:
         raise PublisherError("Corpo articolo vuoto.")

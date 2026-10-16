@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.3"
+VERSION = "3.4"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
@@ -702,6 +702,7 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         "advanced_prompt": item.get("advanced_prompt", ""),
         "prompt_goal": item.get("prompt_goal", ""),
         "result_check": item.get("result_check", ""),
+        "visual_demo": item.get("visual_demo", {}),
         "title": title,
         "excerpt": truncate_at_word_boundary(raw["excerpt"], MAX_EXCERPT_CHARS),
         "body_markdown": body,
