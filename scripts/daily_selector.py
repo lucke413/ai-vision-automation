@@ -2,7 +2,7 @@
 """Prepara gli articoli del giorno e una piccola coda di riserva.
 
 Il selettore non pubblica nulla e non chiama servizi esterni. Se sono
-disponibili meno di cinque candidati, usa comunque quelli disponibili e
+disponibili meno di sei candidati, usa comunque quelli disponibili e
 scrive un avviso: il workflow non deve fermarsi per una carenza temporanea.
 """
 
@@ -21,11 +21,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.2"
-DAILY_LIMIT = 5
+VERSION = "2.3"
+DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
 MAX_OFFERS = 1
-# Espansione graduale: al massimo un articolo nuovo su cinque, mai obbligatorio.
+# Espansione graduale: al massimo un articolo nuovo su sei, mai obbligatorio.
 EXPANSION_CATEGORIES = {"Casa smart", "Accessori e postazioni"}
 MAX_EXPANSION_ARTICLES = 1
 
@@ -112,7 +112,7 @@ def is_offer(item: dict) -> bool:
 
 
 def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Sceglie fino a 5 articoli e fino a 3 riserve.
+    """Sceglie fino a 6 articoli e fino a 3 riserve.
 
     La varietà è una preferenza, non un vincolo: se le notizie valide
     appartengono alla stessa categoria o fonte, vengono comunque usate.

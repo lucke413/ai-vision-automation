@@ -27,9 +27,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.0"
+VERSION = "3.1"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
-DAILY_LIMIT = 5
+DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
 MAX_DAILY_OFFERS = 1
 MAX_ITEMS = DAILY_LIMIT + RESERVE_LIMIT

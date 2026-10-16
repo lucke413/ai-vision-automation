@@ -9,7 +9,7 @@ Gestisce:
 - creazione/riuso dei tag;
 - immagine dalla fonte o da OpenGraph;
 - copertina grafica locale di riserva quando non c'è un'immagine scaricabile;
-- cinque orari giornalieri configurabili in Europe/Rome;
+- sei orari giornalieri configurabili in Europe/Rome;
 - report JSON anche in caso di errori su singoli articoli.
 """
 
@@ -39,13 +39,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "1.4"
+VERSION = "1.5"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
 
 DEFAULT_TIMEZONE = "Europe/Rome"
-DEFAULT_SLOT_TIMES = "08:00,10:30,14:00,16:30,20:30"
+DEFAULT_SLOT_TIMES = "08:00,10:30,14:00,16:30,18:30,20:30"
 
 MACRO_CATEGORIES = (
     "News",

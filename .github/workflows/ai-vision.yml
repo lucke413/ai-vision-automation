@@ -80,9 +80,9 @@ jobs:
           expected = {
               "scripts/rss_collector.py": "2.3.3",
               "scripts/ai_filter.py": "3.1.1",
-              "scripts/daily_selector.py": "2.2",
-              "scripts/article_generator.py": "3.0",
-              "scripts/wp_publisher.py": "1.4",
+              "scripts/daily_selector.py": "2.3",
+              "scripts/article_generator.py": "3.1",
+              "scripts/wp_publisher.py": "1.5",
           }
 
           for filename, wanted in expected.items():
@@ -226,6 +226,7 @@ jobs:
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           WP_DRY_RUN: ${{ vars.WP_PUBLISH_MODE != 'live' && 'true' || 'false' }}
           WP_TIMEZONE: Europe/Rome
+          WP_SLOT_TIMES: "08:00,10:30,14:00,16:30,18:30,20:30"
         run: python scripts/wp_publisher.py
 
       - name: Controlla report WordPress
