@@ -181,7 +181,52 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(publisher.guide_prompt_blocks(standard_news), "")
         self.assertEqual(publisher.guide_resources(standard_news), "")
         client = MagicMock()
-        self.assertEqual(publisher.guide_inline_figures(standard_news, client, "news"), "")
+        self.assertEqual(publisher.guide_inline_figures(standard_news, client, "news"), [])
         client.upload_media.assert_not_called()
+
+
+    def test_practical_guides_use_real_beginner_urls(self):
+        import practical_guides
+        for topic in practical_guides.TOPICS:
+            item = practical_guides.make_candidate(topic)
+            self.assertNotIn("/en/articles/", item["url"])
+            self.assertNotIn("/en/articles/", item["official_links"][0]["url"])
+            self.assertIn("visual_demo", item)
+            self.assertEqual(len(item["visual_demo"]["lines"]), 3)
+        examples = [practical_guides.make_candidate(topic) for topic in practical_guides.TOPICS]
+        maths = next(x for x in examples if "matematica" in x["topic_slug"])
+        self.assertIn("3x", maths["visual_demo"]["heading"])
+
+    def test_practical_images_must_be_uploaded_and_in_article(self):
+        import practical_guides
+        draft = practical_guides.make_candidate(practical_guides.TOPICS[0])
+        client = MagicMock()
+        client.dry_run = False
+        client.upload_media.side_effect = [
+            {"id": 9, "source_url": "https://example.com/a.png"},
+            {"id": 10, "source_url": "https://example.com/b.png"},
+        ]
+        figures = publisher.guide_inline_figures(draft, client, "sample")
+        self.assertEqual(len(figures), 2)
+        self.assertIn("a.png", figures[0])
+        self.assertIn("b.png", figures[1])
+        body = publisher.markdown_to_html(
+            "## Procedura pratica\n\n1. Prepara i dati\n2. Prova il prompt\n\n"
+            "## Verifica del risultato\n\nControlla la risposta."
+        )
+        enriched = publisher.guide_place_figures(body, figures)
+        self.assertLess(enriched.index("a.png"), enriched.index("Verifica del risultato"))
+        self.assertLess(enriched.index("b.png"), enriched.index("Verifica del risultato"))
+        self.assertEqual(client.upload_media.call_count, 2)
+
+    def test_practical_images_fail_closed_on_bad_upload(self):
+        import practical_guides
+        draft = practical_guides.make_candidate(practical_guides.TOPICS[0])
+        client = MagicMock()
+        client.dry_run = False
+        client.upload_media.return_value = {"id": None, "source_url": ""}
+        with self.assertRaises(publisher.PublisherError):
+            publisher.guide_inline_figures(draft, client, "sample")
+
 
 if __name__=='__main__': unittest.main()
