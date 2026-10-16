@@ -56,6 +56,7 @@ jobs:
               "scripts/history_filter.py",
               "scripts/article_generator.py",
               "scripts/wp_publisher.py",
+              "scripts/practical_guides.py",
               "requirements.txt",
           ):
               if not Path(name).is_file():
@@ -66,7 +67,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m pip check
-          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/article_generator.py scripts/wp_publisher.py
+          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/practical_guides.py scripts/article_generator.py scripts/wp_publisher.py
 
       - name: Verifica equilibrio editoriale
         run: python -m unittest discover -s tests -p 'test_editorial_expansion.py'
@@ -80,9 +81,10 @@ jobs:
           expected = {
               "scripts/rss_collector.py": "2.3.3",
               "scripts/ai_filter.py": "3.1.1",
-              "scripts/daily_selector.py": "2.3",
-              "scripts/article_generator.py": "3.1",
-              "scripts/wp_publisher.py": "1.5",
+              "scripts/daily_selector.py": "2.4",
+              "scripts/article_generator.py": "3.2",
+              "scripts/wp_publisher.py": "1.6",
+              "scripts/practical_guides.py": "1.0",
           }
 
           for filename, wanted in expected.items():
@@ -157,6 +159,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/history_filter.py
+
+      - name: Integra guide pratiche e tutorial nello stesso percorso
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/practical_guides.py
 
       - name: Seleziona articoli giornalieri
         run: python scripts/daily_selector.py

@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.3"
+VERSION = "2.4"
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
 MAX_OFFERS = 1
@@ -112,12 +112,10 @@ def is_offer(item: dict) -> bool:
 
 
 def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Sceglie fino a 6 articoli e fino a 3 riserve.
+    """Equilibrio preferito: tre notizie, due guide e un tutorial.
 
-    La varietà è una preferenza, non un vincolo: se le notizie valide
-    appartengono alla stessa categoria o fonte, vengono comunque usate.
-    Si preferisce una sola offerta nella selezione giornaliera; se non ci
-    sono alternative, il selettore riempie comunque gli slot disponibili.
+    I limiti sono obiettivi, non minimi forzati: se guide o tutorial mancano,
+    gli slot sono disponibili per le notizie con i gate editoriali invariati.
     """
     if not items:
         return [], []
@@ -127,50 +125,51 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
     categories: set[str] = set()
     offers = 0
 
-    # Prima privilegia una categoria nuova e una sola offerta, senza perdere
-    # il candidato se non c'è abbastanza varietà.
-    for item in items:
-        if len(selected) >= DAILY_LIMIT:
-            break
+    def offer_ok(item: dict) -> bool:
+        return not is_offer(item) or offers < MAX_OFFERS
+
+    def add(item: dict) -> bool:
+        nonlocal offers
         identifier = item["article_id"]
-        if identifier in selected_ids:
-            continue
+        if identifier in selected_ids or not offer_ok(item):
+            return False
         if not expansion_room(selected, item):
-            continue
-        offer = is_offer(item)
-        category = str(item.get("category") or "Tecnologia")
-        if offer and offers >= MAX_OFFERS:
-            continue
-        if category in categories:
-            continue
+            return False
+        if len(selected) >= DAILY_LIMIT:
+            return False
         selected.append({**item, "publication_slot": "today"})
         selected_ids.add(identifier)
-        categories.add(category)
-        offers += int(offer)
+        categories.add(str(item.get("category") or "Tecnologia"))
+        offers += int(is_offer(item))
+        return True
 
-    # Riempie gli slot restanti per punteggio. Qui la varietà non è più un
-    # vincolo, così una giornata con poche categorie non viene bloccata.
-    for item in items:
+    guides = [x for x in items if x.get("editorial_kind") == "GUIDA"]
+    tutorials = [x for x in items if x.get("editorial_kind") == "TUTORIAL"]
+    news = [x for x in items if x.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}]
+
+    # Le guide pratiche sono vere rubriche e hanno precedenza, non sono RSS.
+    for item in guides[:2]:
+        add(item)
+    for item in tutorials[:1]:
+        add(item)
+
+    # La cronaca tecnologica resta centrale; prima privilegiamo categorie diverse.
+    for item in news:
         if len(selected) >= DAILY_LIMIT:
             break
-        identifier = item["article_id"]
-        if identifier in selected_ids:
-            continue
-        if not expansion_room(selected, item):
-            continue
-        offer = is_offer(item)
-        if offer and offers >= MAX_OFFERS:
-            continue
-        selected.append({**item, "publication_slot": "today"})
-        selected_ids.add(identifier)
-        offers += int(offer)
+        if str(item.get("category") or "Tecnologia") not in categories:
+            add(item)
+    for item in news:
+        if len(selected) >= DAILY_LIMIT:
+            break
+        add(item)
 
-    # Il limite offerte è ora un vero gate editoriale: se il lotto contiene
-    # quasi soltanto offerte, è preferibile pubblicare meno articoli anziché
-    # trasformare la giornata in un catalogo commerciale.
+    # Se le fonti RSS non bastano, usiamo le altre schede disponibili.
+    for item in guides[2:] + tutorials[1:]:
+        if len(selected) >= DAILY_LIMIT:
+            break
+        add(item)
 
-    # Le riserve non consumano lo slot del giorno e restano disponibili per
-    # una successiva pubblicazione o sostituzione.
     reserves: list[dict] = []
     for item in items:
         if len(reserves) >= RESERVE_LIMIT:
@@ -181,7 +180,7 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
             continue
         reserves.append({**item, "publication_slot": "reserve"})
 
-    return sorted(selected, key=score_key, reverse=True), sorted(reserves, key=score_key, reverse=True)
+    return selected, reserves
 
 
 def main() -> int:
