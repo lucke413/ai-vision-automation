@@ -175,8 +175,8 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertIn("Prompt semplice da copiare", html)
         self.assertIn("Prompt avanzato", html)
         self.assertIn("<pre", html)
-        self.assertTrue(publisher.guide_inline_diagram(sample, "prompt").startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
-        self.assertTrue(publisher.guide_inline_diagram(sample, "check").startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+        self.assertTrue(publisher.guide_inline_diagram(sample, "prompt").startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertTrue(publisher.guide_inline_diagram(sample, "check").startswith(b"\x89PNG\r\n\x1a\n"))
         standard_news = {"title": "Notizia tech", "category": "Tecnologia", "story_type": "NEWS"}
         self.assertEqual(publisher.guide_prompt_blocks(standard_news), "")
         self.assertEqual(publisher.guide_resources(standard_news), "")
