@@ -41,16 +41,16 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = [item(i, cat) for i, cat in enumerate(
             ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 5)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(x['category'] in selector.EXPANSION_CATEGORIES for x in chosen), 1)
         self.assertIn('AI', {x['category'] for x in chosen})
         self.assertLessEqual(len(reserves), 3)
 
     def test_no_forced_new_topic_and_one_offer(self):
         candidates = [item(i, cat, 'OFFERTA' if i < 2 else 'NEWS') for i, cat in enumerate(
-            ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App'])]
+            ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, _ = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 5)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
 
     def test_reserve_promotion_preserves_topic_cap(self):
@@ -67,6 +67,27 @@ class EditorialExpansionTests(unittest.TestCase):
             result=json.loads(out.read_text())
             daily=[x for x in result['items'] if x['publication_slot']=='today']
             self.assertEqual({x['category'] for x in daily}, {'Casa smart','Sicurezza'})
+
+    def test_six_posts_and_new_slot_at_1830(self):
+        from zoneinfo import ZoneInfo
+        self.assertEqual(selector.DAILY_LIMIT, 6)
+        self.assertEqual(generator.DAILY_LIMIT, 6)
+        self.assertEqual(generator.MAX_ITEMS, 6 + generator.RESERVE_LIMIT)
+        with patch.dict('os.environ', {'WP_TIMEZONE': 'Europe/Rome'}, clear=True):
+            self.assertEqual(
+                [value.strftime('%H:%M') for value in publisher.parse_slot_times()],
+                ['08:00', '10:30', '14:00', '16:30', '18:30', '20:30']
+            )
+            now = datetime(2026, 10, 16, 11, 17, tzinfo=ZoneInfo('Europe/Rome'))
+            planned = publisher.next_publication_times(6, now=now)
+            self.assertEqual(
+                [value.strftime('%Y-%m-%d %H:%M') for value in planned],
+                [
+                    '2026-10-16 14:00', '2026-10-16 16:30',
+                    '2026-10-16 18:30', '2026-10-16 20:30',
+                    '2026-10-17 08:00', '2026-10-17 10:30'
+                ]
+            )
 
     def test_rejects_misleading_first_hand_review_title(self):
         with self.assertRaises(generator.GeneratorFatalError):
