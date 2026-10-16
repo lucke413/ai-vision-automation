@@ -229,4 +229,46 @@ class EditorialExpansionTests(unittest.TestCase):
             publisher.guide_inline_figures(draft, client, "sample")
 
 
+
+    def test_guide_overflow_cannot_fill_news_slots(self):
+        import practical_guides
+        news = [{**item(i, cat), "url": f"https://example.com/n-{i}"}
+                for i, cat in enumerate(["AI", "Gaming", "Sicurezza"])]
+        practical = [practical_guides.make_candidate(t) for t in practical_guides.TOPICS]
+        candidates = selector.valid_candidates({"status": "ok", "items": news + practical})
+        chosen, reserves = selector.select_daily(candidates)
+        self.assertEqual(len(chosen), 6)
+        self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 3)
+        self.assertTrue(all(not x.get("editorial_kind") for x in reserves))
+        chosen_without_news, reserves_without_news = selector.select_daily(
+            selector.valid_candidates({"status": "ok", "items": practical})
+        )
+        self.assertEqual(len(chosen_without_news), 3)
+        self.assertEqual(reserves_without_news, [])
+
+    def test_failed_news_is_not_replaced_with_additional_guides(self):
+        import practical_guides
+        with tempfile.TemporaryDirectory() as folder:
+            inp, out = Path(folder)/"selection.json", Path(folder)/"drafts.json"
+            practical = [practical_guides.make_candidate(t) for t in practical_guides.TOPICS]
+            guide = next(x for x in practical if x["editorial_kind"] == "GUIDA")
+            tutorial = next(x for x in practical if x["editorial_kind"] == "TUTORIAL")
+            news = item(1, "Gaming")
+            extra_guide = next(x for x in practical if x["editorial_kind"] == "GUIDA" and x["article_id"] != guide["article_id"])
+            inp.write_text(json.dumps({
+                "items": [{**guide, "publication_slot": "today"},
+                          {**tutorial, "publication_slot": "today"}, news],
+                "reserve_items": [extra_guide],
+            }))
+            def mock_generate(source, _key):
+                if not source.get("editorial_kind"):
+                    raise generator.GeneratorFatalError("notizia non verificabile")
+                return {**source, "publication_slot": source["publication_slot"],
+                        "body_word_count": 650, "quality_warnings": []}
+            with patch.object(generator, "INPUT_FILE", inp), patch.object(generator, "OUTPUT_FILE", out), patch.dict("os.environ", {"GEMINI_API_KEY":"test"}), patch.object(generator, "generate_valid_draft", side_effect=mock_generate), patch.object(generator.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
+                generator.main()
+            output = json.loads(out.read_text())
+            self.assertEqual(output["daily_generated"], 2)
+            self.assertEqual(sum(x["publication_slot"] == "today" for x in output["items"]), 2)
+
 if __name__=='__main__': unittest.main()
