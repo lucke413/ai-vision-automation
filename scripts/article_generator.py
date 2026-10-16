@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.2"
+VERSION = "3.3"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
@@ -461,6 +461,11 @@ REGOLE OBBLIGATORIE:
 - Inserisci almeno tre sezioni Markdown ##, fra cui "Procedura pratica",
   "Esempio da adattare" e "Verifica del risultato".
 - Nella procedura usa elenco numerato tipo "1. Testo", "2. Testo".
+- Spiega cosa sostituire nei segnaposto dei prompt e come perfezionare gli esempi.
+- La pagina inserira automaticamente DUE prompt pronti da copiare: non
+  ripeterli per intero nel corpo, ma spiegane l'uso e il risultato atteso.
+- Descrivi chiaramente soggetto, inquadratura, ambiente, luce e stile
+  per le guide a immagini/video; non fingere risultati ottenuti.
 - I collegamenti alle fonti ufficiali saranno aggiunti automaticamente:
   non inventare nuovi URL e non inserire marcatori Markdown di link.
 - Non presentare la guida come una recensione, un articolo di attualità
@@ -693,6 +698,10 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         "topic_audience": item.get("topic_audience"),
         "official_links": item.get("official_links", []),
         "illustration_steps": item.get("illustration_steps", []),
+        "example_prompt": item.get("example_prompt", ""),
+        "advanced_prompt": item.get("advanced_prompt", ""),
+        "prompt_goal": item.get("prompt_goal", ""),
+        "result_check": item.get("result_check", ""),
         "title": title,
         "excerpt": truncate_at_word_boundary(raw["excerpt"], MAX_EXCERPT_CHARS),
         "body_markdown": body,

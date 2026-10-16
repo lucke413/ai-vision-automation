@@ -22,7 +22,7 @@ from requests.auth import HTTPBasicAuth
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CANDIDATES_PATH = BASE_DIR / "data" / "ai_candidates.json"
-VERSION = "1.0"
+VERSION = "1.1"
 MAX_INJECTED = 6
 MAX_GUIDES = 4
 MAX_TUTORIALS = 2
@@ -40,6 +40,60 @@ OFFICIAL = {
     "canva_effects": ("Animare immagini con Canva", "https://www.canva.com/help/ai-effects/"),
     "excel": ("Formule e Copilot in Excel", "https://support.microsoft.com/en-us/excel/copilot/data-insights-with-copilot-in-excel"),
 }
+
+# Gli articoli mostrano solo collegamenti per iniziare: le pagine di supporto
+# (anche in inglese) rimangono nel brief interno per la verifica redazionale.
+START_HERE = {
+    "chatgpt": {
+        "label": "Apri ChatGPT e prova il prompt",
+        "url": "https://chatgpt.com/",
+        "hint": "Apri ChatGPT, crea una conversazione e incolla il prompt di esempio. Adattalo alla tua situazione.",
+    },
+    "canva": {
+        "label": "Apri Canva AI in italiano",
+        "url": "https://www.canva.com/it_it/canva-ai/",
+        "hint": "Esplora le funzioni AI disponibili nel tuo account, poi adatta la descrizione proposta qui sotto.",
+    },
+    "excel": {
+        "label": "Scopri Excel in italiano",
+        "url": "https://www.microsoft.com/it-it/microsoft-365/excel",
+        "hint": "Inizia da un foglio di prova, leggi il prompt e controlla formule e risultati prima di usarli.",
+    },
+}
+
+
+def advanced_example(topic: tuple) -> str:
+    """Un prompt strutturato e subito personalizzabile per ogni argomento."""
+    slug, audience, kind, title, objective, steps, example, caution, reference = topic
+    base = [
+        "Voglio ottenere un risultato pratico, non una spiegazione teorica.",
+        f"ATTIVITÀ: {objective}",
+        f"PARTI DA QUESTO ESEMPIO: {example}",
+        "CONTESTO: [spiega a chi serve, dove verrà usato e quali dati reali hai].",
+    ]
+    if kind == "TUTORIAL":
+        base.extend([
+            "DESCRIZIONE DETTAGLIATA: specifica soggetto, ambiente, azione, inquadratura, stile, luce e atmosfera quando pertinenti.",
+            "FORMATO: [orizzontale o verticale; durata indicativa se è un video].",
+            "VINCOLI: non inserire loghi, scritte, persone reali o elementi non richiesti; se una funzione non è disponibile, dillo.",
+            "RISULTATO: produci un risultato coerente con la descrizione e dimmi quali dettagli conviene migliorare.",
+        ])
+    else:
+        base.extend([
+            "PASSAGGI: proponi istruzioni concrete, una alla volta, adatte a chi parte da zero.",
+            "FORMATO DEL RISULTATO: [scegli tabella, elenco, email, quiz, scaletta o altro formato utile].",
+            "VINCOLI: usa soltanto i dati forniti, segnala i dati mancanti e non inventare informazioni.",
+            "VERIFICA: mostra come controllare il risultato e quali errori cercare.",
+        ])
+    base.append("TONO: italiano chiaro, senza termini tecnici inutili.")
+    return "\n".join(base)
+
+
+def beginner_link(reference: str) -> dict:
+    category = "chatgpt" if reference.startswith("chatgpt_") else ("canva" if reference.startswith("canva_") else "excel")
+    return dict(START_HERE[category])
+
+
 # slug, pubblico, formato, titolo, scopo, passi verificabili, prompt di esempio,
 # verifica finale, documentazione ufficiale.
 # I prompt sono esempi originali della redazione: non citazioni dei fornitori.
@@ -198,9 +252,13 @@ def make_candidate(topic: tuple) -> dict:
         "story_type": "GUIDA",
         "editorial_kind": kind,
         "topic_audience": audience,
-        "official_links": [{"label": label, "url": url}],
+        "official_links": [beginner_link(reference)],
+        "technical_reference": {"label": label, "url": url},
         "illustration_steps": [step.split(",")[0][:55] for step in steps],
         "example_prompt": example,
+        "advanced_prompt": advanced_example(topic),
+        "prompt_goal": objective,
+        "result_check": caution,
         "final_score": 82 if kind == "GUIDA" else 80,
         "ai_analysis": {"ai_score": 80},
         "affiliate_candidate": False,

@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "1.6"
+VERSION = "1.7"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -273,10 +273,112 @@ def guide_infographic(draft: dict) -> bytes:
     canvas.save(result, format="PNG", optimize=True)
     return result.getvalue()
 
+
+def guide_prompt_blocks(draft: dict) -> str:
+    """Copy-ready example prompts shown only in practical guides."""
+    if draft.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}:
+        return ""
+    def block(title: str, raw: str) -> str:
+        value = str(raw or "").strip()
+        if not value:
+            return ""
+        # The <pre> element preserves the newlines for easy copy/paste.
+        return (
+            '<section class="av-practical-prompt" style="padding:16px 20px;margin:22px 0;'
+            'border:1px solid #c9d9e6;border-radius:12px;background:#f3f8fc;color:#162c42">'
+            '<h2 style="font-size:1.16em;margin:0 0 12px">' + html.escape(title) + '</h2>'
+            '<p>Seleziona e copia il testo qui sotto, poi sostituisci le parti tra parentesi quadre.</p>'
+            '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;'
+            'font:inherit;background:#fff;color:#182a3d;border:1px solid #d4e0e7;'
+            'border-radius:8px;padding:14px">' + html.escape(value) + '</pre>'
+            '</section>'
+        )
+    return (
+        block("Prompt semplice da copiare", draft.get("example_prompt", "")) +
+        block("Prompt avanzato: più dettagli per risultati migliori", draft.get("advanced_prompt", ""))
+    )
+
+
+def guide_inline_diagram(draft: dict, style: str) -> bytes:
+    """Original diagrams illustrating prompt structure and result checks.
+
+    These are NOT screenshots of third-party apps or fabricated outputs.
+    """
+    import io
+    import textwrap
+    from PIL import Image, ImageDraw, ImageFont
+    image = Image.new("RGB", (1080, 570), "#f4f8fd")
+    pen = ImageDraw.Draw(image)
+    def font(size):
+        try:
+            return ImageFont.truetype("DejaVuSans.ttf", size)
+        except OSError:
+            return ImageFont.load_default()
+    title = font(36)
+    body = font(27)
+    small = font(21)
+    pen.rounded_rectangle((25, 25, 1055, 545), 18, outline="#8cb1d0", width=3)
+    if style == "prompt":
+        pen.text((60, 55), "COME COSTRUIRE IL PROMPT", font=title, fill="#1b3e61")
+        labels = [
+            ("1  OBIETTIVO", str(draft.get("prompt_goal") or "Che cosa vuoi ottenere?")),
+            ("2  CONTENUTO", "Aggiungi dati ed esempi concreti, senza informazioni riservate."),
+            ("3  DETTAGLI", "Indica formato, stile e vincoli del risultato."),
+        ]
+    else:
+        pen.text((60, 55), "COME VERIFICARE IL RISULTATO", font=title, fill="#1b3e61")
+        labels = [
+            ("1  CONTROLLA", "Confronta il risultato con l'obiettivo iniziale."),
+            ("2  CORREGGI", "Chiedi una modifica mirata, senza ricominciare da zero."),
+            ("3  CONFERMA", "Verifica informazioni, dettagli visivi e limiti."),
+        ]
+    for i, (heading, detail) in enumerate(labels):
+        top = 122 + i*128
+        pen.rounded_rectangle((55, top, 1025, top+108), 12, fill="#e1edf7")
+        pen.text((78, top+10), heading, font=body, fill="#144b70")
+        for n, line in enumerate(textwrap.wrap(detail, width=65)[:2]):
+            pen.text((78, top+48+n*28), line, font=small, fill="#243e53")
+    output = io.BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    return output.getvalue()
+
+
+def guide_inline_figures(draft: dict, client, slug: str) -> str:
+    """Two explanatory images inside each guide; graceful fallback if upload fails."""
+    if draft.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}:
+        return ""
+    parts = []
+    for kind, title in (
+        ("prompt", "Esempio visivo: come costruire un prompt"),
+        ("check", "Esempio visivo: come controllare il risultato"),
+    ):
+        try:
+            picture = guide_inline_diagram(draft, kind)
+            media = client.upload_media(picture, slug + "-schema-" + kind + ".png",
+                                        "image/png", title, title)
+            url = str(media.get("source_url") or "")
+            if client.dry_run:
+                continue
+            if not url.startswith("https://"):
+                continue
+            parts.append('<figure class="av-guide-example" style="margin:26px auto">'
+                         '<img src="' + html.escape(url, quote=True) +
+                         '" alt="' + html.escape(title, quote=True) +
+                         '" loading="lazy" style="width:100%;max-width:850px;height:auto;'
+                         'border-radius:8px" />'
+                         '<figcaption style="font-size:.91em;text-align:center">' +
+                         html.escape(title) + ' — schema originale AIVision, non schermata del servizio.'
+                         '</figcaption></figure>')
+        except (requests.RequestException, ValueError, OSError, KeyError) as exc:
+            print("    AVVISO immagine didattica interna:", type(exc).__name__)
+    return ('<section class="av-practical-visuals"><h2>Due esempi visivi</h2>' +
+            "".join(parts) + '</section>') if parts else ""
+
+
 def guide_resources(draft: dict) -> str:
     if draft.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}:
         return ""
-    allowed = {"help.openai.com", "www.canva.com", "support.microsoft.com"}
+    allowed = {"chatgpt.com", "www.canva.com", "www.microsoft.com", "help.openai.com", "support.microsoft.com"}
     links = []
     for entry in draft.get("official_links", [])[:3]:
         if not isinstance(entry, dict):
@@ -286,7 +388,7 @@ def guide_resources(draft: dict) -> str:
         if parts.scheme != "https" or parts.hostname not in allowed:
             continue
         links.append('<li><a href="' + html.escape(url, quote=True) + '" rel="noopener noreferrer">' + html.escape(str(entry.get("label") or "Documentazione ufficiale")) + '</a></li>')
-    return '<h2>Risorse ufficiali</h2><p>Le funzionalità possono cambiare: verifica la documentazione aggiornata.</p><ul>' + ''.join(links) + '</ul>' if links else ""
+    return '<h2>Prova lo strumento</h2><p>Qui trovi il servizio con cui mettere in pratica i prompt. Aprilo e segui la guida, senza bisogno di leggere manuali tecnici.</p><ul>' + ''.join(links) + '</ul>' if links else ""
 
 
 def image_url_from_draft(draft: dict) -> str:
@@ -605,6 +707,9 @@ def publish_one(
         raise PublisherError("Titolo mancante.")
     raw_body = str(draft.get("body_markdown") or "").strip()
     body = markdown_to_html(raw_body)
+    if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
+        body += guide_prompt_blocks(draft)
+        body += guide_inline_figures(draft, client, slugify(str(draft.get("slug") or title)))
     body += guide_resources(draft)
     if not body:
         raise PublisherError("Corpo articolo vuoto.")
