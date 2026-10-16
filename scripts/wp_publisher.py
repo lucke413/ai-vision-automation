@@ -378,7 +378,7 @@ def guide_inline_figures(draft: dict, client, slug: str) -> str:
 def guide_resources(draft: dict) -> str:
     if draft.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}:
         return ""
-    allowed = {"help.openai.com", "www.canva.com", "support.microsoft.com"}
+    allowed = {"chatgpt.com", "www.canva.com", "www.microsoft.com", "help.openai.com", "support.microsoft.com"}
     links = []
     for entry in draft.get("official_links", [])[:3]:
         if not isinstance(entry, dict):
