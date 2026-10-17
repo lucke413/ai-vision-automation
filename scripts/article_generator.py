@@ -20,16 +20,16 @@ from html.parser import HTMLParser
 
 import requests
 
-from daily_selector import expansion_room, editorial_room, MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY
+from daily_selector import expansion_room, editorial_room, MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY, MAX_PRACTICAL_PER_DAY
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.5"
+VERSION = "3.6"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
-DAILY_LIMIT = 6
+DAILY_LIMIT = 3
 RESERVE_LIMIT = 3
 MAX_DAILY_OFFERS = 1
 MAX_ITEMS = DAILY_LIMIT + RESERVE_LIMIT
@@ -832,10 +832,10 @@ def main() -> int:
                 remaining_reserves.append(draft)
         daily_drafts.extend(promoted)
         reserve_drafts = remaining_reserves
-    # Ensure no more than three practical articles replace news.
+    # Modalità qualità: mai più di un contenuto pratico nello stesso giorno.
     practical = [d for d in daily_drafts if d.get("editorial_kind") in {"GUIDA", "TUTORIAL"}]
-    if len(practical) > MAX_GUIDES_PER_DAY + MAX_TUTORIALS_PER_DAY:
-        raise RuntimeError("Limite guide/tutorial superato.")
+    if len(practical) > MAX_PRACTICAL_PER_DAY:
+        raise RuntimeError("Limite complessivo guide/tutorial superato.")
     if stopped_reason:
         warnings = [stopped_reason]
     else:
