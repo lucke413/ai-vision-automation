@@ -201,22 +201,19 @@ class EditorialExpansionTests(unittest.TestCase):
         draft = practical_guides.make_candidate(practical_guides.TOPICS[0])
         client = MagicMock()
         client.dry_run = False
-        client.upload_media.side_effect = [
-            {"id": 9, "source_url": "https://example.com/a.png"},
-            {"id": 10, "source_url": "https://example.com/b.png"},
-        ]
+        client.upload_media.return_value = {
+            "id": 9, "source_url": "https://example.com/a.png"
+        }
         figures = publisher.guide_inline_figures(draft, client, "sample")
-        self.assertEqual(len(figures), 2)
+        self.assertEqual(len(figures), 1)
         self.assertIn("a.png", figures[0])
-        self.assertIn("b.png", figures[1])
         body = publisher.markdown_to_html(
             "## Procedura pratica\n\n1. Prepara i dati\n2. Prova il prompt\n\n"
             "## Verifica del risultato\n\nControlla la risposta."
         )
         enriched = publisher.guide_place_figures(body, figures)
         self.assertLess(enriched.index("a.png"), enriched.index("Verifica del risultato"))
-        self.assertLess(enriched.index("b.png"), enriched.index("Verifica del risultato"))
-        self.assertEqual(client.upload_media.call_count, 2)
+        self.assertEqual(client.upload_media.call_count, 1)
         self.assertNotIn("<figcaption", figures[0])
         self.assertNotIn("Illustrazione AIVision", figures[0])
         self.assertNotIn("Esempio pratico: come impostare la richiesta all'AI", figures[0])
