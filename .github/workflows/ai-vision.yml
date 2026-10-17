@@ -177,7 +177,7 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/daily_articles.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 9:
+          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 6:
               raise SystemExit("ERRORE: selezione giornaliera non valida.")
           ids = [item.get("article_id") for item in items]
           if not all(ids) or len(ids) != len(set(ids)):
@@ -205,7 +205,7 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/article_drafts.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 6:
+          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 9:
               raise SystemExit("ERRORE: output bozze non valido.")
           ids = [item.get("draft_id") for item in items]
           if not all(ids) or len(ids) != len(set(ids)):
