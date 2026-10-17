@@ -41,7 +41,7 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = [item(i, cat) for i, cat in enumerate(
             ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(x['category'] in selector.EXPANSION_CATEGORIES for x in chosen), 1)
         self.assertIn('AI', {x['category'] for x in chosen})
         self.assertLessEqual(len(reserves), 3)
@@ -50,7 +50,7 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = [item(i, cat, 'OFFERTA' if i < 2 else 'NEWS') for i, cat in enumerate(
             ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, _ = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
 
     def test_reserve_promotion_preserves_topic_cap(self):
@@ -68,23 +68,24 @@ class EditorialExpansionTests(unittest.TestCase):
             daily=[x for x in result['items'] if x['publication_slot']=='today']
             self.assertEqual({x['category'] for x in daily}, {'Casa smart','Sicurezza'})
 
-    def test_quality_mode_three_posts_spread_across_day(self):
+    def test_quality_mode_six_posts_with_quality_gates(self):
         from zoneinfo import ZoneInfo
-        self.assertEqual(selector.DAILY_LIMIT, 3)
-        self.assertEqual(generator.DAILY_LIMIT, 3)
-        self.assertEqual(generator.MAX_ITEMS, 3 + generator.RESERVE_LIMIT)
+        self.assertEqual(selector.DAILY_LIMIT, 6)
+        self.assertEqual(generator.DAILY_LIMIT, 6)
+        self.assertEqual(generator.MAX_ITEMS, 6 + generator.RESERVE_LIMIT)
         with patch.dict('os.environ', {'WP_TIMEZONE': 'Europe/Rome'}, clear=True):
             self.assertEqual(
                 [value.strftime('%H:%M') for value in publisher.parse_slot_times()],
-                ['09:00', '15:00', '20:30']
+                ['08:00', '10:30', '14:00', '16:30', '18:30', '20:30']
             )
             now = datetime(2026, 10, 16, 11, 17, tzinfo=ZoneInfo('Europe/Rome'))
-            planned = publisher.next_publication_times(3, now=now)
+            planned = publisher.next_publication_times(6, now=now)
             self.assertEqual(
                 [value.strftime('%Y-%m-%d %H:%M') for value in planned],
                 [
-                    '2026-10-16 15:00', '2026-10-16 20:30',
-                    '2026-10-17 09:00'
+                    '2026-10-16 14:00', '2026-10-16 16:30',
+                    '2026-10-16 18:30', '2026-10-16 20:30',
+                    '2026-10-17 08:00', '2026-10-17 10:30'
                 ]
             )
 
@@ -148,9 +149,9 @@ class EditorialExpansionTests(unittest.TestCase):
         guide_items = [practical_guides.make_candidate(x) for x in practical_guides.TOPICS]
         candidates = selector.valid_candidates({"status": "ok", "items": news + guide_items})
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 1)
-        self.assertEqual(sum(not x.get("editorial_kind") for x in chosen), 2)
+        self.assertEqual(sum(not x.get("editorial_kind") for x in chosen), 5)
 
     def test_practical_guides_have_links_lists_and_original_diagrams(self):
         import practical_guides
@@ -173,8 +174,8 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertIn("Prompt semplice da copiare", html)
         self.assertIn("Prompt avanzato", html)
         self.assertIn("<pre", html)
-        self.assertTrue(publisher.guide_inline_diagram(sample, "prompt").startswith(b"\x89PNG\r\n\x1a\n"))
-        self.assertTrue(publisher.guide_inline_diagram(sample, "check").startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertTrue(publisher.guide_inline_diagram(sample, "result").startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertTrue(publisher.guide_inline_diagram(sample, "variant").startswith(b"\x89PNG\r\n\x1a\n"))
         standard_news = {"title": "Notizia tech", "category": "Tecnologia", "story_type": "NEWS"}
         self.assertEqual(publisher.guide_prompt_blocks(standard_news), "")
         self.assertEqual(publisher.guide_resources(standard_news), "")
@@ -216,6 +217,20 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertLess(enriched.index("a.png"), enriched.index("Verifica del risultato"))
         self.assertLess(enriched.index("b.png"), enriched.index("Verifica del risultato"))
         self.assertEqual(client.upload_media.call_count, 2)
+        self.assertNotIn("<figcaption", figures[0])
+        self.assertNotIn("Illustrazione AIVision", figures[0])
+        self.assertNotIn("Esempio pratico: come impostare la richiesta all'AI", figures[0])
+
+    def test_guide_visuals_show_topic_specific_results(self):
+        import practical_guides
+        examples = [practical_guides.make_candidate(topic) for topic in practical_guides.TOPICS]
+        excel = next(x for x in examples if "excel" in x["topic_slug"])
+        poster = next(x for x in examples if "locandina" in x["topic_slug"])
+        presentation = next(x for x in examples if "presentazione" in x["topic_slug"])
+        self.assertEqual(publisher.guide_visual_kind(excel), "spreadsheet")
+        self.assertEqual(publisher.guide_visual_kind(poster), "poster")
+        self.assertEqual(publisher.guide_visual_kind(presentation), "slides")
+        self.assertNotEqual(publisher.guide_infographic(excel), publisher.guide_infographic(poster))
 
     def test_practical_images_fail_closed_on_bad_upload(self):
         import practical_guides
@@ -235,7 +250,7 @@ class EditorialExpansionTests(unittest.TestCase):
         practical = [practical_guides.make_candidate(t) for t in practical_guides.TOPICS]
         candidates = selector.valid_candidates({"status": "ok", "items": news + practical})
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(chosen), 4)
         self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 1)
         self.assertTrue(all(not x.get("editorial_kind") for x in reserves))
         chosen_without_news, reserves_without_news = selector.select_daily(
@@ -250,12 +265,10 @@ class EditorialExpansionTests(unittest.TestCase):
             inp, out = Path(folder)/"selection.json", Path(folder)/"drafts.json"
             practical = [practical_guides.make_candidate(t) for t in practical_guides.TOPICS]
             guide = next(x for x in practical if x["editorial_kind"] == "GUIDA")
-            tutorial = next(x for x in practical if x["editorial_kind"] == "TUTORIAL")
             news = item(1, "Gaming")
             extra_guide = next(x for x in practical if x["editorial_kind"] == "GUIDA" and x["article_id"] != guide["article_id"])
             inp.write_text(json.dumps({
-                "items": [{**guide, "publication_slot": "today"},
-                          {**tutorial, "publication_slot": "today"}, news],
+                "items": [{**guide, "publication_slot": "today"}, news],
                 "reserve_items": [extra_guide],
             }))
             def mock_generate(source, _key):
@@ -266,7 +279,7 @@ class EditorialExpansionTests(unittest.TestCase):
             with patch.object(generator, "INPUT_FILE", inp), patch.object(generator, "OUTPUT_FILE", out), patch.dict("os.environ", {"GEMINI_API_KEY":"test"}), patch.object(generator, "generate_valid_draft", side_effect=mock_generate), patch.object(generator.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
                 generator.main()
             output = json.loads(out.read_text())
-            self.assertEqual(output["daily_generated"], 2)
-            self.assertEqual(sum(x["publication_slot"] == "today" for x in output["items"]), 2)
+            self.assertEqual(output["daily_generated"], 1)
+            self.assertEqual(sum(x["publication_slot"] == "today" for x in output["items"]), 1)
 
 if __name__=='__main__': unittest.main()
