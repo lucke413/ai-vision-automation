@@ -41,7 +41,7 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = [item(i, cat) for i, cat in enumerate(
             ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 6)
+        self.assertEqual(len(chosen), 3)
         self.assertEqual(sum(x['category'] in selector.EXPANSION_CATEGORIES for x in chosen), 1)
         self.assertIn('AI', {x['category'] for x in chosen})
         self.assertLessEqual(len(reserves), 3)
@@ -50,7 +50,7 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = [item(i, cat, 'OFFERTA' if i < 2 else 'NEWS') for i, cat in enumerate(
             ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, _ = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 6)
+        self.assertEqual(len(chosen), 3)
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
 
     def test_reserve_promotion_preserves_topic_cap(self):
@@ -68,24 +68,23 @@ class EditorialExpansionTests(unittest.TestCase):
             daily=[x for x in result['items'] if x['publication_slot']=='today']
             self.assertEqual({x['category'] for x in daily}, {'Casa smart','Sicurezza'})
 
-    def test_six_posts_and_new_slot_at_1830(self):
+    def test_quality_mode_three_posts_spread_across_day(self):
         from zoneinfo import ZoneInfo
-        self.assertEqual(selector.DAILY_LIMIT, 6)
-        self.assertEqual(generator.DAILY_LIMIT, 6)
-        self.assertEqual(generator.MAX_ITEMS, 6 + generator.RESERVE_LIMIT)
+        self.assertEqual(selector.DAILY_LIMIT, 3)
+        self.assertEqual(generator.DAILY_LIMIT, 3)
+        self.assertEqual(generator.MAX_ITEMS, 3 + generator.RESERVE_LIMIT)
         with patch.dict('os.environ', {'WP_TIMEZONE': 'Europe/Rome'}, clear=True):
             self.assertEqual(
                 [value.strftime('%H:%M') for value in publisher.parse_slot_times()],
-                ['08:00', '10:30', '14:00', '16:30', '18:30', '20:30']
+                ['09:00', '15:00', '20:30']
             )
             now = datetime(2026, 10, 16, 11, 17, tzinfo=ZoneInfo('Europe/Rome'))
-            planned = publisher.next_publication_times(6, now=now)
+            planned = publisher.next_publication_times(3, now=now)
             self.assertEqual(
                 [value.strftime('%Y-%m-%d %H:%M') for value in planned],
                 [
-                    '2026-10-16 14:00', '2026-10-16 16:30',
-                    '2026-10-16 18:30', '2026-10-16 20:30',
-                    '2026-10-17 08:00', '2026-10-17 10:30'
+                    '2026-10-16 15:00', '2026-10-16 20:30',
+                    '2026-10-17 09:00'
                 ]
             )
 
@@ -124,10 +123,10 @@ class EditorialExpansionTests(unittest.TestCase):
             {"status": "ok", "items": []},
             "2026-10-17", lambda slug: False,
         )
-        self.assertEqual(result["practical_guide_candidates"], 6)
-        self.assertEqual(len({c["article_id"] for c in result["items"]}), 6)
-        self.assertEqual(sum(x["editorial_kind"] == "GUIDA" for x in result["items"]), 4)
-        self.assertEqual(sum(x["editorial_kind"] == "TUTORIAL" for x in result["items"]), 2)
+        self.assertEqual(result["practical_guide_candidates"], 2)
+        self.assertEqual(len({c["article_id"] for c in result["items"]}), 2)
+        self.assertEqual(sum(x["editorial_kind"] == "GUIDA" for x in result["items"]), 1)
+        self.assertEqual(sum(x["editorial_kind"] == "TUTORIAL" for x in result["items"]), 1)
         for candidate in result["items"]:
             self.assertGreaterEqual(generator.evidence_word_count(candidate), 140)
             self.assertIn("GUIDA DIDATTICA ORIGINALE", generator.build_prompt(candidate))
@@ -149,10 +148,9 @@ class EditorialExpansionTests(unittest.TestCase):
         guide_items = [practical_guides.make_candidate(x) for x in practical_guides.TOPICS]
         candidates = selector.valid_candidates({"status": "ok", "items": news + guide_items})
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 6)
-        self.assertEqual(sum(x.get("editorial_kind") == "GUIDA" for x in chosen), 2)
-        self.assertEqual(sum(x.get("editorial_kind") == "TUTORIAL" for x in chosen), 1)
-        self.assertEqual(sum(not x.get("editorial_kind") for x in chosen), 3)
+        self.assertEqual(len(chosen), 3)
+        self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 1)
+        self.assertEqual(sum(not x.get("editorial_kind") for x in chosen), 2)
 
     def test_practical_guides_have_links_lists_and_original_diagrams(self):
         import practical_guides
@@ -237,13 +235,13 @@ class EditorialExpansionTests(unittest.TestCase):
         practical = [practical_guides.make_candidate(t) for t in practical_guides.TOPICS]
         candidates = selector.valid_candidates({"status": "ok", "items": news + practical})
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 6)
-        self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 3)
+        self.assertEqual(len(chosen), 3)
+        self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 1)
         self.assertTrue(all(not x.get("editorial_kind") for x in reserves))
         chosen_without_news, reserves_without_news = selector.select_daily(
             selector.valid_candidates({"status": "ok", "items": practical})
         )
-        self.assertEqual(len(chosen_without_news), 3)
+        self.assertEqual(len(chosen_without_news), 1)
         self.assertEqual(reserves_without_news, [])
 
     def test_failed_news_is_not_replaced_with_additional_guides(self):
