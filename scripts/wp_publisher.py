@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.1"
+VERSION = "2.2"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -722,18 +722,16 @@ def guide_place_figures(body: str, figures: list[str]) -> str:
     """Place images *inside* the relevant explanation, rather than at the end."""
     if not figures:
         return body
-    if len(figures) != 2:
-        raise PublisherError("La guida richiede due illustrazioni valide.")
-    # First image follows the practical steps; second comes before final checks.
-    if "</ol>" in body:
+    if len(figures) != 1:
+        raise PublisherError("La guida richiede una illustrazione valida.")
+    # Una sola immagine del risultato, collocata prima delle verifiche finali.
+    heading = re.search(r"<h2>Verifica del risultato</h2>", body, flags=re.IGNORECASE)
+    if heading:
+        body = body[:heading.start()] + figures[0] + "\n" + body[heading.start():]
+    elif "</ol>" in body:
         body = body.replace("</ol>", "</ol>\n" + figures[0], 1)
     else:
         body += "\n" + figures[0]
-    heading = re.search(r"<h2>Verifica del risultato</h2>", body, flags=re.IGNORECASE)
-    if heading:
-        body = body[:heading.start()] + figures[1] + "\n" + body[heading.start():]
-    else:
-        body += "\n" + figures[1]
     return body
 
 
