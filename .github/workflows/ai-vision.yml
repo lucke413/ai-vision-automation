@@ -67,7 +67,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m pip check
-          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/practical_guides.py scripts/article_generator.py scripts/wp_publisher.py
+          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/practical_guides.py scripts/article_generator.py scripts/wp_publisher.py scripts/adsense_audit.py
 
       - name: Verifica equilibrio editoriale
         run: python -m unittest discover -s tests -p 'test_editorial_expansion.py'
@@ -254,6 +254,20 @@ jobs:
           for error in data.get("errors", []):
               print(f"AVVISO publisher: {error}")
           PY
+
+      - name: Audit tecnico AdSense
+        env:
+          ADSENSE_SITE_URL: https://aivision.altervista.org
+        run: python scripts/adsense_audit.py
+
+      - name: Salva audit AdSense
+        if: ${{ always() && hashFiles('data/adsense_audit.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-vision-adsense-audit
+          path: data/adsense_audit.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Salva risultati RSS anche in caso di errore
         if: ${{ always() && hashFiles('data/rss_output.json') != '' }}
