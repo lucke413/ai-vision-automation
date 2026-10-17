@@ -9,7 +9,7 @@ Gestisce:
 - creazione/riuso dei tag;
 - immagine dalla fonte o da OpenGraph;
 - copertina grafica locale di riserva quando non c'è un'immagine scaricabile;
-- tre orari giornalieri distribuiti in Europe/Rome;
+- sei orari giornalieri distribuiti in Europe/Rome;
 - report JSON anche in caso di errori su singoli articoli.
 """
 
@@ -39,13 +39,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "1.9"
+VERSION = "2.0"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
 
 DEFAULT_TIMEZONE = "Europe/Rome"
-DEFAULT_SLOT_TIMES = "09:00,15:00,20:30"
+DEFAULT_SLOT_TIMES = "08:00,10:30,14:00,16:30,18:30,20:30"
 
 MACRO_CATEGORIES = (
     "News",
@@ -240,39 +240,233 @@ def markdown_to_html(markdown_text: str) -> str:
 
 
 
-def guide_infographic(draft: dict) -> bytes:
-    """Original three-step infographic, not a simulated screenshot."""
-    import io
-    import textwrap
-    from PIL import Image, ImageDraw, ImageFont
-    canvas = Image.new("RGB", (1200, 675), "#10223e")
-    draw = ImageDraw.Draw(canvas)
-    def font(size):
-        try:
-            return ImageFont.truetype("DejaVuSans.ttf", size)
-        except OSError:
-            return ImageFont.load_default()
-    title_font, step_font, note_font = font(38), font(26), font(22)
-    draw.rounded_rectangle((34, 32, 1166, 642), radius=22, outline="#5279a0", width=3)
-    draw.text((74, 65), "AI VISION | GUIDA PRATICA", font=note_font, fill="#9febde")
-    for index, line in enumerate(textwrap.wrap(str(draft.get("title") or "Guida AI"), width=44)[:2]):
-        draw.text((74, 118+50*index), line, font=title_font, fill="white")
-    steps = draft.get("illustration_steps")
-    stages = [str(x)[:75] for x in steps[:3]] if isinstance(steps, list) else []
-    while len(stages) < 3:
-        stages.append(("Preparazione", "Esempio", "Verifica")[len(stages)])
-    for index, stage in enumerate(stages):
-        x = 52 + 382*index
-        draw.rounded_rectangle((x, 285, x+360, 525), radius=18, fill="#244567")
-        draw.ellipse((x+16, 302, x+62, 348), fill="#6ce1cc")
-        draw.text((x+31, 308), str(index+1), font=note_font, fill="#10223e")
-        for line_index, line in enumerate(textwrap.wrap(stage, width=22)[:4]):
-            draw.text((x+20, 370+35*line_index), line, font=step_font, fill="white")
-    draw.text((74, 571), "Schema originale, non screenshot del servizio.", font=note_font, fill="#bfd0e3")
-    result = io.BytesIO()
-    canvas.save(result, format="PNG", optimize=True)
-    return result.getvalue()
+def guide_visual_kind(draft: dict) -> str:
+    """Sceglie un mockup di risultato coerente con l'argomento della guida."""
+    slug = str(draft.get("topic_slug") or draft.get("slug") or "").lower()
+    title = str(draft.get("title") or "").lower()
+    value = slug + " " + title
+    if any(key in value for key in ("excel", "foglio", "dati", "servizi", "abbonament")):
+        return "spreadsheet"
+    if "presentazione" in value or "slide" in value:
+        return "slides"
+    if "locandina" in value:
+        return "poster"
+    if "thumbnail" in value or "copertina" in value:
+        return "thumbnail"
+    if "storyboard" in value:
+        return "storyboard"
+    if any(key in value for key in ("video", "animare", "clip")):
+        return "video"
+    if any(key in value for key in ("immagin", "ritoccare", "foto")):
+        return "image"
+    if "email" in value:
+        return "email"
+    if any(key in value for key in ("riunione", "attività", "scadenze")):
+        return "tasks"
+    if any(key in value for key in ("curriculum", "cv")):
+        return "resume"
+    if any(key in value for key in ("quiz", "interrogazione", "studio", "ripasso")):
+        return "quiz"
+    if "spesa" in value:
+        return "shopping"
+    if any(key in value for key in ("viaggio", "itinerario")):
+        return "itinerary"
+    if "reclamo" in value:
+        return "document"
+    return "document"
 
+
+def _guide_font(size: int, bold: bool = False):
+    from PIL import ImageFont
+    names = (
+        "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
+        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    )
+    for name in names:
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            pass
+    return ImageFont.load_default()
+
+
+def _guide_base(title: str, variant: int = 0):
+    from PIL import Image, ImageDraw
+    image = Image.new("RGB", (1200, 675), "#eef4fa" if variant == 0 else "#f7f1eb")
+    pen = ImageDraw.Draw(image)
+    pen.rounded_rectangle((34, 28, 1166, 647), radius=30, fill="#ffffff", outline="#bfd0df", width=2)
+    pen.text((72, 58), "AI VISION", font=_guide_font(24, True), fill="#176087")
+    pen.text((72, 96), "ESEMPIO DI RISULTATO" if variant == 0 else "VARIANTE DEL RISULTATO",
+             font=_guide_font(19, True), fill="#6b7d8e")
+    clean = " ".join(str(title or "Guida pratica").split())
+    if len(clean) > 62:
+        clean = clean[:59].rsplit(" ", 1)[0] + "…"
+    pen.text((72, 132), clean, font=_guide_font(30, True), fill="#17324a")
+    return image, pen
+
+
+def _draw_spreadsheet(draft: dict, variant: int) -> bytes:
+    import io
+    image, pen = _guide_base(draft.get("title", ""), variant)
+    x0, y0, x1, y1 = 82, 212, 1118, 594
+    pen.rounded_rectangle((x0, y0, x1, y1), radius=18, fill="#f8fbfd", outline="#a9bdc9", width=2)
+    pen.rectangle((x0, y0, x1, y0+56), fill="#1f7a5c")
+    for i, label in enumerate(("Voce", "Gen", "Feb", "Var.%", "Stato")):
+        pen.text((x0+20+i*190, y0+15), label, font=_guide_font(20, True), fill="white")
+    rows = [
+        ("Progetto A","120","145","+20,8%","OK"),
+        ("Progetto B","88","92","+4,5%","OK"),
+        ("Progetto C","64","51","-20,3%","Rivedi"),
+    ]
+    for r, row in enumerate(rows):
+        y=y0+72+r*65
+        if r % 2 == 1:
+            pen.rectangle((x0+2,y-8,x1-2,y+47),fill="#edf5f2")
+        for i,val in enumerate(row):
+            pen.text((x0+20+i*190,y),val,font=_guide_font(20),fill="#20384d")
+    if variant:
+        pen.rounded_rectangle((710,425,1060,565),radius=12,fill="#eaf2f8")
+        for b in ((755,520,800,548),(830,485,875,548),(905,450,950,548),(980,410,1025,548)):
+            pen.rounded_rectangle(b,radius=5,fill="#397fa5")
+        pen.text((730,438),"Andamento",font=_guide_font(18,True),fill="#244966")
+    out=io.BytesIO(); image.save(out,format="PNG",optimize=True); return out.getvalue()
+
+
+def _draw_slides(draft: dict, variant: int) -> bytes:
+    import io
+    image, pen = _guide_base(draft.get("title", ""), variant)
+    slides=[(95,235,585,535),(615,255,1095,555)] if not variant else [(105,260,470,510),(495,225,850,475),(875,280,1110,475)]
+    for idx,(x0,y0,x1,y1) in enumerate(slides):
+        pen.rounded_rectangle((x0,y0,x1,y1),radius=18,fill="#172d4b" if idx%2==0 else "#f1d7a9",outline="#8ea7ba",width=2)
+        if idx%2==0:
+            pen.text((x0+30,y0+38),"PROGETTO",font=_guide_font(24,True),fill="#80e0cf")
+            pen.text((x0+30,y0+82),"Una idea per slide",font=_guide_font(26,True),fill="white")
+            pen.rectangle((x0+30,y0+150,x1-35,y0+158),fill="#6b8298")
+            pen.rectangle((x0+30,y0+183,x1-100,y0+191),fill="#6b8298")
+        else:
+            pen.text((x0+28,y0+35),"RISULTATI",font=_guide_font(24,True),fill="#694a1e")
+            for b,h in enumerate((70,120,160,95)):
+                bx=x0+55+b*80
+                pen.rounded_rectangle((bx,y1-55-h,bx+46,y1-55),radius=5,fill="#3f7397")
+    out=io.BytesIO(); image.save(out,format="PNG",optimize=True); return out.getvalue()
+
+
+def _draw_poster(draft: dict, variant: int) -> bytes:
+    import io
+    image, pen = _guide_base(draft.get("title", ""), variant)
+    pen.rounded_rectangle((175,205,500,605),radius=24,fill="#102744")
+    pen.ellipse((235,255,445,465),fill="#7be1d0")
+    pen.ellipse((285,305,395,415),fill="#ffcf78")
+    pen.text((215,485),"SCIENZA",font=_guide_font(35,True),fill="white")
+    pen.text((215,535),"OPEN DAY",font=_guide_font(24,True),fill="#9fe9dd")
+    pen.rounded_rectangle((555,245,1075,545),radius=26,fill="#f5efe5")
+    pen.text((605,292),"Locandina pronta",font=_guide_font(34,True),fill="#17324a")
+    pen.text((605,345),"• gerarchia chiara",font=_guide_font(23),fill="#355269")
+    pen.text((605,390),"• spazio per titolo",font=_guide_font(23),fill="#355269")
+    pen.text((605,435),"• contrasto leggibile",font=_guide_font(23),fill="#355269")
+    out=io.BytesIO(); image.save(out,format="PNG",optimize=True); return out.getvalue()
+
+
+def _draw_image_result(draft: dict, variant: int) -> bytes:
+    import io
+    image, pen = _guide_base(draft.get("title", ""), variant)
+    pen.rounded_rectangle((110,220,1090,585),radius=28,fill="#142a42")
+    pen.rectangle((175,300,1025,525),fill="#294b64")
+    pen.rectangle((230,420,930,455),fill="#a8754e")
+    pen.rectangle((255,455,285,535),fill="#805d44")
+    pen.rectangle((900,455,930,535),fill="#805d44")
+    pen.rounded_rectangle((450,330,690,415),radius=10,fill="#ecf4fb")
+    pen.rectangle((470,350,670,395),fill="#7bdacb")
+    pen.ellipse((755,315,830,390),fill="#ffd47e")
+    pen.line((792,390,760,450),fill="#ffd47e",width=10)
+    pen.ellipse((320,330,365,375),fill="#79bd80")
+    pen.ellipse((345,345,395,400),fill="#6da772")
+    pen.rectangle((340,390,375,430),fill="#c98959")
+    if variant:
+        pen.rounded_rectangle((500,470,820,535),radius=14,fill="#1d3852")
+        pen.text((540,488),"variante raffinata",font=_guide_font(22,True),fill="#9fe9dd")
+    out=io.BytesIO(); image.save(out,format="PNG",optimize=True); return out.getvalue()
+
+
+def _draw_storyboard(draft: dict, variant: int, video: bool = False) -> bytes:
+    import io
+    image, pen = _guide_base(draft.get("title", ""), variant)
+    for i,(x0,y0,x1,y1) in enumerate(((90,230,390,440),(450,230,750,440),(810,230,1110,440))):
+        pen.rounded_rectangle((x0,y0,x1,y1),radius=16,fill=("#1c334d" if i!=1 else "#dfeaf2"),outline="#98adbd",width=2)
+        pen.ellipse((x0+110,y0+55,x0+190,y0+135),fill="#78daca")
+        pen.rectangle((x0+75,y0+150,x1-75,y0+166),fill="#7c91a4")
+        if video:
+            cx=(x0+x1)//2; cy=(y0+y1)//2
+            pen.polygon([(cx-18,cy-25),(cx-18,cy+25),(cx+27,cy)],fill="#ffffff")
+        pen.text((x0+18,y1+18),f"SCENA {i+1}",font=_guide_font(18,True),fill="#355269")
+    out=io.BytesIO(); image.save(out,format="PNG",optimize=True); return out.getvalue()
+
+
+def _draw_document(draft: dict, variant: int, mode: str) -> bytes:
+    import io
+    image, pen = _guide_base(draft.get("title", ""), variant)
+    pen.rounded_rectangle((230,215,970,600),radius=16,fill="#ffffff",outline="#c1ced9",width=2)
+    if mode == "email":
+        pen.rectangle((230,215,970,275),fill="#e8f1f7")
+        pen.text((265,232),"Oggetto: proposta chiara e sintetica",font=_guide_font(22,True),fill="#244966")
+        y=315
+        for width in (610,560,640,500,590):
+            pen.rounded_rectangle((270,y,270+width,y+13),radius=5,fill="#cddbe5"); y+=42
+    elif mode == "resume":
+        pen.rectangle((230,215,425,600),fill="#173b59")
+        pen.ellipse((285,260,370,345),fill="#8bdcca")
+        pen.text((470,255),"ESPERIENZA",font=_guide_font(24,True),fill="#173b59")
+        for y in (315,365,445,495): pen.rectangle((470,y,890,y+10),fill="#ccd8e1")
+    elif mode == "tasks":
+        for x,label in ((260,"DA FARE"),(500,"IN CORSO"),(740,"FATTO")):
+            pen.text((x,250),label,font=_guide_font(18,True),fill="#244966")
+            for j in range(2):
+                pen.rounded_rectangle((x,295+j*115,x+190,385+j*115),radius=12,fill="#edf3f7",outline="#c5d2dd")
+    elif mode == "quiz":
+        pen.text((280,255),"DOMANDA 1",font=_guide_font(23,True),fill="#215b7b")
+        pen.text((280,300),"Qual è l'idea principale?",font=_guide_font(28,True),fill="#17324a")
+        for j,label in enumerate(("A","B","C")):
+            y=370+j*60
+            pen.ellipse((280,y,315,y+35),fill="#79daca")
+            pen.text((292,y+5),label,font=_guide_font(17,True),fill="#17324a")
+            pen.rectangle((335,y+12,795,y+22),fill="#d1dde6")
+    elif mode == "shopping":
+        pen.text((280,250),"LISTA DELLA SPESA",font=_guide_font(26,True),fill="#215b7b")
+        for j,label in enumerate(("Ortofrutta","Dispensa","Freschi","Casa")):
+            y=315+j*58
+            pen.rounded_rectangle((280,y,310,y+30),radius=6,outline="#3b8a6f",width=3)
+            pen.text((335,y),label,font=_guide_font(22),fill="#314d61")
+    elif mode == "itinerary":
+        pen.line((330,285,330,540),fill="#4b88a8",width=7)
+        for j,(time,label) in enumerate((("09:00","Partenza"),("11:30","Tappa"),("14:00","Pausa"),("17:30","Rientro"))):
+            y=295+j*75
+            pen.ellipse((312,y-5,348,y+31),fill="#7bdacb")
+            pen.text((390,y-4),time,font=_guide_font(20,True),fill="#215b7b")
+            pen.text((500,y-4),label,font=_guide_font(20),fill="#314d61")
+    else:
+        pen.text((280,250),"DOCUMENTO PRONTO",font=_guide_font(25,True),fill="#215b7b")
+        for y,w in ((320,560),(360,610),(400,520),(475,600),(515,450)):
+            pen.rectangle((280,y,280+w,y+11),fill="#cedae4")
+    out=io.BytesIO(); image.save(out,format="PNG",optimize=True); return out.getvalue()
+
+
+def guide_result_image(draft: dict, variant: int = 0) -> bytes:
+    kind = guide_visual_kind(draft)
+    if kind == "spreadsheet": return _draw_spreadsheet(draft, variant)
+    if kind == "slides": return _draw_slides(draft, variant)
+    if kind in {"poster", "thumbnail"}: return _draw_poster(draft, variant)
+    if kind == "image": return _draw_image_result(draft, variant)
+    if kind == "storyboard": return _draw_storyboard(draft, variant, False)
+    if kind == "video": return _draw_storyboard(draft, variant, True)
+    if kind in {"email","resume","tasks","quiz","shopping","itinerary"}:
+        return _draw_document(draft, variant, kind)
+    return _draw_document(draft, variant, "document")
+
+
+def guide_infographic(draft: dict) -> bytes:
+    """Copertina della guida: mostra il risultato ottenibile, non i passaggi."""
+    return guide_result_image(draft, 0)
 
 def guide_prompt_blocks(draft: dict) -> str:
     """Copy-ready example prompts shown only in practical guides."""
@@ -300,96 +494,43 @@ def guide_prompt_blocks(draft: dict) -> str:
 
 
 def guide_inline_diagram(draft: dict, style: str) -> bytes:
-    """Two topic-specific editorial demonstrations, not third-party screenshots."""
-    import io
-    import textwrap
-    from PIL import Image, ImageDraw, ImageFont
-
-    image = Image.new("RGB", (1100, 625), "#f4f8fd")
-    pen = ImageDraw.Draw(image)
-    def font(size):
-        try:
-            return ImageFont.truetype("DejaVuSans.ttf", size)
-        except OSError:
-            return ImageFont.load_default()
-
-    heading_font, body_font, small_font = font(35), font(27), font(23)
-    pen.rounded_rectangle((20, 20, 1080, 600), radius=20, outline="#74a1cb", width=3)
-    demo = draft.get("visual_demo") or {}
-    if not isinstance(demo, dict):
-        demo = {}
-    if style == "prompt":
-        title = "ESEMPIO: COSA SCRIVERE ALL'AI"
-        steps = [
-            ("ATTIVITÀ", str(draft.get("prompt_goal") or "Definisci l'obiettivo")),
-            ("PROMPT REALE", str(draft.get("example_prompt") or "Fornisci un esempio concreto")),
-            ("PERSONALIZZA", "Sostituisci i dati tra [parentesi] con i tuoi esempi."),
-        ]
-    else:
-        title = "ESEMPIO DI RISULTATO DA VERIFICARE"
-        lines = demo.get("lines")
-        if not isinstance(lines, list) or len(lines) != 3:
-            lines = ["1. Prepara il contenuto", "2. Controlla il risultato",
-                     "3. Correggi eventuali errori"]
-        steps = [(f"PASSAGGIO {i + 1}", str(line)) for i, line in enumerate(lines[:3])]
-    pen.text((56, 52), title, font=heading_font, fill="#174b75")
-    subject = str(draft.get("title") or "Guida pratica") if style == "prompt" else str(demo.get("heading") or "Esempio concreto")
-    pen.text((58, 103), textwrap.shorten(subject, width=61, placeholder="..."),
-             font=small_font, fill="#46647b")
-    for i, (label, description) in enumerate(steps):
-        y = 157 + i * 137
-        pen.rounded_rectangle((55, y, 1045, y+117), radius=16, fill="#e0edf8")
-        pen.text((80, y+12), label, font=small_font, fill="#1a547b")
-        # Wrap by rendered pixel width, not merely number of characters.
-        wrapped = textwrap.wrap(description, width=72, break_long_words=False,
-                                break_on_hyphens=False)[:2]
-        for j, line in enumerate(wrapped):
-            pen.text((80, y+49+j*32), line, font=body_font, fill="#1d3245")
-    pen.text((60, 584), "Esempio illustrativo AIVision: non è una schermata del servizio.",
-             font=small_font, fill="#536e81")
-    output = io.BytesIO()
-    image.save(output, format="PNG", optimize=True)
-    return output.getvalue()
+    """Illustrazione del risultato finale; i passaggi restano nel testo della guida."""
+    return guide_result_image(draft, 0 if style in {"result", "prompt", "primary"} else 1)
 
 
 def guide_inline_figures(draft: dict, client, slug: str) -> list[str]:
-    """Return two real uploaded illustrations or abort this guide publication.
-
-    An article must never claim to contain illustrated steps when WordPress
-    did not actually accept the image uploads.
-    """
+    """Carica due esempi visuali del risultato, senza didascalie ripetitive."""
     if draft.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}:
         return []
     if client.dry_run:
-        # Still exercise image rendering in tests / dry runs.
-        guide_inline_diagram(draft, "prompt")
-        guide_inline_diagram(draft, "check")
-        return ['<!-- immagine 1 simulata -->', '<!-- immagine 2 simulata -->']
+        guide_inline_diagram(draft, "result")
+        guide_inline_diagram(draft, "variant")
+        return ['<!-- risultato visivo 1 simulato -->', '<!-- risultato visivo 2 simulato -->']
     figures = []
-    for kind, caption in (
-        ("prompt", "Esempio pratico: come impostare la richiesta all'AI"),
-        ("check", "Esempio pratico: risultato atteso e controlli"),
+    title = str(draft.get("title") or "Guida pratica")
+    for kind, alt_text in (
+        ("result", f"Esempio visivo del risultato per {title}"),
+        ("variant", f"Seconda variante del risultato per {title}"),
     ):
         picture = guide_inline_diagram(draft, kind)
-        media = client.upload_media(picture, slug + "-esempio-" + kind + ".png",
-                                    "image/png", caption, caption)
+        media = client.upload_media(
+            picture, slug + "-risultato-" + kind + ".png",
+            "image/png", alt_text, ""
+        )
         url = str(media.get("source_url") or "")
         parts = urlsplit(url)
         if parts.scheme != "https" or not parts.netloc or not media.get("id"):
             raise PublisherError("Immagine didattica non caricata correttamente.")
-        print("    Illustrazione interna caricata:", kind, media.get("id"))
+        print("    Esempio visivo caricato:", kind, media.get("id"))
         figures.append(
             '<figure class="av-guide-example" style="margin:24px auto;max-width:900px">'
             '<img src="' + html.escape(url, quote=True) +
-            '" alt="' + html.escape(caption, quote=True) +
+            '" alt="' + html.escape(alt_text, quote=True) +
             '" loading="lazy" decoding="async" style="display:block;width:100%;'
             'max-width:900px;height:auto;border-radius:10px" />'
-            '<figcaption style="font-size:.91em;text-align:center">' +
-            html.escape(caption) + '. Illustrazione AIVision, non screenshot del servizio.'
-            '</figcaption></figure>'
+            '</figure>'
         )
     return figures
-
 
 def guide_place_figures(body: str, figures: list[str]) -> str:
     """Place images *inside* the relevant explanation, rather than at the end."""
