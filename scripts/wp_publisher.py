@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.0"
+VERSION = "2.1"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -259,6 +259,8 @@ def guide_visual_kind(draft: dict) -> str:
         return "video"
     if any(key in value for key in ("immagin", "ritoccare", "foto")):
         return "image"
+    if any(key in value for key in ("settimana", "settimanale", "pianificare", "piano creato")):
+        return "weekly_planner"
     if "email" in value:
         return "email"
     if any(key in value for key in ("riunione", "attività", "scadenze")):
@@ -451,12 +453,203 @@ def _draw_document(draft: dict, variant: int, mode: str) -> bytes:
     out=io.BytesIO(); image.save(out,format="PNG",optimize=True); return out.getvalue()
 
 
+
+def _result_canvas(background: str = "#e9eef5"):
+    from PIL import Image, ImageDraw
+    image = Image.new("RGB", (1200, 675), background)
+    pen = ImageDraw.Draw(image)
+    return image, pen
+
+
+def _save_result_png(image) -> bytes:
+    import io
+    out = io.BytesIO()
+    image.save(out, format="PNG", optimize=True)
+    return out.getvalue()
+
+
+def _draw_weekly_planner_v2(draft: dict, variant: int) -> bytes:
+    image, pen = _result_canvas("#e7edf4" if variant == 0 else "#f0ebe5")
+    # Applicazione/calendario: il risultato finale, non una spiegazione.
+    pen.rounded_rectangle((42, 32, 1158, 640), radius=26, fill="#ffffff", outline="#c5d0da", width=2)
+    pen.rounded_rectangle((42, 32, 1158, 106), radius=26, fill="#20364f")
+    pen.rectangle((42, 82, 1158, 106), fill="#20364f")
+    pen.text((78, 54), "Piano settimanale", font=_guide_font(27, True), fill="#ffffff")
+    pen.text((890, 58), "LUN 19  →  VEN 23", font=_guide_font(18, True), fill="#b8d9e9")
+
+    left=118; top=148; right=1120; bottom=602
+    days=("LUN 19","MAR 20","MER 21","GIO 22","VEN 23")
+    colw=(right-left)//5
+    for i,day in enumerate(days):
+        x=left+i*colw
+        pen.text((x+18,118),day,font=_guide_font(18,True),fill="#314b61")
+        pen.line((x,top,x,bottom),fill="#d7e0e7",width=1)
+    pen.line((right,top,right,bottom),fill="#d7e0e7",width=1)
+
+    times=("09:00","11:00","13:00","15:00","17:00")
+    for r,t in enumerate(times):
+        y=top+r*90
+        pen.text((58,y-10),t,font=_guide_font(16),fill="#6b7d8c")
+        pen.line((left,y,right,y),fill="#e4e9ee",width=1)
+    pen.line((left,bottom,right,bottom),fill="#e4e9ee",width=1)
+
+    events = [
+        (0,0,2,"Focus progetto","#8fd9cf"),
+        (0,3,1,"Email / follow-up","#f5c879"),
+        (1,0,1,"Priorità 1","#8fb8e8"),
+        (1,2,2,"Lavoro concentrato","#b7a3e3"),
+        (2,1,1,"Riunione","#f19e9e"),
+        (2,3,1,"Revisione","#8fd9cf"),
+        (3,0,2,"Priorità 2","#f5c879"),
+        (3,3,1,"Pausa + buffer","#b9d7a6"),
+        (4,1,2,"Chiusura attività","#8fb8e8"),
+    ]
+    if variant:
+        events = [
+            (0,0,1,"Pianificazione","#8fb8e8"),
+            (0,2,2,"Blocco focus","#8fd9cf"),
+            (1,1,1,"Revisione","#f5c879"),
+            (1,3,1,"Buffer","#b9d7a6"),
+            (2,0,2,"Progetto A","#b7a3e3"),
+            (3,1,2,"Progetto B","#8fd9cf"),
+            (4,0,1,"Follow-up","#f19e9e"),
+            (4,2,2,"Chiusura settimana","#8fb8e8"),
+        ]
+    for day,row,span,label,color in events:
+        x=left+day*colw+8; y=top+row*90+8
+        h=span*90-16
+        pen.rounded_rectangle((x,y,x+colw-16,y+h),radius=10,fill=color)
+        pen.text((x+12,y+12),label,font=_guide_font(15,True),fill="#17324a")
+    return _save_result_png(image)
+
+
+def _draw_spreadsheet_v2(draft: dict, variant: int) -> bytes:
+    image, pen = _result_canvas("#e8ecef")
+    pen.rounded_rectangle((35, 28, 1165, 646), radius=22, fill="#ffffff", outline="#c2ccd2", width=2)
+    pen.rectangle((35,28,1165,82),fill="#217346")
+    pen.text((62,43),"Budget_progetto.xlsx",font=_guide_font(21,True),fill="white")
+    pen.rectangle((35,82,1165,126),fill="#f4f6f7")
+    pen.text((64,93),"fx",font=_guide_font(18,True),fill="#68767f")
+    formula='=SE(E6>0;"OK";"RIVEDI")' if not variant else '=SOMMA(C6:D6)'
+    pen.rounded_rectangle((100,90,1115,119),radius=5,fill="#ffffff",outline="#cbd3d8")
+    pen.text((118,95),formula,font=_guide_font(17),fill="#273944")
+    x0,y0=82,158; rowh=52; colw=160
+    headers=("Attività","Ore st.","Ore reali","Scarto","Stato","Costo")
+    for i,h in enumerate(headers):
+        x=x0+i*colw
+        pen.rectangle((x,y0,x+colw,y0+rowh),fill="#dfeee6")
+        pen.text((x+12,y0+15),h,font=_guide_font(17,True),fill="#234c37")
+    rows=[
+        ("Analisi","4","3,5","-0,5","OK","€ 140"),
+        ("Bozza","6","7","+1","RIVEDI","€ 280"),
+        ("Grafica","5","4","-1","OK","€ 160"),
+        ("Revisione","3","2,5","-0,5","OK","€ 100"),
+        ("Totale","18","17","-1","","€ 680"),
+    ]
+    for r,row in enumerate(rows):
+        y=y0+(r+1)*rowh
+        for i,val in enumerate(row):
+            x=x0+i*colw
+            pen.rectangle((x,y,x+colw,y+rowh),fill=("#f8fbf9" if r%2==0 else "#ffffff"),outline="#e2e7e9")
+            pen.text((x+12,y+15),val,font=_guide_font(17, r==4),fill="#263b45")
+    # Piccolo grafico dentro il foglio.
+    gx,gy=760,475
+    pen.rounded_rectangle((gx,gy,1115,620),radius=10,fill="#f7f9fa",outline="#d9e1e4")
+    for i,h in enumerate((52,88,67,112)):
+        bx=gx+48+i*68
+        pen.rectangle((bx,598-h,bx+38,598),fill="#4c9a70")
+    pen.text((gx+16,gy+12),"Ore per fase",font=_guide_font(16,True),fill="#39535f")
+    return _save_result_png(image)
+
+
+def _draw_slides_v2(draft: dict, variant: int) -> bytes:
+    image, pen = _result_canvas("#e6e9ee")
+    pen.rounded_rectangle((30,25,1170,650),radius=22,fill="#ffffff",outline="#c4cbd4",width=2)
+    pen.rectangle((30,25,1170,80),fill="#c94b36")
+    pen.text((60,42),"Presentazione progetto",font=_guide_font(21,True),fill="white")
+    # miniature
+    for i in range(4):
+        y=112+i*120
+        pen.rounded_rectangle((55,y,245,y+98),radius=8,fill="#f2f2f2",outline="#c7ccd1")
+        if i==1:
+            pen.rectangle((60,y+5,240,y+93),fill="#17324a")
+            pen.text((78,y+29),"RISULTATI",font=_guide_font(17,True),fill="#8fe0d1")
+        else:
+            pen.rectangle((72,y+25,220,y+34),fill="#aeb7bf")
+            pen.rectangle((72,y+47,195,y+55),fill="#d0d6db")
+    # slide principale
+    x0,y0,x1,y1=290,112,1125,590
+    pen.rounded_rectangle((x0,y0,x1,y1),radius=12,fill=("#132a46" if not variant else "#f5efe5"),outline="#bdc6cd")
+    fg="#ffffff" if not variant else "#2f3f4b"
+    accent="#86e0cf" if not variant else "#bf6d44"
+    pen.text((350,165),"RISULTATI DEL PROGETTO",font=_guide_font(30,True),fill=accent)
+    pen.text((350,218),"Dati chiari, una storia per slide",font=_guide_font(26,True),fill=fg)
+    # chart
+    basey=485
+    for i,h in enumerate((105,155,205,135)):
+        bx=395+i*105
+        pen.rounded_rectangle((bx,basey-h,bx+62,basey),radius=7,fill=accent)
+    pen.text((820,345),"+28%",font=_guide_font(50,True),fill=accent)
+    pen.text((820,405),"obiettivo raggiunto",font=_guide_font(20),fill=fg)
+    return _save_result_png(image)
+
+
+def _draw_poster_v2(draft: dict, variant: int) -> bytes:
+    image, pen = _result_canvas("#dadfe6" if not variant else "#efe7db")
+    # Ombra + poster finito.
+    pen.rounded_rectangle((315,45,905,630),radius=18,fill="#b6bec7")
+    pen.rounded_rectangle((300,32,890,617),radius=18,fill=("#10263f" if not variant else "#f6d08c"))
+    if not variant:
+        pen.ellipse((510,105,780,375),fill="#73d9c8")
+        pen.ellipse((570,160,720,310),fill="#ffcb70")
+        pen.text((355,90),"OPEN DAY",font=_guide_font(30,True),fill="#ffffff")
+        pen.text((355,420),"FUTURO",font=_guide_font(64,True),fill="#ffffff")
+        pen.text((355,492),"Tecnologia • Creatività • Idee",font=_guide_font(23),fill="#a8e8dc")
+        pen.rounded_rectangle((355,545,565,585),radius=8,fill="#ffffff")
+        pen.text((382,554),"18 NOVEMBRE",font=_guide_font(18,True),fill="#10263f")
+    else:
+        pen.rectangle((300,390,890,617),fill="#17324a")
+        pen.text((355,90),"MOSTRA",font=_guide_font(30,True),fill="#6b4d2c")
+        pen.text((355,145),"NUOVE",font=_guide_font(60,True),fill="#17324a")
+        pen.text((355,212),"VISIONI",font=_guide_font(60,True),fill="#17324a")
+        pen.ellipse((600,95,820,315),fill="#d8654f")
+        pen.text((355,455),"SABATO 21 • ORE 17:00",font=_guide_font(22,True),fill="#ffffff")
+        pen.text((355,510),"Ingresso libero",font=_guide_font(21),fill="#b7d7e9")
+    return _save_result_png(image)
+
+
+def _draw_image_result_v2(draft: dict, variant: int) -> bytes:
+    # Illustrazione completa: niente intestazione, niente schema di passaggi.
+    image, pen = _result_canvas("#12263b" if not variant else "#efe0cb")
+    if not variant:
+        pen.rectangle((0,430,1200,675),fill="#6e4b36")
+        pen.rectangle((150,470,1050,520),fill="#aa7957")
+        pen.rectangle((195,520,230,650),fill="#7c563e")
+        pen.rectangle((970,520,1005,650),fill="#7c563e")
+        pen.rounded_rectangle((430,300,750,455),radius=14,fill="#edf4fa")
+        pen.rectangle((455,325,725,425),fill="#6dcfc0")
+        pen.ellipse((875,220,970,315),fill="#ffd173")
+        pen.line((920,310,865,465),fill="#e9b657",width=16)
+        pen.ellipse((215,245,285,315),fill="#66a66e")
+        pen.ellipse((260,265,330,345),fill="#7bb37a")
+        pen.rectangle((250,340,295,420),fill="#c78555")
+        pen.text((420,80),"CREATIVE WORKSPACE",font=_guide_font(38,True),fill="#9fe9dd")
+    else:
+        pen.rectangle((0,445,1200,675),fill="#8f6b50")
+        pen.rounded_rectangle((350,195,850,520),radius=26,fill="#ffffff")
+        pen.rectangle((390,240,810,440),fill="#d9a168")
+        pen.ellipse((500,275,660,435),fill="#365f7a")
+        pen.ellipse((555,315,625,385),fill="#f0c76b")
+        pen.text((425,465),"poster editoriale",font=_guide_font(28,True),fill="#17324a")
+    return _save_result_png(image)
+
 def guide_result_image(draft: dict, variant: int = 0) -> bytes:
     kind = guide_visual_kind(draft)
-    if kind == "spreadsheet": return _draw_spreadsheet(draft, variant)
-    if kind == "slides": return _draw_slides(draft, variant)
-    if kind in {"poster", "thumbnail"}: return _draw_poster(draft, variant)
-    if kind == "image": return _draw_image_result(draft, variant)
+    if kind == "weekly_planner": return _draw_weekly_planner_v2(draft, variant)
+    if kind == "spreadsheet": return _draw_spreadsheet_v2(draft, variant)
+    if kind == "slides": return _draw_slides_v2(draft, variant)
+    if kind in {"poster", "thumbnail"}: return _draw_poster_v2(draft, variant)
+    if kind == "image": return _draw_image_result_v2(draft, variant)
     if kind == "storyboard": return _draw_storyboard(draft, variant, False)
     if kind == "video": return _draw_storyboard(draft, variant, True)
     if kind in {"email","resume","tasks","quiz","shopping","itinerary"}:
@@ -499,38 +692,31 @@ def guide_inline_diagram(draft: dict, style: str) -> bytes:
 
 
 def guide_inline_figures(draft: dict, client, slug: str) -> list[str]:
-    """Carica due esempi visuali del risultato, senza didascalie ripetitive."""
+    """Carica un solo esempio interno, diverso dalla copertina e senza didascalia."""
     if draft.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}:
         return []
+    picture = guide_inline_diagram(draft, "variant")
     if client.dry_run:
-        guide_inline_diagram(draft, "result")
-        guide_inline_diagram(draft, "variant")
-        return ['<!-- risultato visivo 1 simulato -->', '<!-- risultato visivo 2 simulato -->']
-    figures = []
+        return ['<!-- risultato visivo simulato -->']
     title = str(draft.get("title") or "Guida pratica")
-    for kind, alt_text in (
-        ("result", f"Esempio visivo del risultato per {title}"),
-        ("variant", f"Seconda variante del risultato per {title}"),
-    ):
-        picture = guide_inline_diagram(draft, kind)
-        media = client.upload_media(
-            picture, slug + "-risultato-" + kind + ".png",
-            "image/png", alt_text, ""
-        )
-        url = str(media.get("source_url") or "")
-        parts = urlsplit(url)
-        if parts.scheme != "https" or not parts.netloc or not media.get("id"):
-            raise PublisherError("Immagine didattica non caricata correttamente.")
-        print("    Esempio visivo caricato:", kind, media.get("id"))
-        figures.append(
-            '<figure class="av-guide-example" style="margin:24px auto;max-width:900px">'
-            '<img src="' + html.escape(url, quote=True) +
-            '" alt="' + html.escape(alt_text, quote=True) +
-            '" loading="lazy" decoding="async" style="display:block;width:100%;'
-            'max-width:900px;height:auto;border-radius:10px" />'
-            '</figure>'
-        )
-    return figures
+    media = client.upload_media(
+        picture, slug + "-risultato.png",
+        "image/png", f"Esempio del risultato per {title}", ""
+    )
+    url = str(media.get("source_url") or "")
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not parts.netloc or not media.get("id"):
+        raise PublisherError("Immagine didattica non caricata correttamente.")
+    print("    Risultato visuale caricato:", media.get("id"))
+    return [
+        '<figure class="av-guide-example" style="margin:24px auto;max-width:900px">'
+        '<img src="' + html.escape(url, quote=True) +
+        '" alt="' + html.escape(f"Esempio del risultato per {title}", quote=True) +
+        '" loading="lazy" decoding="async" style="display:block;width:100%;'
+        'max-width:900px;height:auto;border-radius:10px" />'
+        '</figure>'
+    ]
+
 
 def guide_place_figures(body: str, figures: list[str]) -> str:
     """Place images *inside* the relevant explanation, rather than at the end."""
