@@ -21,14 +21,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.6"
-DAILY_LIMIT = 3
+VERSION = "2.7"
+DAILY_LIMIT = 6
 RESERVE_LIMIT = 3
 MAX_OFFERS = 1
 MAX_GUIDES_PER_DAY = 1
 MAX_TUTORIALS_PER_DAY = 1
 MAX_PRACTICAL_PER_DAY = 1
-# Modalità qualità AdSense: massimo tre uscite al giorno, con al massimo una guida/tutorial.
+# Modalità qualità AdSense: fino a sei uscite al giorno, con al massimo una guida/tutorial.
+# Il volume non forza la selezione: restano attivi i gate su qualità, offerte e varietà.
 # Espansione graduale: al massimo un articolo di categoria nuova, mai obbligatorio.
 EXPANSION_CATEGORIES = {"Casa smart", "Accessori e postazioni"}
 MAX_EXPANSION_ARTICLES = 1
@@ -127,7 +128,7 @@ def is_offer(item: dict) -> bool:
 
 
 def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Modalità qualità: fino a tre articoli, con al massimo un contenuto pratico.
+    """Modalità qualità: fino a sei articoli, con al massimo un contenuto pratico.
 
     Guide e tutorial non sono obbligatori: gli slot restano disponibili per
     notizie con i gate editoriali invariati e non si forza mai il volume.
