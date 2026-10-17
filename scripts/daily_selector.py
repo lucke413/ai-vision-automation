@@ -2,7 +2,7 @@
 """Prepara gli articoli del giorno e una piccola coda di riserva.
 
 Il selettore non pubblica nulla e non chiama servizi esterni. Se sono
-disponibili meno di sei candidati, usa comunque quelli disponibili e
+disponibili meno di tre candidati, usa comunque quelli disponibili e
 scrive un avviso: il workflow non deve fermarsi per una carenza temporanea.
 """
 
@@ -21,13 +21,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.5"
-DAILY_LIMIT = 6
+VERSION = "2.6"
+DAILY_LIMIT = 3
 RESERVE_LIMIT = 3
 MAX_OFFERS = 1
-MAX_GUIDES_PER_DAY = 2
+MAX_GUIDES_PER_DAY = 1
 MAX_TUTORIALS_PER_DAY = 1
-# Espansione graduale: al massimo un articolo nuovo su sei, mai obbligatorio.
+MAX_PRACTICAL_PER_DAY = 1
+# Modalità qualità AdSense: massimo tre uscite al giorno, con al massimo una guida/tutorial.
+# Espansione graduale: al massimo un articolo di categoria nuova, mai obbligatorio.
 EXPANSION_CATEGORIES = {"Casa smart", "Accessori e postazioni"}
 MAX_EXPANSION_ARTICLES = 1
 
@@ -107,12 +109,14 @@ def valid_candidates(data: dict) -> list[dict]:
 
 
 def editorial_room(selected: list[dict], candidate: dict) -> bool:
-    """Limits practical content, leaving at least three places for news."""
+    """Limita guide e tutorial a un solo contenuto pratico al giorno."""
     kind = candidate.get("editorial_kind")
     limits = {"GUIDA": MAX_GUIDES_PER_DAY, "TUTORIAL": MAX_TUTORIALS_PER_DAY}
-    return kind not in limits or sum(
-        x.get("editorial_kind") == kind for x in selected
-    ) < limits[kind]
+    if kind not in limits:
+        return True
+    if sum(x.get("editorial_kind") in {"GUIDA", "TUTORIAL"} for x in selected) >= MAX_PRACTICAL_PER_DAY:
+        return False
+    return sum(x.get("editorial_kind") == kind for x in selected) < limits[kind]
 
 
 def is_offer(item: dict) -> bool:
@@ -123,10 +127,10 @@ def is_offer(item: dict) -> bool:
 
 
 def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Equilibrio preferito: tre notizie, due guide e un tutorial.
+    """Modalità qualità: fino a tre articoli, con al massimo un contenuto pratico.
 
-    I limiti sono obiettivi, non minimi forzati: se guide o tutorial mancano,
-    gli slot sono disponibili per le notizie con i gate editoriali invariati.
+    Guide e tutorial non sono obbligatori: gli slot restano disponibili per
+    notizie con i gate editoriali invariati e non si forza mai il volume.
     """
     if not items:
         return [], []
@@ -154,15 +158,14 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
         offers += int(is_offer(item))
         return True
 
-    guides = [x for x in items if x.get("editorial_kind") == "GUIDA"]
-    tutorials = [x for x in items if x.get("editorial_kind") == "TUTORIAL"]
+    practical = [x for x in items if x.get("editorial_kind") in {"GUIDA", "TUTORIAL"}]
     news = [x for x in items if x.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}]
 
-    # Le guide pratiche sono vere rubriche e hanno precedenza, non sono RSS.
-    for item in guides[:MAX_GUIDES_PER_DAY]:
-        add(item)
-    for item in tutorials[:MAX_TUTORIALS_PER_DAY]:
-        add(item)
+    # Una sola rubrica pratica per giornata: scegli la migliore già ordinata
+    # per punteggio ed evita raffiche di guide/template nello stesso giorno.
+    for item in practical:
+        if add(item):
+            break
 
     # La cronaca tecnologica resta centrale; prima privilegiamo categorie diverse.
     for item in news:
