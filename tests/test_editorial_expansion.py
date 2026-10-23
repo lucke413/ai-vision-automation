@@ -61,7 +61,7 @@ class EditorialExpansionTests(unittest.TestCase):
             def draft(source, key):
                 if source['article_id']=='1':
                     raise generator.GeneratorFatalError('Simulated rejection')
-                return {**source,'quality_warnings':[], 'body_word_count':650}
+                return {**source, 'title': {'0': 'Dispositivi intelligenti per abitazioni moderne', '2': 'Accessori USB per postazioni di lavoro', '3': 'Protezione informatica contro minacce recenti'}[source['article_id']], 'quality_warnings':[], 'body_word_count':650}
             with patch.object(generator,'INPUT_FILE',inp), patch.object(generator,'OUTPUT_FILE',out), patch.dict('os.environ',{'GEMINI_API_KEY':'test-not-a-real-key'}), patch.object(generator,'generate_valid_draft',side_effect=draft), patch.object(generator.time,'sleep'), contextlib.redirect_stdout(io.StringIO()):
                 generator.main()
             result=json.loads(out.read_text())
@@ -109,7 +109,7 @@ class EditorialExpansionTests(unittest.TestCase):
         client.get_or_create_term.side_effect=lambda kind,name: {'id':{'Guide':1,'Casa smart':2}[name]}
         client.related_link.return_value='';client.existing_post.return_value=None
         client.upload_media.return_value={'id':0};client.create_post.return_value={'id':123}
-        draft={**item(0,'Casa smart','GUIDA'), 'body_markdown':' '.join(['parola']*410)}
+        draft={**item(0,'Casa smart','GUIDA'), 'body_markdown':' '.join(['parola']*510)}
         with patch.object(publisher,'fallback_png',return_value=b'png'):
             publisher.publish_one(draft,datetime.now(timezone.utc),client,None)
         self.assertEqual(client.create_post.call_args.args[0]['categories'],[1,2])
