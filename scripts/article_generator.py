@@ -635,9 +635,8 @@ def normalize_draft(raw: dict, item: dict) -> dict:
     validate_editorial_body(body)
     quality_warnings = []
     if body_words < QUALITY_MIN_BODY_WORDS:
-        quality_warnings.append(
-            f"Testo breve di {body_words} parole: sotto la soglia qualità "
-            f"di {QUALITY_MIN_BODY_WORDS}; mantenuto come avviso editoriale non bloccante."
+        raise GeneratorFatalError(
+            f"Quality gate: testo di {body_words} parole, minimo {QUALITY_MIN_BODY_WORDS}."
         )
     if body_words < TARGET_BODY_WORDS:
         quality_warnings.append(
