@@ -20,17 +20,17 @@ from html.parser import HTMLParser
 
 import requests
 
-from daily_selector import expansion_room, editorial_room, MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY, MAX_PRACTICAL_PER_DAY
+from daily_selector import expansion_room, editorial_room, MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY, MAX_PRACTICAL_PER_DAY, MAX_NEWS_PER_DAY
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.7"
+VERSION = "3.8"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
-RESERVE_LIMIT = 3
+RESERVE_LIMIT = 6
 MAX_DAILY_OFFERS = 1
 MAX_ITEMS = DAILY_LIMIT + RESERVE_LIMIT
 MAX_RETRIES = 3
@@ -291,7 +291,7 @@ def call_gemini(prompt: str, api_key: str) -> dict:
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.35,
-            "maxOutputTokens": 4600,
+            "maxOutputTokens": 6000,
             "responseMimeType": "application/json",
         },
     }
@@ -393,6 +393,7 @@ def enrich_source(item: dict) -> dict:
     url = str(item.get('url') or '')
     # Fonti già usate dalla raccolta. Nessun accesso a URL arbitrari o locali.
     domains = {'tomshw.it', 'smartworld.it', 'multiplayer.it', 'hwupgrade.it',
+               'arstechnica.com', 'everyeye.it', 'blog.it.playstation.com',
                'techcrunch.com', 'theverge.com', 'openai.com', 'blog.google',
                'blogs.microsoft.com', 'apple.com', 'samsung.com',
                'dday.it', 'bleepingcomputer.com', 'hdblog.it', 'hdmotori.it',
@@ -885,10 +886,12 @@ def main() -> int:
                 remaining_reserves.append(draft)
         daily_drafts.extend(promoted)
         reserve_drafts = remaining_reserves
-    # Modalità qualità: mai più di un contenuto pratico nello stesso giorno.
+    # Rispetta le quote pratiche indipendenti anche dopo le promozioni.
     practical = [d for d in daily_drafts if d.get("editorial_kind") in {"GUIDA", "TUTORIAL"}]
-    if len(practical) > MAX_PRACTICAL_PER_DAY:
-        raise RuntimeError("Limite complessivo guide/tutorial superato.")
+    if len(practical) > MAX_PRACTICAL_PER_DAY or sum(d.get("editorial_kind") == "GUIDA" for d in practical) > MAX_GUIDES_PER_DAY or sum(d.get("editorial_kind") == "TUTORIAL" for d in practical) > MAX_TUTORIALS_PER_DAY:
+        raise RuntimeError("Quote guide/tutorial superate.")
+    if sum(d.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for d in daily_drafts) > MAX_NEWS_PER_DAY:
+        raise RuntimeError("Quota notizie superata.")
     if stopped_reason:
         warnings = [stopped_reason]
     else:
@@ -922,6 +925,9 @@ def main() -> int:
         "daily_generated": len(daily_drafts),
         "reserve_requested": len(reserve_items),
         "reserve_generated": len(reserve_drafts),
+        "daily_news": sum(d.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for d in daily_drafts),
+        "daily_guides": sum(d.get("editorial_kind") == "GUIDA" for d in daily_drafts),
+        "daily_tutorials": sum(d.get("editorial_kind") == "TUTORIAL" for d in daily_drafts),
         "errors": errors,
         "drafts_with_quality_warnings": sum(
             1 for draft in drafts if draft.get("quality_warnings")
