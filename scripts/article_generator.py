@@ -134,6 +134,12 @@ REGOLE EDITORIALI:
   "la fonte riporta/segnala", "come riportato dalla fonte" e formule simili;
 - non inserire link affiliati, codici tracking o pubblicità nel testo;
 - non presentare la bozza come verifica indipendente dei fatti.
+- ogni notizia deve spiegare che cosa cambia concretamente per il lettore,
+  soltanto se tale conseguenza è documentabile nella fonte;
+- elimina le notizie con informazioni insufficienti invece di amplificarle;
+- differenzia titoli, apertura e struttura in base al fatto specifico;
+- per le guide includi un esempio riproducibile, prerequisiti e limiti,
+  senza dichiarare di avere eseguito verifiche non svolte.
 
 GUIDE E CONFRONTI DI PRODOTTI:
 - spiega compatibilità, requisiti e limiti solo se documentati nella fonte;
@@ -753,6 +759,42 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
     raise GeneratorFatalError("Generazione bozza non completata.")
 
 
+def _editorial_tokens(value: str) -> set[str]:
+    import unicodedata
+    value = unicodedata.normalize("NFKD", value.casefold())
+    words = re.findall(r"[a-z0-9]{4,}", value)
+    stop = {"della", "delle", "degli", "questo", "questa", "quello", "quella",
+            "anche", "dopo", "prima", "come", "sono", "essere", "tutti",
+            "nuovo", "nuova", "dalla", "dallo", "sulla", "sulle", "nelle",
+            "dentro", "senza", "quando", "mentre", "dove", "quindi"}
+    return set(words) - stop
+
+
+def editorial_distinctiveness(draft: dict, accepted: list[dict]) -> str | None:
+    """Conservative anti-duplicate gate; never infer facts or fabricate value."""
+    title = str(draft.get("title") or "")
+    body = str(draft.get("body_markdown") or "")
+    paragraphs = [
+        re.sub(r"[^\\w\\s]", "", p).strip().casefold()
+        for p in re.split(r"\\n\\s*\\n", body)
+        if len(p.split()) >= 24
+    ]
+    if len(paragraphs) >= 2 and len(set(paragraphs)) != len(paragraphs):
+        return "paragrafi ripetuti"
+    if len(_editorial_tokens(title)) < 3:
+        return "titolo poco informativo"
+    for other in accepted:
+        if draft.get("article_id") and draft.get("article_id") == other.get("article_id"):
+            return "identificativo duplicato"
+        a, b = _editorial_tokens(title), _editorial_tokens(str(other.get("title") or ""))
+        if len(a) >= 4 and len(b) >= 4 and len(a & b) / len(a | b) >= 0.78:
+            return "titolo troppo simile a un altro articolo del lotto"
+    if draft.get("story_type") == "NEWS" and draft.get("source_text_status") == "rss_fallback":
+        if int(draft.get("source_text_word_count") or 0) < 100:
+            return "notizia senza sufficiente materiale originale verificabile"
+    return None
+
+
 def main() -> int:
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not INPUT_FILE.is_file():
@@ -802,6 +844,18 @@ def main() -> int:
             continue
         if index < len(items):
             time.sleep(REQUEST_DELAY)
+
+    # Qualità prima della quantità: controlla tutto il lotto, senza riempire
+    # automaticamente gli slot con notizie duplicate o prive di evidenze.
+    accepted = []
+    for draft in drafts:
+        reason = editorial_distinctiveness(draft, accepted)
+        if reason:
+            errors.append({"article_id": draft.get("article_id"), "error": "Quality gate: " + reason})
+            print("    AVVISO: bozza esclusa: " + reason)
+        else:
+            accepted.append(draft)
+    drafts = accepted
 
     daily_drafts = [draft for draft in drafts if draft.get("publication_slot") == "today"]
     reserve_drafts = [draft for draft in drafts if draft.get("publication_slot") == "reserve"]
