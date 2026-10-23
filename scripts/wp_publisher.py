@@ -1072,6 +1072,10 @@ def publish_one(
         body = guide_place_figures(body, figures)
         body += guide_prompt_blocks(draft)
     body += guide_resources(draft)
+    # Amazon Associates: predisposizione sicura. Nessun link personale viene
+    # pubblicato automaticamente su Altervista senza autorizzazione esplicita.
+    if draft.get("affiliate_candidate"):
+        print("    AFFILIAZIONE: articolo candidato; link personale non inserito (verifica autorizzazione Altervista).")
     if not body:
         raise PublisherError("Corpo articolo vuoto.")
     word_count = len(re.findall(r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\wÀ-ÖØ-öø-ÿ]+)*\b", raw_body, flags=re.UNICODE))
