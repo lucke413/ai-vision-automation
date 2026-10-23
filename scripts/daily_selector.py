@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.8"
+VERSION = "2.9"
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 6
 MAX_OFFERS = 1
@@ -179,12 +179,18 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
     # Never replace failed news with an extra tutorial or guide.
     # Reserve candidates come from RSS only, and retain their quality gates.
     reserves: list[dict] = []
-    for item in news:
+    # Riserve utili: priorita alle notizie, non alle offerte.
+    news_reserves = [x for x in news if not is_offer(x)]
+    if offers == 0:
+        news_reserves += [x for x in news if is_offer(x)][:1]
+    for item in news_reserves:
         if len(reserves) >= RESERVE_LIMIT:
             break
         if item["article_id"] in selected_ids:
             continue
         if any(item["article_id"] == reserve["article_id"] for reserve in reserves):
+            continue
+        if not expansion_room(selected, item):
             continue
         reserves.append({**item, "publication_slot": "reserve"})
 
