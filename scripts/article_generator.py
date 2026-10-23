@@ -354,27 +354,46 @@ def call_gemini(prompt: str, api_key: str) -> dict:
 
 
 class SourceArticleParser(HTMLParser):
-    """Estrae solo testo in article/main; esclude menu, script e widget."""
+    """Extract article body, excluding common navigation and sidebars.
+
+    Some publishers use entry-content or articleBody containers instead of
+    semantic <article>/<main> elements. We only read known article containers,
+    never arbitrary page text or embedded scripts.
+    """
+    CONTENT_CLASSES = {"entry-content", "post-content", "article-body",
+                       "article-content", "story-body", "article__body"}
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.stack = []
+        self.capture_depths = []
         self.parts = []
 
     def handle_starttag(self, tag, attrs):
-        if tag not in {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'}:
+        attrs = dict(attrs)
+        if tag not in {'area', 'base', 'br', 'col', 'embed', 'hr', 'img',
+                       'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'}:
             self.stack.append(tag)
+            classes = set(str(attrs.get("class") or "").lower().split())
+            is_body = (tag in {"article", "main"}
+                       or str(attrs.get("itemprop") or "").lower() == "articlebody"
+                       or bool(classes & self.CONTENT_CLASSES))
+            if is_body:
+                self.capture_depths.append(len(self.stack))
         if tag in {'p', 'h1', 'h2', 'h3', 'li', 'br'}:
             self.parts.append('\n')
 
     def handle_endtag(self, tag):
         if tag in self.stack:
             self.stack = self.stack[:len(self.stack) - 1 - self.stack[::-1].index(tag)]
+            self.capture_depths = [d for d in self.capture_depths if d <= len(self.stack)]
         if tag in {'p', 'h1', 'h2', 'h3', 'li'}:
             self.parts.append('\n')
 
     def handle_data(self, data):
-        blocked = {'script', 'style', 'nav', 'aside', 'footer', 'form', 'noscript', 'button'}
-        if ('article' in self.stack or 'main' in self.stack) and not blocked.intersection(self.stack):
+        blocked = {'script', 'style', 'nav', 'aside', 'footer',
+                   'form', 'noscript', 'button'}
+        if self.capture_depths and not blocked.intersection(self.stack):
             self.parts.append(data)
 
     def text(self):
