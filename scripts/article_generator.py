@@ -775,8 +775,8 @@ def editorial_distinctiveness(draft: dict, accepted: list[dict]) -> str | None:
     title = str(draft.get("title") or "")
     body = str(draft.get("body_markdown") or "")
     paragraphs = [
-        re.sub(r"[^\\w\\s]", "", p).strip().casefold()
-        for p in re.split(r"\\n\\s*\\n", body)
+        re.sub(r"[^\w\s]", "", p).strip().casefold()
+        for p in re.split(r"\n\s*\n", body)
         if len(p.split()) >= 24
     ]
     if len(paragraphs) >= 2 and len(set(paragraphs)) != len(paragraphs):
