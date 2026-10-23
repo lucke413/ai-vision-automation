@@ -1070,10 +1070,6 @@ def publish_one(
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
         if not draft.get("example_prompt") or not draft.get("advanced_prompt") or not guide_resources(draft):
             raise PublisherError("Quality gate: guida priva di prompt o link pratici ufficiali.")
-        figures = guide_inline_figures(draft, client, slugify(str(draft.get("slug") or title)))
-        body = guide_place_figures(body, figures)
-        body += guide_prompt_blocks(draft)
-    body += guide_resources(draft)
     # Amazon Associates: predisposizione sicura. Nessun link personale viene
     # pubblicato automaticamente su Altervista senza autorizzazione esplicita.
     if draft.get("affiliate_candidate"):
@@ -1101,6 +1097,12 @@ def publish_one(
         return {"article_id": draft.get("article_id"), "title": title,
                 "status": "already_exists", "wp_status": existing.get("status"),
                 "post_id": existing.get("id"), "link": existing.get("link")}
+
+    if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
+        figures = guide_inline_figures(draft, client, slug)
+        body = guide_place_figures(body, figures)
+        body += guide_prompt_blocks(draft)
+    body += guide_resources(draft)
 
     category_name = category_for(draft)
     category = client.get_or_create_term("categories", category_name)
