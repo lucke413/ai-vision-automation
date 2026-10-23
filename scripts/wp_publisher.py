@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.3"
+VERSION = "2.4"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -83,7 +83,7 @@ PUBLIC_FORBIDDEN_PATTERNS = (
     re.compile(r"\b(?:da|dati? da) verificare\b", re.IGNORECASE),
     re.compile(r"\b(?:secondo|stando a|come riportato da) (?:la )?fonte\b", re.IGNORECASE),
     re.compile(r"\bla fonte (?:riporta|segnala|fornita|indica)\b", re.IGNORECASE),
-    re.compile(r"\b(?:bozza|fact[_ -]?check|istruzioni (?:interne|editoriali))\b", re.IGNORECASE),
+    re.compile(r"\b(?:questa bozza (?:editoriale|generata)|bozza interna|fact[_ -]?check|istruzioni (?:interne|editoriali))\b", re.IGNORECASE),
 )
 
 
