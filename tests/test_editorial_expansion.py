@@ -41,16 +41,16 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = [item(i, cat) for i, cat in enumerate(
             ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 6)
+        self.assertEqual(len(chosen), 3)
         self.assertEqual(sum(x['category'] in selector.EXPANSION_CATEGORIES for x in chosen), 1)
         self.assertIn('AI', {x['category'] for x in chosen})
-        self.assertLessEqual(len(reserves), 3)
+        self.assertLessEqual(len(reserves), selector.RESERVE_LIMIT)
 
     def test_no_forced_new_topic_and_one_offer(self):
         candidates = [item(i, cat, 'OFFERTA' if i < 2 else 'NEWS') for i, cat in enumerate(
             ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, _ = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 6)
+        self.assertEqual(len(chosen), 3)
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
 
     def test_reserve_promotion_preserves_topic_cap(self):
@@ -73,6 +73,9 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(selector.DAILY_LIMIT, 6)
         self.assertEqual(generator.DAILY_LIMIT, 6)
         self.assertEqual(generator.MAX_ITEMS, 6 + generator.RESERVE_LIMIT)
+        self.assertEqual(selector.RESERVE_LIMIT, generator.RESERVE_LIMIT)
+        self.assertEqual(selector.MAX_NEWS_PER_DAY, 3)
+        self.assertEqual(selector.MAX_GUIDES_PER_DAY, 2)
         with patch.dict('os.environ', {'WP_TIMEZONE': 'Europe/Rome'}, clear=True):
             self.assertEqual(
                 [value.strftime('%H:%M') for value in publisher.parse_slot_times()],
@@ -124,9 +127,9 @@ class EditorialExpansionTests(unittest.TestCase):
             {"status": "ok", "items": []},
             "2026-10-17", lambda slug: False,
         )
-        self.assertEqual(result["practical_guide_candidates"], 2)
-        self.assertEqual(len({c["article_id"] for c in result["items"]}), 2)
-        self.assertEqual(sum(x["editorial_kind"] == "GUIDA" for x in result["items"]), 1)
+        self.assertEqual(result["practical_guide_candidates"], 3)
+        self.assertEqual(len({c["article_id"] for c in result["items"]}), 3)
+        self.assertEqual(sum(x["editorial_kind"] == "GUIDA" for x in result["items"]), 2)
         self.assertEqual(sum(x["editorial_kind"] == "TUTORIAL" for x in result["items"]), 1)
         for candidate in result["items"]:
             self.assertGreaterEqual(generator.evidence_word_count(candidate), 140)
@@ -150,8 +153,8 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = selector.valid_candidates({"status": "ok", "items": news + guide_items})
         chosen, reserves = selector.select_daily(candidates)
         self.assertEqual(len(chosen), 6)
-        self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 1)
-        self.assertEqual(sum(not x.get("editorial_kind") for x in chosen), 5)
+        self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 3)
+        self.assertEqual(sum(not x.get("editorial_kind") for x in chosen), 3)
 
     def test_practical_guides_have_links_lists_and_original_diagrams(self):
         import practical_guides
@@ -247,14 +250,56 @@ class EditorialExpansionTests(unittest.TestCase):
         practical = [practical_guides.make_candidate(t) for t in practical_guides.TOPICS]
         candidates = selector.valid_candidates({"status": "ok", "items": news + practical})
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 4)
-        self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 1)
+        self.assertEqual(len(chosen), 6)
+        self.assertEqual(sum(bool(x.get("editorial_kind")) for x in chosen), 3)
         self.assertTrue(all(not x.get("editorial_kind") for x in reserves))
         chosen_without_news, reserves_without_news = selector.select_daily(
             selector.valid_candidates({"status": "ok", "items": practical})
         )
-        self.assertEqual(len(chosen_without_news), 1)
+        self.assertEqual(len(chosen_without_news), 3)
         self.assertEqual(reserves_without_news, [])
+
+    def test_news_slots_not_filled_by_practical_articles(self):
+        import practical_guides
+        candidates = [practical_guides.make_candidate(t) for t in practical_guides.TOPICS]
+        selected, reserves = selector.select_daily(selector.valid_candidates(
+            {"status": "ok", "items": candidates}))
+        self.assertEqual(len(selected), 3)
+        self.assertEqual(reserves, [])
+        self.assertEqual(sum(x["editorial_kind"] == "GUIDA" for x in selected), 2)
+        self.assertEqual(sum(x["editorial_kind"] == "TUTORIAL" for x in selected), 1)
+
+    def test_source_parser_entry_content_without_page_navigation(self):
+        parser = generator.SourceArticleParser()
+        parser.feed('<div class="entry-content"><h2>Titolo</h2><p>Fatti attendibili.</p>'
+                    '<nav>Menu da escludere</nav><script>no_script()</script>'
+                    '<p>Ulteriori informazioni.</p></div>')
+        result = parser.text()
+        self.assertIn("Fatti attendibili", result)
+        self.assertIn("Ulteriori informazioni", result)
+        self.assertNotIn("Menu da escludere", result)
+        self.assertNotIn("no_script", result)
+
+    def test_existing_wordpress_post_does_not_upload_images(self):
+        client = MagicMock()
+        client.dry_run = False
+        client.existing_post.return_value = {"id": 88, "link": "https://example.com/post",
+                                             "status": "future"}
+        draft = {**item(12, "AI"), "body_markdown": " ".join(["fatto"] * 520),
+                 "slug": "articolo-esistente"}
+        result = publisher.publish_one(draft, datetime.now(timezone.utc), client, None)
+        self.assertEqual(result["status"], "already_exists")
+        client.upload_media.assert_not_called()
+        client.create_post.assert_not_called()
+
+    def test_guide_missing_resources_fails_closed(self):
+        client = MagicMock()
+        client.dry_run = True
+        draft = {**item(13, "AI", "GUIDA"), "editorial_kind": "GUIDA",
+                 "body_markdown": " ".join(["esempio"] * 520)}
+        with self.assertRaises(publisher.PublisherError):
+            publisher.publish_one(draft, datetime.now(timezone.utc), client, None)
+        client.create_post.assert_not_called()
 
     def test_failed_news_is_not_replaced_with_additional_guides(self):
         import practical_guides

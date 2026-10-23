@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.2"
+VERSION = "2.3"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -1068,10 +1068,8 @@ def publish_one(
     raw_body = str(draft.get("body_markdown") or "").strip()
     body = markdown_to_html(raw_body)
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
-        figures = guide_inline_figures(draft, client, slugify(str(draft.get("slug") or title)))
-        body = guide_place_figures(body, figures)
-        body += guide_prompt_blocks(draft)
-    body += guide_resources(draft)
+        if not draft.get("example_prompt") or not draft.get("advanced_prompt") or not guide_resources(draft):
+            raise PublisherError("Quality gate: guida priva di prompt o link pratici ufficiali.")
     # Amazon Associates: predisposizione sicura. Nessun link personale viene
     # pubblicato automaticamente su Altervista senza autorizzazione esplicita.
     if draft.get("affiliate_candidate"):
@@ -1092,6 +1090,19 @@ def publish_one(
     # l'espansione. Il publisher blocca solo violazioni effettive del gate.
     if draft.get("quality_warnings"):
         print(f"    AVVISO qualità: {title} -> {draft.get('quality_warnings')}")
+
+    slug = slugify(str(draft.get("slug") or title))
+    existing = client.existing_post(slug)
+    if existing:
+        return {"article_id": draft.get("article_id"), "title": title,
+                "status": "already_exists", "wp_status": existing.get("status"),
+                "post_id": existing.get("id"), "link": existing.get("link")}
+
+    if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
+        figures = guide_inline_figures(draft, client, slug)
+        body = guide_place_figures(body, figures)
+        body += guide_prompt_blocks(draft)
+    body += guide_resources(draft)
 
     category_name = category_for(draft)
     category = client.get_or_create_term("categories", category_name)
@@ -1143,19 +1154,6 @@ def publish_one(
         caption="",
     )
 
-    slug = slugify(str(draft.get("slug") or title))
-    existing = client.existing_post(slug)
-    if existing:
-        return {
-            "article_id": draft.get("article_id"),
-            "title": title,
-            "status": "already_exists",
-            "post_id": existing.get("id"),
-            "link": existing.get("link"),
-            "category": category_name,
-            "image_origin": image_origin,
-        }
-
     local_date = planned_time.strftime("%Y-%m-%dT%H:%M:%S")
     utc_date = planned_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     payload = {
@@ -1176,7 +1174,8 @@ def publish_one(
         "seo_status": seo_status,
         "article_id": draft.get("article_id"),
         "title": title,
-        "status": "planned" if client.dry_run else "published",
+        "status": "planned" if client.dry_run else "scheduled",
+        "wp_status": created.get("status", "future" if not client.dry_run else "dry_run"),
         "post_id": created.get("id"),
         "link": created.get("link"),
         "scheduled_local": local_date,
@@ -1246,6 +1245,9 @@ def main() -> int:
         "slot_times": [value.strftime("%H:%M") for value in parse_slot_times()],
         "requested": len(drafts),
         "completed": len(results),
+        "scheduled": sum(x.get("status") == "scheduled" for x in results),
+        "already_existing": sum(x.get("status") == "already_exists" for x in results),
+        "actually_online_verified": 0,
         "errors": errors,
         "items": results,
     }

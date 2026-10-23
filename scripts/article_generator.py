@@ -20,17 +20,17 @@ from html.parser import HTMLParser
 
 import requests
 
-from daily_selector import expansion_room, editorial_room, MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY, MAX_PRACTICAL_PER_DAY
+from daily_selector import expansion_room, editorial_room, MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY, MAX_PRACTICAL_PER_DAY, MAX_NEWS_PER_DAY
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.7"
+VERSION = "3.8"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
-RESERVE_LIMIT = 3
+RESERVE_LIMIT = 6
 MAX_DAILY_OFFERS = 1
 MAX_ITEMS = DAILY_LIMIT + RESERVE_LIMIT
 MAX_RETRIES = 3
@@ -291,7 +291,7 @@ def call_gemini(prompt: str, api_key: str) -> dict:
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.35,
-            "maxOutputTokens": 4600,
+            "maxOutputTokens": 6000,
             "responseMimeType": "application/json",
         },
     }
@@ -354,27 +354,46 @@ def call_gemini(prompt: str, api_key: str) -> dict:
 
 
 class SourceArticleParser(HTMLParser):
-    """Estrae solo testo in article/main; esclude menu, script e widget."""
+    """Extract article body, excluding common navigation and sidebars.
+
+    Some publishers use entry-content or articleBody containers instead of
+    semantic <article>/<main> elements. We only read known article containers,
+    never arbitrary page text or embedded scripts.
+    """
+    CONTENT_CLASSES = {"entry-content", "post-content", "article-body",
+                       "article-content", "story-body", "article__body"}
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.stack = []
+        self.capture_depths = []
         self.parts = []
 
     def handle_starttag(self, tag, attrs):
-        if tag not in {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'}:
+        attrs = dict(attrs)
+        if tag not in {'area', 'base', 'br', 'col', 'embed', 'hr', 'img',
+                       'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'}:
             self.stack.append(tag)
+            classes = set(str(attrs.get("class") or "").lower().split())
+            is_body = (tag in {"article", "main"}
+                       or str(attrs.get("itemprop") or "").lower() == "articlebody"
+                       or bool(classes & self.CONTENT_CLASSES))
+            if is_body:
+                self.capture_depths.append(len(self.stack))
         if tag in {'p', 'h1', 'h2', 'h3', 'li', 'br'}:
             self.parts.append('\n')
 
     def handle_endtag(self, tag):
         if tag in self.stack:
             self.stack = self.stack[:len(self.stack) - 1 - self.stack[::-1].index(tag)]
+            self.capture_depths = [d for d in self.capture_depths if d <= len(self.stack)]
         if tag in {'p', 'h1', 'h2', 'h3', 'li'}:
             self.parts.append('\n')
 
     def handle_data(self, data):
-        blocked = {'script', 'style', 'nav', 'aside', 'footer', 'form', 'noscript', 'button'}
-        if ('article' in self.stack or 'main' in self.stack) and not blocked.intersection(self.stack):
+        blocked = {'script', 'style', 'nav', 'aside', 'footer',
+                   'form', 'noscript', 'button'}
+        if self.capture_depths and not blocked.intersection(self.stack):
             self.parts.append(data)
 
     def text(self):
@@ -393,6 +412,7 @@ def enrich_source(item: dict) -> dict:
     url = str(item.get('url') or '')
     # Fonti già usate dalla raccolta. Nessun accesso a URL arbitrari o locali.
     domains = {'tomshw.it', 'smartworld.it', 'multiplayer.it', 'hwupgrade.it',
+               'arstechnica.com', 'everyeye.it', 'blog.it.playstation.com',
                'techcrunch.com', 'theverge.com', 'openai.com', 'blog.google',
                'blogs.microsoft.com', 'apple.com', 'samsung.com',
                'dday.it', 'bleepingcomputer.com', 'hdblog.it', 'hdmotori.it',
@@ -885,10 +905,12 @@ def main() -> int:
                 remaining_reserves.append(draft)
         daily_drafts.extend(promoted)
         reserve_drafts = remaining_reserves
-    # Modalità qualità: mai più di un contenuto pratico nello stesso giorno.
+    # Rispetta le quote pratiche indipendenti anche dopo le promozioni.
     practical = [d for d in daily_drafts if d.get("editorial_kind") in {"GUIDA", "TUTORIAL"}]
-    if len(practical) > MAX_PRACTICAL_PER_DAY:
-        raise RuntimeError("Limite complessivo guide/tutorial superato.")
+    if len(practical) > MAX_PRACTICAL_PER_DAY or sum(d.get("editorial_kind") == "GUIDA" for d in practical) > MAX_GUIDES_PER_DAY or sum(d.get("editorial_kind") == "TUTORIAL" for d in practical) > MAX_TUTORIALS_PER_DAY:
+        raise RuntimeError("Quote guide/tutorial superate.")
+    if sum(d.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for d in daily_drafts) > MAX_NEWS_PER_DAY:
+        raise RuntimeError("Quota notizie superata.")
     if stopped_reason:
         warnings = [stopped_reason]
     else:
@@ -922,6 +944,9 @@ def main() -> int:
         "daily_generated": len(daily_drafts),
         "reserve_requested": len(reserve_items),
         "reserve_generated": len(reserve_drafts),
+        "daily_news": sum(d.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for d in daily_drafts),
+        "daily_guides": sum(d.get("editorial_kind") == "GUIDA" for d in daily_drafts),
+        "daily_tutorials": sum(d.get("editorial_kind") == "TUTORIAL" for d in daily_drafts),
         "errors": errors,
         "drafts_with_quality_warnings": sum(
             1 for draft in drafts if draft.get("quality_warnings")

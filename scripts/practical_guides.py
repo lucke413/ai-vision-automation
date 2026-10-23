@@ -22,9 +22,9 @@ from requests.auth import HTTPBasicAuth
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CANDIDATES_PATH = BASE_DIR / "data" / "ai_candidates.json"
-VERSION = "1.4"
-MAX_INJECTED = 2
-MAX_GUIDES = 1
+VERSION = "1.5"
+MAX_INJECTED = 3
+MAX_GUIDES = 2
 MAX_TUTORIALS = 1
 
 # Riferimenti ufficiali. Verificare periodicamente eventuali variazioni

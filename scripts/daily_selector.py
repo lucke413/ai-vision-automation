@@ -21,15 +21,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.7"
+VERSION = "2.8"
 DAILY_LIMIT = 6
-RESERVE_LIMIT = 3
+RESERVE_LIMIT = 6
 MAX_OFFERS = 1
-MAX_GUIDES_PER_DAY = 1
+MAX_NEWS_PER_DAY = 3
+MAX_GUIDES_PER_DAY = 2
 MAX_TUTORIALS_PER_DAY = 1
-MAX_PRACTICAL_PER_DAY = 1
-# Modalità qualità AdSense: fino a sei uscite al giorno, con al massimo una guida/tutorial.
-# Il volume non forza la selezione: restano attivi i gate su qualità, offerte e varietà.
+MAX_PRACTICAL_PER_DAY = 3
+# Mix editoriale: massimo tre notizie, due guide e un tutorial.
+# Le quote sono tetti indipendenti, non obiettivi di pubblicazione obbligatori.
 # Espansione graduale: al massimo un articolo di categoria nuova, mai obbligatorio.
 EXPANSION_CATEGORIES = {"Casa smart", "Accessori e postazioni"}
 MAX_EXPANSION_ARTICLES = 1
@@ -110,11 +111,11 @@ def valid_candidates(data: dict) -> list[dict]:
 
 
 def editorial_room(selected: list[dict], candidate: dict) -> bool:
-    """Limita guide e tutorial a un solo contenuto pratico al giorno."""
+    """Rispetta i tetti indipendenti: fino a 3 notizie, 2 guide e 1 tutorial."""
     kind = candidate.get("editorial_kind")
     limits = {"GUIDA": MAX_GUIDES_PER_DAY, "TUTORIAL": MAX_TUTORIALS_PER_DAY}
     if kind not in limits:
-        return True
+        return sum(x.get("editorial_kind") not in limits for x in selected) < MAX_NEWS_PER_DAY
     if sum(x.get("editorial_kind") in {"GUIDA", "TUTORIAL"} for x in selected) >= MAX_PRACTICAL_PER_DAY:
         return False
     return sum(x.get("editorial_kind") == kind for x in selected) < limits[kind]
@@ -128,10 +129,9 @@ def is_offer(item: dict) -> bool:
 
 
 def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Modalità qualità: fino a sei articoli, con al massimo un contenuto pratico.
+    """Fino a sei articoli: tre notizie, due guide e un tutorial al massimo.
 
-    Guide e tutorial non sono obbligatori: gli slot restano disponibili per
-    notizie con i gate editoriali invariati e non si forza mai il volume.
+    Ogni formato ha i propri slot; se manca materiale valido, si pubblica meno.
     """
     if not items:
         return [], []
@@ -159,24 +159,21 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
         offers += int(is_offer(item))
         return True
 
-    practical = [x for x in items if x.get("editorial_kind") in {"GUIDA", "TUTORIAL"}]
+    # Conserva gli slot delle notizie: non riempirli con altre guide.
+    guides = [x for x in items if x.get("editorial_kind") == "GUIDA"]
+    tutorials = [x for x in items if x.get("editorial_kind") == "TUTORIAL"]
     news = [x for x in items if x.get("editorial_kind") not in {"GUIDA", "TUTORIAL"}]
 
-    # Una sola rubrica pratica per giornata: scegli la migliore già ordinata
-    # per punteggio ed evita raffiche di guide/template nello stesso giorno.
-    for item in practical:
-        if add(item):
-            break
-
-    # La cronaca tecnologica resta centrale; prima privilegiamo categorie diverse.
+    # Scelta prima delle notizie valide, privilegiando argomenti diversi.
     for item in news:
-        if len(selected) >= DAILY_LIMIT:
-            break
         if str(item.get("category") or "Tecnologia") not in categories:
             add(item)
     for item in news:
-        if len(selected) >= DAILY_LIMIT:
-            break
+        add(item)
+
+    for item in guides:
+        add(item)
+    for item in tutorials:
         add(item)
 
     # Never replace failed news with an extra tutorial or guide.
@@ -220,6 +217,9 @@ def main() -> int:
         "reserve_count": len(reserves),
         "category_distribution": dict(Counter(x.get("category", "Tecnologia") for x in selected)),
         "offer_count": sum(1 for x in selected if is_offer(x)),
+        "news_count": sum(x.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for x in selected),
+        "guide_count": sum(x.get("editorial_kind") == "GUIDA" for x in selected),
+        "tutorial_count": sum(x.get("editorial_kind") == "TUTORIAL" for x in selected),
         "items": selected,
         "reserve_items": reserves,
     }
@@ -233,6 +233,7 @@ def main() -> int:
     print(f"Articoli selezionati: {len(selected)}/{DAILY_LIMIT}")
     print(f"Articoli di scorta: {len(reserves)}/{RESERVE_LIMIT}")
     print(f"Offerte selezionate: {output['offer_count']}")
+    print(f"Distribuzione: {output['news_count']} notizie, {output['guide_count']} guide, {output['tutorial_count']} tutorial.")
     for index, item in enumerate(selected, 1):
         print(f"{index}. [{item.get('final_score', 0)}] [{item.get('category', 'Tecnologia')}] {item['title']}")
     return 0
