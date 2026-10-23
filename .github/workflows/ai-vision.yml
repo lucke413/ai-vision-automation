@@ -2,6 +2,12 @@ name: AI Vision Automation
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_live:
+        description: 'Pubblica davvero su WordPress (se non selezionato: simulazione)'
+        required: false
+        type: boolean
+        default: false
   pull_request:
     branches: [main]
     paths:
@@ -266,7 +272,7 @@ jobs:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-          WP_DRY_RUN: ${{ vars.WP_PUBLISH_MODE != 'live' && 'true' || 'false' }}
+          WP_DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && !inputs.publish_live) || vars.WP_PUBLISH_MODE != 'live') && 'true' || 'false' }}
           WP_TIMEZONE: Europe/Rome
           WP_SLOT_TIMES: "08:00,10:30,14:00,16:30,18:30,20:30"
         run: python scripts/wp_publisher.py
