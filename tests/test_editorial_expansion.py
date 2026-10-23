@@ -101,6 +101,78 @@ class EditorialExpansionTests(unittest.TestCase):
         with self.assertRaises(generator.GeneratorFatalError):
             generator.validate_editorial_body("Durante il nostro ascolto abbiamo notato bassi molto presenti.")
 
+    def test_guide_word_bozza_is_not_an_unsupported_claim(self):
+        example = "Prepara una bozza di email e controlla il destinatario."
+        generator.validate_editorial_body(example)
+        self.assertFalse(any(p.search(example) for p in publisher.PUBLIC_FORBIDDEN_PATTERNS))
+        with self.assertRaises(generator.GeneratorFatalError):
+            generator.validate_editorial_body("Abbiamo provato questo strumento per voi.")
+
+    def test_body_only_repair_keeps_original_metadata(self):
+        source = {
+            "article_id": "fixed-id", "title": "Esempio guida email per principianti",
+            "description": " ".join(["Guida pratica originale"] * 70),
+            "url": "https://chatgpt.com/", "editorial_kind": "GUIDA",
+            "topic_slug": "email-esempio"
+        }
+        original = {
+            "title": "Come preparare una email chiara usando l'AI",
+            "excerpt": "Come organizzare una richiesta utile.",
+            "body_markdown": " ".join(["testo"] * 410),
+            "seo_title": "Email con AI", "seo_description": "Come preparare email",
+            "slug": "email-esempio", "tags": ["AI"],
+            "fact_check_notes": []
+        }
+        repaired = {"body_markdown": " ".join(["passaggio"] * 625)}
+        with patch.object(generator, "enrich_source", side_effect=lambda x: x), patch.object(
+            generator, "call_gemini", side_effect=[original, repaired]
+        ) as call:
+            draft = generator.generate_valid_draft(source, "fake-key")
+        self.assertEqual(draft["body_word_count"], 625)
+        self.assertEqual(draft["slug"], original["slug"])
+        self.assertEqual(draft["title"], original["title"])
+        self.assertEqual(call.call_count, 2)
+        self.assertIn("SOLO con JSON", call.call_args.args[0])
+
+    def test_invalid_repair_still_fails_quality_gate(self):
+        source = {
+            "article_id": "fixed-id", "title": "Guida con fonte sufficiente",
+            "description": " ".join(["Metodo pratico affidabile"] * 70),
+            "url": "https://chatgpt.com/", "editorial_kind": "GUIDA",
+            "topic_slug": "guida-prova"
+        }
+        raw = {
+            "title": "Come organizzare contenuti con una guida utile",
+            "excerpt": "Esempio", "body_markdown": " ".join(["testo"] * 420),
+            "seo_title": "Guida", "seo_description": "Passaggi",
+            "slug": "guida-prova", "tags": ["AI"], "fact_check_notes": []
+        }
+        with patch.object(generator, "enrich_source", side_effect=lambda x: x), patch.object(
+            generator, "call_gemini",
+            side_effect=[raw, {"body_markdown": " ".join(["breve"] * 430)},
+                         {"body_markdown": " ".join(["corto"] * 440)}]
+        ):
+            with self.assertRaises(generator.GeneratorFatalError):
+                generator.generate_valid_draft(source, "fake-key")
+
+    def test_reserves_prefer_noncommercial_news(self):
+        candidates = [
+            {**item(0, "Gaming", "NEWS"), "final_score": 110},
+            {**item(1, "Offerte & Prezzi", "OFFERTA"), "final_score": 105},
+        ]
+        candidates.extend(
+            {**item(10+i, "Offerte & Prezzi", "OFFERTA"), "final_score": 100-i}
+            for i in range(8)
+        )
+        candidates.extend(
+            {**item(30+i, "Sicurezza", "NEWS"), "final_score": 70-i}
+            for i in range(8)
+        )
+        chosen, reserves = selector.select_daily(candidates)
+        self.assertEqual(len(reserves), 6)
+        self.assertTrue(all(not selector.is_offer(x) for x in reserves))
+        self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
+
     def test_evidence_gate_counts_source_material(self):
         weak = {"title": "Titolo breve", "description": "pochi dati", "source_text": ""}
         rich = {"title": "Titolo", "description": " ".join(["dato"] * 150), "source_text": ""}
