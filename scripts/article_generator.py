@@ -791,30 +791,29 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
             f"Fonte troppo povera ({evidence_words} parole utili): articolo escluso per evitare rielaborazioni senza valore aggiunto."
         )
     raw = call_gemini(build_prompt(item), api_key)
-
+    reason = ""
     for attempt in range(MAX_REPAIR_ATTEMPTS + 1):
         try:
-            draft = normalize_draft(raw, item)
-            if (
-                draft["body_word_count"] >= QUALITY_MIN_BODY_WORDS
-                or attempt >= MAX_REPAIR_ATTEMPTS
-            ):
-                return draft
-
-            print(
-                f"    Bozza breve ({draft['body_word_count']} parole); "
-                "espansione automatica."
-            )
+            return normalize_draft(raw, item)
         except GeneratorFatalError as exc:
-            message = str(exc)
-            if "URL originale non valido" in message or attempt >= MAX_REPAIR_ATTEMPTS:
+            reason = str(exc)
+            if "URL originale non valido" in reason or attempt >= MAX_REPAIR_ATTEMPTS:
                 raise
-            print(f"    Bozza non conforme ({message}); riscrittura automatica.")
-
-        time.sleep(2.0)
-        raw = call_gemini(build_prompt(item, previous=raw), api_key)
-
-    raise GeneratorFatalError("Generazione bozza non completata.")
+            print(f"    Bozza non conforme ({reason}); riparazione mirata.")
+            if isinstance(raw, dict) and str(raw.get("body_markdown") or "").strip() and {
+                "title", "excerpt", "seo_title", "seo_description", "slug",
+                "tags", "fact_check_notes",
+            }.issubset(raw):
+                try:
+                    raw = repair_body(raw, item, api_key, reason)
+                    continue
+                except GeneratorRateLimitError:
+                    raise
+                except GeneratorFatalError as repair_exc:
+                    print(f"    Recupero del solo corpo non riuscito: {repair_exc}")
+            time.sleep(2.0)
+            raw = call_gemini(build_prompt(item, previous=raw), api_key)
+    raise GeneratorFatalError(f"Bozza non conforme: {reason}")
 
 
 def _editorial_tokens(value: str) -> set[str]:
