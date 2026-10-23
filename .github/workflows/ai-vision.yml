@@ -2,6 +2,12 @@ name: AI Vision Automation
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/ai-vision.yml'
   schedule:
     - cron: '17 11 * * *'
       timezone: Europe/Rome
@@ -15,7 +21,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  editorial-preflight:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout proposed code (no WordPress credentials)
+        uses: actions/checkout@v5
+      - name: Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies for isolated tests
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+      - name: Compile pipeline code
+        run: python -m compileall -q scripts tests
+      - name: Regression tests without external publishing
+        env:
+          WP_DRY_RUN: "true"
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
   ai-pipeline:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -81,10 +114,10 @@ jobs:
           expected = {
               "scripts/rss_collector.py": "2.3.3",
               "scripts/ai_filter.py": "3.1.1",
-              "scripts/daily_selector.py": "2.7",
-              "scripts/article_generator.py": "3.7",
-              "scripts/wp_publisher.py": "2.2",
-              "scripts/practical_guides.py": "1.4",
+              "scripts/daily_selector.py": "2.8",
+              "scripts/article_generator.py": "3.8",
+              "scripts/wp_publisher.py": "2.3",
+              "scripts/practical_guides.py": "1.5",
           }
 
           for filename, wanted in expected.items():
@@ -183,7 +216,7 @@ jobs:
           if not all(ids) or len(ids) != len(set(ids)):
               raise SystemExit("ERRORE: identificativi articolo mancanti o duplicati.")
           reserves = data.get("reserve_items", [])
-          if not isinstance(reserves, list) or len(reserves) > 3:
+          if not isinstance(reserves, list) or len(reserves) > 6:
               raise SystemExit("ERRORE: coda di riserva non valida.")
           reserve_ids = [item.get("article_id") for item in reserves]
           if any(item_id in ids for item_id in reserve_ids) or len(reserve_ids) != len(set(reserve_ids)):
@@ -205,7 +238,7 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/article_drafts.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 9:
+          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 12:
               raise SystemExit("ERRORE: output bozze non valido.")
           ids = [item.get("draft_id") for item in items]
           if not all(ids) or len(ids) != len(set(ids)):
@@ -251,6 +284,8 @@ jobs:
           print(f"Publisher status: {data.get('status')}")
           print(f"Articoli richiesti: {data.get('requested', 0)}")
           print(f"Articoli elaborati: {data.get('completed', 0)}")
+          print(f"Programmati su WP: {data.get('scheduled', 0)}; gia esistenti: {data.get('already_existing', 0)}")
+          print("Online verificati: 0 (il report non esegue una verifica HTTP pubblica dei post).")
           for error in data.get("errors", []):
               print(f"AVVISO publisher: {error}")
           PY
