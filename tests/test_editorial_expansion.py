@@ -44,7 +44,7 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(len(chosen), 3)
         self.assertEqual(sum(x['category'] in selector.EXPANSION_CATEGORIES for x in chosen), 1)
         self.assertIn('AI', {x['category'] for x in chosen})
-        self.assertLessEqual(len(reserves), 3)
+        self.assertLessEqual(len(reserves), selector.RESERVE_LIMIT)
 
     def test_no_forced_new_topic_and_one_offer(self):
         candidates = [item(i, cat, 'OFFERTA' if i < 2 else 'NEWS') for i, cat in enumerate(
@@ -128,7 +128,7 @@ class EditorialExpansionTests(unittest.TestCase):
             "2026-10-17", lambda slug: False,
         )
         self.assertEqual(result["practical_guide_candidates"], 3)
-        self.assertEqual(len({c["article_id"] for c in result["items"]}), 2)
+        self.assertEqual(len({c["article_id"] for c in result["items"]}), 3)
         self.assertEqual(sum(x["editorial_kind"] == "GUIDA" for x in result["items"]), 2)
         self.assertEqual(sum(x["editorial_kind"] == "TUTORIAL" for x in result["items"]), 1)
         for candidate in result["items"]:
