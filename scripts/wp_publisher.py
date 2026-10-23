@@ -77,7 +77,7 @@ SOURCE_CATEGORY_MAP = {
 }
 
 VALID_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-MIN_PUBLISH_WORDS = 400
+MIN_PUBLISH_WORDS = 500
 PUBLIC_FORBIDDEN_PATTERNS = (
     re.compile(r"\bprima della pubblicazione\b", re.IGNORECASE),
     re.compile(r"\b(?:da|dati? da) verificare\b", re.IGNORECASE),
