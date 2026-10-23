@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.8"
+VERSION = "3.9"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 6
@@ -218,7 +218,7 @@ UNSUPPORTED_CLAIM_PATTERNS = (
     re.compile(r"\b(?:da|dati? da) verificare\b", re.IGNORECASE),
     re.compile(r"\b(?:secondo|stando a|come riportato da) (?:la )?fonte\b", re.IGNORECASE),
     re.compile(r"\bla fonte (?:riporta|segnala|fornita|indica)\b", re.IGNORECASE),
-    re.compile(r"\b(?:bozza|fact[_ -]?check|istruzioni (?:interne|editoriali))\b", re.IGNORECASE),
+    re.compile(r"\b(?:questa bozza (?:editoriale|generata)|bozza interna|fact[_ -]?check|istruzioni (?:interne|editoriali))\b", re.IGNORECASE),
 )
 
 
@@ -515,7 +515,7 @@ Restituisci esclusivamente JSON con i campi:
  "affiliate_candidate": false,
  "needs_review": true
 }}
-{("Riscrivi perché la bozza precedente era troppo breve o non conforme; non inventare dettagli. Bozza: " + json.dumps(previous, ensure_ascii=False)) if previous else ""}
+{("Sviluppa la versione precedente in 620-780 parole, rimuovi false esperienze dirette e non inventare dati. Versione precedente: " + json.dumps(previous, ensure_ascii=False)) if previous else ""}
 """
     title = str(item.get("title") or "")[:500]
     description = str(item.get("description") or "")[:5000]
