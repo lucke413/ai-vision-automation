@@ -30,7 +30,9 @@ class RecoveryTests(unittest.TestCase):
                     "<p>" + "Blender su Android per tablet nel 2027 avrà novità per la grafica digitale. " * 5 + "</p>")
         with tempfile.TemporaryDirectory() as folder, patch.object(
             recovery, "archive", return_value=([offer, news], {"complete": True})
-        ), patch.object(recovery, "fetch_html_meta", return_value=({"description": ""}, None)), patch.object(
+        ), patch.object(recovery, "inspect_all_metadata", return_value={
+            4: ({"description": ""}, None), 5: ({"description": ""}, None)
+        }), patch.object(
             recovery, "apply_meta", side_effect=AssertionError("should never write")
         ):
             output = Path(folder) / "report.json"
@@ -90,6 +92,63 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(recovery.apply_meta(session, row, []),
                              "skipped_description_already_present")
         session.post.assert_not_called()
+
+    def test_write_is_never_attempted_for_review_only_articles(self):
+        row = {"id": 9, "url": "https://aivision.altervista.org/example-9/",
+               "modified": "2026-10-01T12:00:00", "slug": "example-9",
+               "title": "Samsung Galaxy Watch8 in offerta",
+               "category_of_review": "offerta_da_ricontrollare",
+               "meta_description_proposal": "Riassunto originale abbastanza lungo per SEO."}
+        session = MagicMock()
+        self.assertEqual(recovery.apply_meta(session, row, []),
+                         "skipped_editorial_review")
+        session.post.assert_not_called()
+
+    def test_apply_only_missing_description_and_saves_backup_before_post(self):
+        row = {"id": 7, "url": "https://aivision.altervista.org/example-7/",
+               "modified": "2026-10-01T12:00:00", "slug": "example-7",
+               "title": "Blender su Android per tablet",
+               "category_of_review": "approfondimento_con_fonti",
+               "meta_description_proposal": "Blender su Android è in sviluppo per tablet."}
+        session = MagicMock()
+        before = MagicMock()
+        before.json.return_value = {
+            "status": "publish", "link": row["url"], "slug": row["slug"],
+            "modified": row["modified"],
+            "title": {"rendered": row["title"]},
+            "aivision_seo": {"seo_title": "Titolo conservato",
+                             "focus_keyphrase": "Blender tablet", "seo_description": ""}
+        }
+        after = MagicMock()
+        after.json.return_value = {"aivision_seo": {
+            "seo_title": "Titolo conservato", "focus_keyphrase": "Blender tablet",
+            "seo_description": row["meta_description_proposal"]
+        }}
+        session.post.return_value = after
+        with patch.object(recovery, "get", return_value=before), patch.object(
+            recovery, "_save_backup"
+        ) as backup:
+            self.assertEqual(recovery.apply_meta(session, row, []), "updated")
+        backup.assert_called_once()
+        self.assertEqual(session.post.call_args.kwargs["json"],
+                         {"aivision_seo": {"seo_description": row["meta_description_proposal"]}})
+
+    def test_missing_meta_in_long_post_is_not_ignored(self):
+        short = post(1, "Blender su Android tablet 2027",
+                     "<p>Blender su Android per tablet nel 2027 avrà novità per la grafica digitale. " * 2 + "</p>")
+        long = post(2, "Notizie tecnologiche dettagliate di ottobre 2026",
+                    "<p>Notizie tecnologiche dettagliate di ottobre 2026 spiegate chiaramente. " * 90 + "</p>")
+        with tempfile.TemporaryDirectory() as folder, patch.object(
+            recovery, "archive", return_value=([short, long], {"complete": True})
+        ), patch.object(recovery, "inspect_all_metadata", return_value={
+            1: ({"description": "Esistente"}, None),
+            2: ({"description": ""}, None)
+        }):
+            result = Path(folder) / "report.json"
+            self.assertEqual(recovery.main(["--output", str(result)]), 0)
+            data = json.loads(result.read_text())
+        self.assertEqual(data["meta_missing_outside_short_posts"], 1)
+        self.assertEqual(data["meta_missing_count"], 1)
 
 
 if __name__ == "__main__":
