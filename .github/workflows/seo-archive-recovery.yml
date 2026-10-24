@@ -8,6 +8,10 @@ on:
         type: boolean
         default: true
         required: false
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/seo-archive-recovery.yml'
   schedule:
     - cron: '25 6 * * *'
       timezone: Europe/Rome
