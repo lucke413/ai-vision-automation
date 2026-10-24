@@ -79,13 +79,16 @@ class RecoveryTests(unittest.TestCase):
 
     def test_apply_skips_changed_post_and_preserves_existing(self):
         row = {"id": 7, "url": "https://aivision.altervista.org/example-7/",
-               "modified": "2026-10-01T12:00:00",
+               "modified": "2026-10-01T12:00:00", "slug": "example-7",
+               "title": "Blender su Android per tablet",
+               "category_of_review": "approfondimento_con_fonti",
                "meta_description_proposal": "A long summary of a product article"}
         session = MagicMock()
         response = MagicMock()
         response.status_code = 200
         response.json.return_value = {
             "status": "publish", "link": row["url"], "modified": row["modified"],
+            "slug": row["slug"], "title": {"rendered": row["title"]},
             "aivision_seo": {"seo_title": "Existing title", "seo_description": "Already set"}
         }
         with patch.object(recovery, "get", return_value=response):
