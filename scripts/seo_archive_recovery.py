@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recupero SEO archivio AIVision: analisi completa e metadati opt-in.
+"""Recupero SEO archivio AIVision: analisi completa e metadati verificati.
 
 Default: SOLA LETTURA, nessuna variazione agli articoli.
 La modalità --apply-meta può compilare SOLO meta description già assenti,
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import concurrent.futures
 import datetime as dt
 import html
 import json
@@ -28,6 +29,8 @@ OUTPUT_FILE = Path(__file__).resolve().parents[1] / "data" / "seo_archive_recove
 MAX_ARCHIVE = 1000
 MAX_SHORT = 300
 MAX_APPLY = 6
+MAX_META_SCAN_WORKERS = 4
+BACKUP_FILE = Path(__file__).resolve().parents[1] / "data" / "seo_archive_backups.json"
 TIMEOUT = (5, 15)
 UA = "AIVision-SEO-Archive-Recovery/1.0 (manual read-only by default)"
 STOPWORDS = {
@@ -213,36 +216,66 @@ def proposal(post: dict, all_posts: list[dict]) -> dict:
     }
 
 
+def _save_backup(backups: list[dict]) -> None:
+    """Salva snapshot sul disco PRIMA di ogni possibile modifica WP."""
+    BACKUP_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = BACKUP_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps({
+        "site": BASE_URL,
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "type": "pre_edit_seo_fields_only",
+        "posts": backups,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(BACKUP_FILE)
+
+
 def apply_meta(session: requests.Session, row: dict, backups: list[dict]) -> str:
-    """Aggiorna SOLO aivision_seo preservando titoli, contenuto e altre proprietà."""
+    """Scrive SOLTANTO la meta description assente, mai altri campi.
+
+    Una lettura REST autenticata previene modifiche su post cambiati o su
+    post senza SEO Bridge. Lo snapshot è persistito prima del POST.
+    """
     post_id = int(row["id"])
+    if not row.get("meta_description_proposal"):
+        return "skipped_no_safe_proposal"
+    if row.get("category_of_review") in {
+        "offerta_da_ricontrollare", "esperienza_o_recensione_da_attribuire",
+    }:
+        return "skipped_editorial_review"
     target = urljoin(BASE_URL + "/", f"wp-json/wp/v2/posts/{post_id}")
     response = get(session, target, params={"context": "edit"})
     response.raise_for_status()
     current = response.json()
-    if (current.get("status") != "publish"
-            or current.get("link") != row["url"]
-            or current.get("modified") != row["modified"]):
+    if (
+        current.get("status") != "publish"
+        or current.get("link") != row["url"]
+        or current.get("slug") != row["slug"]
+        or current.get("modified") != row["modified"]
+        or plain((current.get("title") or {}).get("rendered") or "") != row["title"]
+    ):
         return "skipped_post_changed"
     seo = current.get("aivision_seo")
     if not isinstance(seo, dict):
         return "skipped_seo_bridge_unavailable"
     if str(seo.get("seo_description") or "").strip():
         return "skipped_description_already_present"
-    # Snapshot del solo payload SEO preesistente prima di qualsiasi POST.
     backups.append({
-        "post_id": post_id, "url": row["url"], "previous_aivision_seo": seo,
+        "post_id": post_id, "url": row["url"], "slug": row["slug"],
+        "previous_aivision_seo": dict(seo),
         "previous_modified": current.get("modified"),
     })
-    new_fields = dict(seo)
-    new_fields["seo_description"] = row["meta_description_proposal"]
+    _save_backup(backups)
+    description = row["meta_description_proposal"]
     result = session.post(
         target, params={"context": "edit"},
-        json={"aivision_seo": new_fields}, timeout=TIMEOUT, allow_redirects=False,
+        # Sending the entire SEO object can erase other fields on the bridge:
+        # post only the missing description.
+        json={"aivision_seo": {"seo_description": description}},
+        timeout=TIMEOUT, allow_redirects=False,
     )
     result.raise_for_status()
     saved = result.json().get("aivision_seo")
-    if not isinstance(saved, dict) or saved.get("seo_description") != new_fields["seo_description"]:
+    if not isinstance(saved, dict) or saved.get("seo_description") != description:
         return "write_unconfirmed_check_wordpress"
     for key in ("seo_title", "focus_keyphrase"):
         if str(saved.get(key) or "") != str(seo.get(key) or ""):
@@ -250,10 +283,27 @@ def apply_meta(session: requests.Session, row: dict, backups: list[dict]) -> str
     return "updated"
 
 
+def _live_meta_for_row(row: dict) -> tuple[int, dict, str | None]:
+    """Una sessione distinta per ogni thread evita condivisione di stato HTTP."""
+    with requests.Session() as session:
+        session.headers["User-Agent"] = UA
+        meta, error = fetch_html_meta(session, row)
+        return int(row["id"]), meta, error
+
+
+def inspect_all_metadata(rows: list[dict]) -> dict[int, tuple[dict, str | None]]:
+    """Verifica tutte le descrizioni, non solo gli articoli cortissimi."""
+    found: dict[int, tuple[dict, str | None]] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_META_SCAN_WORKERS) as pool:
+        for post_id, meta, error in pool.map(_live_meta_for_row, rows):
+            found[post_id] = (meta, error)
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = argparse.ArgumentParser(description=__doc__)
     arguments.add_argument("--apply-meta", action="store_true",
-                           help="Salva metadescrizioni già assenti, solo su esplicita richiesta")
+                           help="Aggiorna soltanto metadescrizioni mancanti già documentate")
     arguments.add_argument("--limit", type=int, default=MAX_APPLY)
     arguments.add_argument("--output", type=Path, default=OUTPUT_FILE)
     opts = arguments.parse_args(argv)
@@ -261,12 +311,16 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("Limite di aggiornamenti fuori scala (max 6).")
     if opts.apply_meta and os.environ.get("SEO_ARCHIVE_ALLOW_WRITES") != "YES":
         raise PermissionError("Per modificare metadati serve SEO_ARCHIVE_ALLOW_WRITES=YES.")
+    if BACKUP_FILE.is_file():
+        BACKUP_FILE.unlink()
     session = requests.Session()
     session.headers["User-Agent"] = UA
     if opts.apply_meta:
         username = os.environ.get("WP_USERNAME", "").strip()
         password = os.environ.get("WP_APP_PASSWORD", "").strip()
         configured_base = os.environ.get("WP_BASE_URL", "").strip().rstrip("/")
+        if configured_base.endswith("/wp-json"):
+            configured_base = configured_base[:-len("/wp-json")]
         if configured_base != BASE_URL or not username or not password:
             raise ValueError("Credenziali WordPress o dominio non configurati in modo sicuro.")
         session.auth = HTTPBasicAuth(username, password)
@@ -275,67 +329,109 @@ def main(argv: list[str] | None = None) -> int:
     if not diagnostic["complete"]:
         raise RuntimeError("Inventario WordPress incompleto: nessun intervento consentito.")
     all_records = [analyze_post(post) for post in posts]
-    originals = [post for post, record in zip(posts, all_records)
-                 if record["words"] < MAX_SHORT]
-    # Prima i contenuti più brevi, non per forza quelli più recenti.
-    originals.sort(key=lambda post: analyze_post(post)["words"])
-    records = [proposal(post, all_records) for post in originals]
+    short_posts = [post for post, record in zip(posts, all_records)
+                   if record["words"] < MAX_SHORT]
+    short_posts.sort(key=lambda post: analyze_post(post)["words"])
+    short_records = [proposal(post, all_records) for post in short_posts]
+
+    # Tutte le pagine devono essere controllate: anche i post lunghi possono
+    # mancare di metadescrizione. Si usa una lettura parallela LIMITATA.
+    scan_rows = [{
+        "id": post["id"], "url": post.get("link"), "title": plain(
+            (post.get("title") or {}).get("rendered") or ""
+        )
+    } for post in posts]
+    checked = inspect_all_metadata(scan_rows)
+    missing: list[dict] = []
+    http_errors = []
+    short_ids = {x["id"] for x in short_records}
+    records_by_id = {x["id"]: x for x in short_records}
+    for post in posts:
+        post_id = int(post["id"])
+        meta, error = checked.get(post_id, ({}, "Pagina non verificata"))
+        if error:
+            http_errors.append({"post_id": post_id, "error": error})
+            if post_id in short_ids:
+                records_by_id[post_id]["metadata_status"] = "html_unavailable"
+            continue
+        if meta.get("robots", "").lower().find("noindex") >= 0:
+            # Non tentare di cambiare plugin SEO, robots o visibilità in automatico.
+            continue
+        if not meta.get("description"):
+            item = records_by_id.get(post_id) or proposal(post, all_records)
+            item["current_meta_description"] = ""
+            item["metadata_status"] = ("proposal_only" if item["meta_description_proposal"]
+                                       else "requires_editorial_review")
+            missing.append(item)
+        elif post_id in short_ids:
+            records_by_id[post_id]["current_meta_description"] = meta["description"]
+            records_by_id[post_id]["metadata_status"] = "already_present"
+
+    # I post con meno parole hanno precedenza: massimo sei metadati per run,
+    # ma le OFFERTE obsolete e le recensioni non verificate restano da valutare.
+    missing.sort(key=lambda row: (row["words"], row["id"]))
     backups: list[dict] = []
     applied = 0
-    for row in records:
-        meta, error = fetch_html_meta(session, row)
-        if error:
-            row["metadata_status"] = "html_unavailable"
-            row["metadata_error"] = error
-            continue
-        row["current_meta_description"] = meta["description"]
-        if meta["description"]:
-            row["metadata_status"] = "already_present"
-            continue
+    errors: list[dict] = []
+    for row in missing:
         if not row["meta_description_proposal"]:
+            continue
+        if row["category_of_review"] in {
+            "offerta_da_ricontrollare", "esperienza_o_recensione_da_attribuire",
+        }:
             row["metadata_status"] = "requires_editorial_review"
             continue
-        row["metadata_status"] = "proposal_only"
-        if opts.apply_meta and applied < opts.limit:
-            try:
-                status = apply_meta(session, row, backups)
-                row["metadata_status"] = status
-                if status == "updated":
-                    applied += 1
-            except (requests.RequestException, ValueError, KeyError) as exc:
-                row["metadata_status"] = "update_error"
-                row["metadata_error"] = f"{type(exc).__name__}: {str(exc)[:150]}"
-                # Stop on first failure: prevent a batch of uncertain writes.
+        if not opts.apply_meta or applied >= opts.limit:
+            continue
+        try:
+            status = apply_meta(session, row, backups)
+            row["metadata_status"] = status
+            if status == "updated":
+                applied += 1
+            if status.startswith("write_unconfirmed"):
+                errors.append({"id": row["id"], "error": status})
                 break
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            row["metadata_status"] = "update_error"
+            row["metadata_error"] = f"{type(exc).__name__}: {str(exc)[:150]}"
+            errors.append({"id": row["id"], "error": row["metadata_error"]})
+            # Stop on uncertainty; never continue a potentially corrupt batch.
+            break
 
-    counts = collections.Counter(row["category_of_review"] for row in records)
+    counts = collections.Counter(row["category_of_review"] for row in short_records)
     result = {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "site": BASE_URL, "mode": "meta_updates" if opts.apply_meta else "dry_run",
         "complete_inventory": True, "total_public_posts": len(posts),
-        "short_posts": len(records), "short_threshold_words": MAX_SHORT,
+        "pages_html_checked": len(checked), "pages_html_errors": http_errors[:100],
+        "short_posts": len(short_records), "short_threshold_words": MAX_SHORT,
         "review_categories": dict(counts), "meta_updates_confirmed": applied,
-        "missing_meta_proposals": sum(x["metadata_status"] == "proposal_only" for x in records),
+        "meta_missing_count": len(missing),
+        "meta_missing_outside_short_posts": sum(x["id"] not in short_ids for x in missing),
+        "missing_meta_proposals": sum(x["metadata_status"] == "proposal_only" for x in missing),
         "meta_editorial_review_needed": sum(
-            x["metadata_status"] == "requires_editorial_review" for x in records),
-        "backups": backups, "posts": records,
+            x["metadata_status"] == "requires_editorial_review" for x in missing),
+        "backups": backups, "errors": errors,
+        "missing_meta_posts": missing,
+        "posts": short_records,
         "not_done": [
-            "Non si espandono testi, non si fanno redirect e non si rimuovono post.",
-            "Le offerte datate richiedono verifica prezzi e condizioni prima di ogni ampliamento.",
-            "Il numero di parole non rappresenta un requisito SEO Google.",
-            "Controllare il sito live e Search Console dopo qualunque aggiornamento.",
+            "Non si allungano automaticamente articoli né si cambiano titoli/URL.",
+            "Le offerte scadute e le recensioni richiedono fonti prima di modificare i fatti.",
+            "Google non stabilisce un minimo di parole SEO: nessun testo riempitivo.",
+            "Search Console è necessaria per verificare l'indicizzazione reale.",
         ],
     }
     opts.output.parent.mkdir(parents=True, exist_ok=True)
     opts.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"SEO ARCHIVIO: {len(posts)} articoli, {len(records)} sotto {MAX_SHORT} parole.")
+    print(f"SEO ARCHIVIO: {len(posts)} articoli; {len(short_records)} sotto {MAX_SHORT} parole.")
     print("Raggruppamento:", dict(counts))
-    print("Metadati aggiornati:", applied)
-    for row in records:
+    print(f"Pagine HTML: {len(checked)}, errori: {len(http_errors)}")
+    print(f"Metadescrizioni mancanti: {len(missing)}; aggiornate: {applied}")
+    for row in missing:
         print(f"  [{row['id']}] {row['words']} parole | {row['metadata_status']} | "
               f"{row['category_of_review']} | {row['title'][:85]}")
     print("Report:", opts.output)
-    return 0
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

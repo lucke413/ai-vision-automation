@@ -2,9 +2,16 @@ name: AIVision Full SEO Audit
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '45 7 * * 0'
+      timezone: Europe/Rome
 
 permissions:
   contents: read
+
+concurrency:
+  group: ai-vision-full-seo-audit
+  cancel-in-progress: false
 
 jobs:
   seo-audit:
@@ -27,4 +34,4 @@ jobs:
         with:
           name: aivision-full-seo-audit
           path: data/seo_full_audit.json
-          retention-days: 21
+          retention-days: 90
