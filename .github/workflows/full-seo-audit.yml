@@ -1,0 +1,30 @@
+name: AIVision Full SEO Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seo-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Scarica codice
+        uses: actions/checkout@v5
+      - name: Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Dipendenze per controllo SEO
+        run: python -m pip install requests
+      - name: Analisi SEO completa pubblica - nessuna pubblicazione
+        run: python scripts/seo_site_audit.py
+      - name: Carica report SEO anche in caso di problemi
+        if: ${{ always() && hashFiles('data/seo_full_audit.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-full-seo-audit
+          path: data/seo_full_audit.json
+          retention-days: 21
