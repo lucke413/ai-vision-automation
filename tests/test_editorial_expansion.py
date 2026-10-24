@@ -373,6 +373,70 @@ class EditorialExpansionTests(unittest.TestCase):
             publisher.publish_one(draft, datetime.now(timezone.utc), client, None)
         client.create_post.assert_not_called()
 
+    def test_icona_only_from_explicit_approved_catalog(self):
+        import icona_affiliates as affiliates
+        import os
+        rows = [
+            {"product_name": "Samsung Galaxy A55 5G", "url": "https://www.amazon.it/dp/B0EXAMPLE1?tag=example-21",
+             "source": "altervista_icona", "confirmed": True},
+            {"product_name": "Sony WH-1000XM5", "url": "https://evil.example/dp/anything",
+             "source": "altervista_icona", "confirmed": True},
+            {"product_name": "Generic item", "url": "https://www.amazon.it/dp/B0EXAMPLE2?tag=bad-21",
+             "source": "amazon_associates", "confirmed": True},
+        ]
+        with patch.dict(os.environ, {"ICONA_ENABLED": "true", "ICONA_LINKS_JSON": json.dumps(rows)}):
+            accepted = affiliates.load_catalog()
+            self.assertEqual(len(accepted), 1)
+            block, count = affiliates.affiliate_html({
+                "title": "Samsung Galaxy A55 5G: prezzo e caratteristiche",
+                "category": "Smartphone & Mobile", "story_type": "NEWS"
+            })
+            self.assertEqual(count, 1)
+            self.assertIn("rel=\"sponsored nofollow noopener noreferrer\"", block)
+            self.assertIn("Link di affiliazione IconA", block)
+            self.assertIn("Verifica prezzo e disponibilit", block)
+            self.assertNotIn("evil.example", block)
+
+    def test_icona_disabled_without_explicit_activation(self):
+        import icona_affiliates as affiliates
+        with patch.dict("os.environ", {"ICONA_ENABLED": "false", "ICONA_LINKS_JSON": "[]"}):
+            self.assertEqual(affiliates.load_catalog(), [])
+            self.assertEqual(affiliates.affiliate_html({"title": "Samsung Galaxy A55", "category": "Gaming"}), ("", 0))
+
+    def test_icona_skips_guides_and_unmatched_products(self):
+        import icona_affiliates as affiliates
+        cat = [{"product_name": "Samsung Galaxy A55 5G", "url": "https://www.amazon.it/dp/B0EXAMPLE1"}]
+        self.assertEqual(affiliates.affiliate_html({
+            "title": "Samsung Galaxy A55 5G", "category": "AI",
+            "editorial_kind": "GUIDA"
+        }, cat), ("", 0))
+        self.assertEqual(affiliates.affiliate_html({
+            "title": "Samsung Galaxy A56 5G", "category": "Smartphone & Mobile"
+        }, cat), ("", 0))
+        self.assertEqual(affiliates.affiliate_html({
+            "title": "L'intelligenza artificiale a scuola", "category": "AI"
+        }, cat), ("", 0))
+
+    def test_icona_blocks_non_https_and_insecure_urls(self):
+        import icona_affiliates as affiliates
+        invalid = ["http://www.amazon.it/dp/B0EXAMPLE1",
+                   "https://amazon.it.evil.example/dp/B0EXAMPLE1",
+                   "https://user:pass@amazon.it/dp/B0EXAMPLE1",
+                   "https://www.amazon.it/dp/B0EXAMPLE1#frag",
+                   "https://www.amazon.it/dp/B0EXAMPLE1?note=bad link"]
+        self.assertTrue(all(not affiliates._valid_url(url) for url in invalid))
+
+    def test_icona_affiliation_link_html_escaped(self):
+        import icona_affiliates as affiliates
+        row = {"product_name": "Samsung Galaxy A55 5G",
+               "url": "https://www.amazon.it/dp/B0EXAMPLE1?ref=x&tag=foo"}
+        text, count = affiliates.affiliate_html({
+            "title": "Samsung Galaxy A55 5G in offerta", "category": "Offerte & Prezzi"
+        }, [row])
+        self.assertEqual(count, 1)
+        self.assertIn("&amp;tag=foo", text)
+        self.assertNotIn("ref=x&tag=foo", text)
+
     def test_failed_news_is_not_replaced_with_additional_guides(self):
         import practical_guides
         with tempfile.TemporaryDirectory() as folder:

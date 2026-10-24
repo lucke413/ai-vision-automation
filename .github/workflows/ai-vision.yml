@@ -106,7 +106,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m pip check
-          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/practical_guides.py scripts/article_generator.py scripts/wp_publisher.py scripts/adsense_audit.py
+          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/practical_guides.py scripts/article_generator.py scripts/wp_publisher.py scripts/icona_affiliates.py scripts/adsense_audit.py
 
       - name: Verifica equilibrio editoriale
         run: python -m unittest discover -s tests -p 'test_editorial_expansion.py'
@@ -122,7 +122,7 @@ jobs:
               "scripts/ai_filter.py": "3.1.1",
               "scripts/daily_selector.py": "2.9",
               "scripts/article_generator.py": "3.9",
-              "scripts/wp_publisher.py": "2.4",
+              "scripts/wp_publisher.py": "2.5",
               "scripts/practical_guides.py": "1.5",
           }
 
@@ -275,6 +275,8 @@ jobs:
           WP_DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && !inputs.publish_live) || vars.WP_PUBLISH_MODE != 'live') && 'true' || 'false' }}
           WP_TIMEZONE: Europe/Rome
           WP_SLOT_TIMES: "08:00,10:30,14:00,16:30,18:30,20:30"
+          ICONA_ENABLED: ${{ vars.ICONA_ENABLED || 'false' }}
+          ICONA_LINKS_JSON: ${{ secrets.ICONA_LINKS_JSON }}
         run: python scripts/wp_publisher.py
 
       - name: Controlla report WordPress

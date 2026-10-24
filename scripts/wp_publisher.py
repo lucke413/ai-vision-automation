@@ -34,12 +34,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 from requests.auth import HTTPBasicAuth
 
+from icona_affiliates import affiliate_html
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.4"
+VERSION = "2.5"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -1070,10 +1072,8 @@ def publish_one(
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
         if not draft.get("example_prompt") or not draft.get("advanced_prompt") or not guide_resources(draft):
             raise PublisherError("Quality gate: guida priva di prompt o link pratici ufficiali.")
-    # Amazon Associates: predisposizione sicura. Nessun link personale viene
-    # pubblicato automaticamente su Altervista senza autorizzazione esplicita.
-    if draft.get("affiliate_candidate"):
-        print("    AFFILIAZIONE: articolo candidato; link personale non inserito (verifica autorizzazione Altervista).")
+    # Su Altervista sono consentiti esclusivamente link IconA autorizzati.
+    # Mai aggiungere tag Associates personali o URL non presenti nel catalogo.
     if not body:
         raise PublisherError("Corpo articolo vuoto.")
     word_count = len(re.findall(r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\wÀ-ÖØ-öø-ÿ]+)*\b", raw_body, flags=re.UNICODE))
@@ -1103,6 +1103,9 @@ def publish_one(
         body = guide_place_figures(body, figures)
         body += guide_prompt_blocks(draft)
     body += guide_resources(draft)
+    affiliate_block, affiliate_count = affiliate_html(draft)
+    if affiliate_block:
+        body += "\n" + affiliate_block
 
     category_name = category_for(draft)
     category = client.get_or_create_term("categories", category_name)
@@ -1183,6 +1186,7 @@ def publish_one(
         "category": category_name,
         "tags": [tag.get("name") for tag in tags],
         "image_origin": image_origin,
+        "affiliate_links": affiliate_count,
         "image_source_url": image_url or None,
         "media_id": media.get("id"),
     }
@@ -1248,6 +1252,7 @@ def main() -> int:
         "scheduled": sum(x.get("status") == "scheduled" for x in results),
         "already_existing": sum(x.get("status") == "already_exists" for x in results),
         "actually_online_verified": 0,
+        "affiliate_links_inserted": sum(x.get("affiliate_links", 0) for x in results),
         "errors": errors,
         "items": results,
     }
