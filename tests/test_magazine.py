@@ -142,3 +142,20 @@ class ExtendedLayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp,'manifest.json').write_text(json.dumps({'issue':'2026-10-25','ready_to_publish':False}))
             with self.assertRaises(ValueError):verify_bundle(tmp)
+
+class StructuredOutputTests(unittest.TestCase):
+    def test_provider_schema_and_malformed_retry(self):
+        from scripts.magazine.content import Gemini,output_schema,SCHEMA
+        client=Gemini.__new__(Gemini)
+        client.call=Mock(side_effect=[[{'text':'{"partial":'}],[{'text':'{"cover_title":"Complete"}'}]])
+        schema=output_schema(SCHEMA)
+        result=client.json('Generate',schema=schema)
+        self.assertEqual(result['cover_title'],'Complete')
+        self.assertEqual(client.call.call_count,2)
+        sent=client.call.call_args.kwargs['config']['responseFormat']['text']
+        self.assertEqual(sent['mimeType'],'APPLICATION_JSON');self.assertIn('guide',sent['schema']['required'])
+    def test_invalid_json_still_fails_closed(self):
+        from scripts.magazine.content import Gemini
+        client=Gemini.__new__(Gemini);client.call=Mock(return_value=[{'text':'invalid'}])
+        with self.assertRaises(ValueError):client.json('Generate')
+        self.assertEqual(client.call.call_count,2)
