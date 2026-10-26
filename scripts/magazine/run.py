@@ -44,7 +44,9 @@ def main():
     # Refuse reusing old artifacts from another run.
     if (folder/'manifest.json').exists():raise ValueError('Output directory already contains an issue')
     sources=collect(start,end);write(folder/'sources.json',sources)
-    client=Gemini();data,editorial=generate(client,sources,issue);write(folder/'editorial.json',data)
+    print(f'Sources collected: {len(sources)}',flush=True)
+    client=Gemini();data,editorial=generate(client,sources,issue,lambda name,value:write(folder/name,value));write(folder/'editorial.json',data)
+    print('Editorial validation passed; selecting images',flush=True)
     art={};credits={}
     provider=os.environ.get('MAGAZINE_IMAGE_SOURCE','commons')
     prompts=dict(data['art'])
@@ -67,11 +69,13 @@ def main():
             else:client.image('Original AIVision editorial illustration. No text, logos or fictitious screenshots. '+brief,path)
             art[name]=path
     write(folder/'image-credits.json',credits)
+    print(f'Images selected: {len(art)}',flush=True)
     # Check actual source URLs, not arbitrary URLs supplied by the model.
     used=set(sid for item in [*data['news'],*[data[k] for k in ('feature','guide','original','tips','qa')]] for sid in item['sources'])
     for s in sources:
         if s['id'] in used:download(s['url'],{'aivision.altervista.org','help.libreoffice.org','support.google.com','nvlpubs.nist.gov'})
     pdf=folder/f'aivision-magazine-{issue}.pdf';report=render(data,sources,pdf,art,issue,period,credits)
+    print(f'PDF rendered: {report["pages"]} pages',flush=True)
     visual_issues=[]
     # Review every rendered page, not just the cover or PDF text extraction.
     for image in sorted(folder.glob('page-*.png')):

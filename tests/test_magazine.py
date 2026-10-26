@@ -53,6 +53,20 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(get.call_count,1)
 
 class EditorialTests(unittest.TestCase):
+    def test_evidence_repair_preserves_articles_and_rechecks_literal_source(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture();expected=copy.deepcopy(data)
+        data['original']['evidence'][0]['quote']='An invented translation of the original source passage.'
+        client=Mock();client.json.return_value={'evidence':expected['original']['evidence']}
+        self.assertEqual(repair_evidence(client,data,sources),expected)
+        self.assertEqual(client.json.call_count,1);validate(data,sources)
+    def test_invented_evidence_cannot_pass_repair(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture();data['original']['evidence'][0]['quote']='An invented translation of the original source passage.'
+        client=Mock();client.json.return_value={'evidence':data['original']['evidence']}
+        repair_evidence(client,data,sources)
+        self.assertEqual(client.json.call_count,2)
+        with self.assertRaises(ValueError):validate(data,sources)
     def test_length_repair_changes_only_invalid_fields(self):
         from scripts.magazine.content import repair_lengths
         data,sources=fixture();expected=copy.deepcopy(data)
