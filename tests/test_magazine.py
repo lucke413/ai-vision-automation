@@ -174,6 +174,19 @@ class ExtendedLayoutTests(unittest.TestCase):
             with self.assertRaises(ValueError):verify_bundle(tmp)
 
 class StructuredOutputTests(unittest.TestCase):
+    def test_transient_provider_retry_and_quota_fail_closed(self):
+        from scripts.magazine.content import Gemini
+        client=Gemini.__new__(Gemini);client.key='test';client.model='test-model';client.last_request=0
+        busy=Mock(status_code=503);ok=Mock(status_code=200)
+        ok.json.return_value={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'{}'}]}}]}
+        with patch('scripts.magazine.content.requests.post',side_effect=[busy,ok]) as post,patch('scripts.magazine.content.time.sleep'):
+            self.assertEqual(client.call([{'text':'test'}]),[{'text':'{}'}]);self.assertEqual(post.call_count,2)
+        with patch('scripts.magazine.content.requests.post',return_value=busy) as post,patch('scripts.magazine.content.time.sleep'):
+            with self.assertRaises(RuntimeError):client.call([{'text':'test'}])
+            self.assertEqual(post.call_count,3)
+        with patch('scripts.magazine.content.requests.post',return_value=Mock(status_code=429)) as post,patch('scripts.magazine.content.time.sleep'):
+            with self.assertRaises(RuntimeError):client.call([{'text':'test'}])
+            self.assertEqual(post.call_count,1)
     def test_provider_schema_and_malformed_retry(self):
         from scripts.magazine.content import Gemini,output_schema,SCHEMA
         client=Gemini.__new__(Gemini)
