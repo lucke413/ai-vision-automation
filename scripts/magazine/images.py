@@ -45,7 +45,8 @@ def candidates(query):
 
 def free_images(client,briefs,folder,previous_covers=()):
     """Fail closed if rights, relevance or visual quality cannot be established."""
-    query_data=client.json('Converti ogni brief in 2 ricerche fotografiche inglesi per Wikimedia Commons, 2-5 parole ciascuna. Soggetti concreti, attuali, pertinenti, non loghi o schermate. Evita concetti astratti impossibili da trovare. Restituisci JSON {chiave:[ricerca1,ricerca2]} con esattamente le chiavi in input. INPUT '+json.dumps(briefs))
+    schema={'type':'object','properties':{k:{'type':'array','items':{'type':'string'},'minItems':2,'maxItems':2} for k in briefs},'required':list(briefs)}
+    query_data=client.json('Converti ogni brief in 2 ricerche fotografiche inglesi per Wikimedia Commons, 2-5 parole ciascuna. Soggetti concreti, attuali, pertinenti, non loghi o schermate. Evita concetti astratti impossibili da trovare. Restituisci JSON {chiave:[ricerca1,ricerca2]} con esattamente le chiavi in input. INPUT '+json.dumps(briefs),schema=schema)
     if not isinstance(query_data,dict) or set(query_data)!=set(briefs):raise ValueError('Invalid image search plan')
     images={};credits={};seen=set();cache={}
     for key,brief in briefs.items():
