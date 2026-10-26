@@ -112,3 +112,33 @@ class LayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:self.assertEqual(render(d,s,Path(tmp)/'test.pdf',art,'COLLAUDO','18–25 ottobre')['pages'],7)
 
 if __name__=='__main__':unittest.main()
+
+class ImageRightsTests(unittest.TestCase):
+    def test_exact_license_and_deed_url_normalization(self):
+        from scripts.magazine.images import rights
+        def meta(license,url):
+            return {'descriptionurl':'https://commons.wikimedia.org/wiki/File:Photo.jpg','extmetadata':{k:{'value':v} for k,v in {'ObjectName':'Modern desk','Artist':'Author','LicenseShortName':license,'LicenseUrl':url,'Copyrighted':'True','Restrictions':''}.items()}}
+        self.assertEqual(rights(meta('CC0','http://creativecommons.org/publicdomain/zero/1.0/deed.en'))['license'],'CC0')
+        self.assertIsNotNone(rights(meta('CC BY 4.0','https://creativecommons.org/licenses/by/4.0/')))
+        self.assertIsNone(rights(meta('CC BY-NC 4.0','https://creativecommons.org/licenses/by-nc/4.0/')))
+        self.assertIsNone(rights(meta('CC BY 4.0','https://evil.test/by/4.0/')))
+
+@unittest.skipUnless(importlib.util.find_spec('fitz') and importlib.util.find_spec('reportlab'),'Dedicated magazine dependencies required')
+class ExtendedLayoutTests(unittest.TestCase):
+    def test_two_three_four_news_and_credits(self):
+        from scripts.magazine.layout import render
+        d,s=fixture();root=Path(__file__).resolve().parents[1]/'magazine/art'
+        art={k:root/'creative.jpg' for k in d['art']}
+        for count in (2,3,4):
+            data=copy.deepcopy(d);data['news']=[copy.deepcopy(d['news'][0]) for _ in range(count)]
+            with tempfile.TemporaryDirectory() as tmp:
+                self.assertEqual(render(data,s,Path(tmp)/'test.pdf',art,'COLLAUDO','18–25 ottobre')['pages'],8)
+        credits={k:{'artist':'Nome autore','title':'Titolo originale della fotografia','source':'https://commons.wikimedia.org/wiki/File:Photo.jpg','license':'CC BY 4.0','license_url':'https://creativecommons.org/licenses/by/4.0/'} for k in art}
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(render(d,s,Path(tmp)/'test.pdf',art,'COLLAUDO','18–25 ottobre',credits)['pages'],9)
+    def test_preview_bundle_never_publishes(self):
+        from scripts.magazine.run import verify_bundle
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp,'manifest.json').write_text(json.dumps({'issue':'2026-10-25','ready_to_publish':False}))
+            with self.assertRaises(ValueError):verify_bundle(tmp)

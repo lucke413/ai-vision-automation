@@ -45,20 +45,33 @@ def main():
     if (folder/'manifest.json').exists():raise ValueError('Output directory already contains an issue')
     sources=collect(start,end);write(folder/'sources.json',sources)
     client=Gemini();data,editorial=generate(client,sources,issue);write(folder/'editorial.json',data)
-    art={}
-    for name,brief in data['art'].items():
-        path=folder/(name+'-art.jpg')
-        if args.preview_art:
-            from PIL import Image
-            mapping={'cover':'cover.jpg','feature':'creative.jpg','guide':'creative.jpg','original':'factcheck.jpg','tips':'archive.jpg'}
-            with Image.open(args.preview_art/mapping[name]) as im:im.convert('RGB').save(path,quality=91)
-        else:client.image('Original AIVision editorial illustration. No text, no logos, no fictitious screenshots. '+brief,path)
-        art[name]=path
+    art={};credits={}
+    provider=os.environ.get('MAGAZINE_IMAGE_SOURCE','commons')
+    prompts=dict(data['art'])
+    if not args.preview_art:
+        prompts.update({f'news{i}':'Modern editorial image relevant to: '+n['title']+'. '+n['body'] for i,n in enumerate(data['news'])})
+    if not args.preview_art and provider=='commons':
+        from .images import free_images
+        previous=[r.get('manifest',{}).get('art_hashes',{}).get('cover') for r in wp.journal.data['issues'].values()] if wp else []
+        art,credits=free_images(client,prompts,folder,previous)
+    else:
+        if not args.preview_art and provider!='gemini':raise ValueError('Unknown image provider')
+        if not args.preview_art:
+            prompts.update({f'step{i}':'A distinct editorial illustration of this practical step; no fictitious software interface. '+data['guide']['title']+'. '+n['title']+'. '+n['body'] for i,n in enumerate(data['guide']['steps'])})
+        for name,brief in prompts.items():
+            path=folder/(name+'-art.jpg')
+            if args.preview_art:
+                from PIL import Image
+                mapping={'cover':'cover.jpg','feature':'creative.jpg','guide':'creative.jpg','original':'factcheck.jpg','tips':'archive.jpg'}
+                with Image.open(args.preview_art/mapping[name]) as im:im.convert('RGB').save(path,quality=91)
+            else:client.image('Original AIVision editorial illustration. No text, logos or fictitious screenshots. '+brief,path)
+            art[name]=path
+    write(folder/'image-credits.json',credits)
     # Check actual source URLs, not arbitrary URLs supplied by the model.
     used=set(sid for item in [*data['news'],*[data[k] for k in ('feature','guide','original','tips','qa')]] for sid in item['sources'])
     for s in sources:
         if s['id'] in used:download(s['url'],{'aivision.altervista.org','help.libreoffice.org','support.google.com','nvlpubs.nist.gov'})
-    pdf=folder/f'aivision-magazine-{issue}.pdf';report=render(data,sources,pdf,art,issue,period)
+    pdf=folder/f'aivision-magazine-{issue}.pdf';report=render(data,sources,pdf,art,issue,period,credits)
     visual_issues=[]
     # Review every rendered page, not just the cover or PDF text extraction.
     for image in sorted(folder.glob('page-*.png')):
@@ -70,7 +83,7 @@ def main():
     with fitz.open(pdf) as doc:doc[0].get_pixmap(matrix=fitz.Matrix(1.5,1.5)).pil_save(folder/'cover.jpg',quality=90)
     manifest={'version':1,'issue':issue,'period':period,'title':f'AIVision Magazine {issue} · {data["cover_title"]}',
       'deck':data['cover_deck'],'pdf':pdf.name,'pdf_sha256':sha(pdf.read_bytes()),'cover_sha256':sha((folder/'cover.jpg').read_bytes()),
-      'report_sha256':sha((folder/'report.json').read_bytes()),'ready_to_publish':not bool(args.preview_art),'created_at':datetime.now().astimezone().isoformat()}
+      'art_hashes':{k:sha(p.read_bytes()) for k,p in art.items()},'report_sha256':sha((folder/'report.json').read_bytes()),'ready_to_publish':not bool(args.preview_art),'created_at':datetime.now().astimezone().isoformat()}
     write(folder/'manifest.json',manifest)
     # Newsletter-ready editorial payload, no recipients or sending code.
     write(folder/'newsletter-draft.json',{'subject':manifest['title'],'intro':manifest['deck'],'issue':issue})

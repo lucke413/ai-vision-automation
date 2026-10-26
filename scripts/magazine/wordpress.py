@@ -78,6 +78,9 @@ class WordPress:
         record=self.journal.data['issues'].get(issue)
         if record and record['pdf_sha256']!=manifest['pdf_sha256']:raise ValueError('Different PDF for reserved issue; restore original run artifact')
         if not record:
+            for previous in self.journal.data['issues'].values():
+                if previous.get('manifest',{}).get('art_hashes',{}).get('cover')==manifest.get('art_hashes',{}).get('cover'):
+                    raise ValueError('Cover illustration already used')
             self.journal.data['issues'][issue]={'status':'reserved','pdf_sha256':manifest['pdf_sha256'],'manifest':manifest};self.journal.save()
         pdf=self.media(Path(directory)/manifest['pdf'],slug+'-'+manifest['pdf_sha256'][:12],'application/pdf')
         cover=self.media(Path(directory)/'cover.jpg',slug+'-cover-'+manifest['cover_sha256'][:12],'image/jpeg')

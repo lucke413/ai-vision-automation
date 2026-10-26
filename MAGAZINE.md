@@ -2,9 +2,9 @@
 
 ## Stato e confini
 
-Implementazione separata dalle automazioni quotidiane. Template derivato dal pilota approvato: A4, testata rossa, colonna laterale in copertina, grandi immagini, tre colonne editoriali, sei passi numerati, box gialli, indice e fonti cliccabili. Il formato automatico produce 8 pagine, 7 quando mancano notizie settimanali. Gli articoli originali sono distinti dalle notizie WordPress.
+Implementazione separata dalle automazioni quotidiane. Template derivato dal pilota approvato: A4, testata rossa, colonna laterale in copertina, grandi immagini, tre colonne editoriali, sei passi numerati, box gialli, indice e fonti cliccabili. Il formato automatico produce 8 pagine, 7 quando mancano notizie settimanali, più una pagina di crediti quando usa immagini con licenza. Gli articoli originali sono distinti dalle notizie WordPress.
 
-Il merge installa **solo RSS nel widget esistente** (e newsletter/ultimo numero solo se realmente disponibili). Non crea un secondo widget e non pubblica un PDF dimostrativo. La schedulazione live resta disabilitata finché `MAGAZINE_ENABLED` non è `true`.
+Il merge avvia anche una preview reale senza pubblicazione e installa **solo RSS nel widget esistente** (e newsletter/ultimo numero solo se realmente disponibili). Non crea un secondo widget e non pubblica un PDF dimostrativo. La schedulazione live resta disabilitata finché `MAGAZINE_ENABLED` non è `true`.
 
 ## Esecuzione
 
@@ -25,21 +25,22 @@ Riutilizza esclusivamente i segreti già previsti dal progetto: `GEMINI_API_KEY`
 | Variabile | Significato |
 |---|---|
 | `GEMINI_MODEL` | Modello testuale e multimodale già usato dal progetto |
-| `MAGAZINE_IMAGE_MODEL` | Modello immagini con accesso effettivamente disponibile nell'account; nessun valore di default |
+| `MAGAZINE_IMAGE_SOURCE` | `commons` di default: immagini gratuite con licenza e crediti. `gemini` opzionale |
+| `MAGAZINE_IMAGE_MODEL` | Necessario solo per il provider `gemini`; nessun valore di default |
 | `MAGAZINE_ENABLED` | `true` solo dopo collaudo completo del primo numero reale |
 | `NEWSLETTER_FORM_URL` | URL HTTPS del modulo ospitato Brevo, dominio `sibforms.com` |
 | `NEWSLETTER_DOI_VERIFIED` | `true` solo dopo prova di consenso, conferma e disiscrizione |
 
-Il sistema **non attiva fatturazione né acquista servizi**. Al 26/10/2026 la documentazione Google indica che la generazione immagini via API non è inclusa nel piano gratuito. Il live richiede un modello immagini abilitato; finché manca, non deve essere attivato. L'account newsletter è separato e non è configurato da questo repository. Modelli e tariffe vanno verificati prima dell'attivazione: https://ai.google.dev/gemini-api/docs/pricing .
+Il sistema **non attiva fatturazione né acquista servizi**. Al 26/10/2026 la documentazione Google indica che la generazione immagini via API non è inclusa nel piano gratuito. Il provider predefinito Commons non richiede un account né pagamento. Un modello immagini abilitato serve solo scegliendo esplicitamente il provider `gemini`. L'account newsletter è separato e non è configurato da questo repository. Modelli e tariffe vanno verificati prima dell'attivazione: https://ai.google.dev/gemini-api/docs/pricing .
 
 ## Fonti e qualità
 
 - Selezione WordPress con controllo finale su `date_gmt`, paginazione limitata, esclusione offerte per categorie, titolo e testo; filtro prudente che può scartare anche articoli che menzionano offerte in altro contesto.
 - Deduplica URL canonico, titolo e hash del contenuto. I numeri della rivista non rientrano nelle selezioni successive.
-- Ricerca primaria evergreen iniziale: LibreOffice e Chrome (stampa/PDF) e NIST AI 600-1. Aggiornare `PRIMARY` in `content.py` per ampliare i temi e ruotare le risorse. Questa prima versione non esegue ricerca aperta senza limiti.
+- Ricerca primaria evergreen iniziale: LibreOffice (esportazione/PDF) e NIST AI 600-1. Aggiornare `PRIMARY` in `content.py` per ampliare i temi e ruotare le risorse. Questa prima versione non esegue ricerca aperta senza limiti.
 - JSON validato: rubriche, lunghezze, fonti per ID, estratti probatori esatti. Secondo passaggio editoriale del modello; non è una garanzia matematica di accuratezza. Un errore, fonte irraggiungibile o JSON incompleto interrompe il numero.
-- Immagini live generate, dichiarate illustrative. Nessuna immagine WordPress viene riutilizzata senza un accertamento dei diritti; non basta che sia tecnicamente scaricabile.
-- PDF: A4, numero pagine, testo entro i limiti, collisioni tra riquadri testuali, pagine non vuote, link interni, outline, numero pagina, file 100 KB–18 MB. Ogni pagina viene renderizzata e sottoposta a revisione visuale multimodale. Le immagini sono verificate per formato, dimensioni e peso.
+- Immagini live: Commons predefinito con metadati di licenza verificati (CC0, pubblico dominio, CC BY 2/3/4), autore, titolo, fonte e licenza nei crediti; escluse licenze ambigue, NC, SA e restrizioni segnalate. Ogni candidato passa controllo visuale di pertinenza e qualità. Copertine già utilizzate escluse per hash. Se non si trova una foto adatta, il numero si ferma. Nessuna immagine WordPress viene riutilizzata senza un accertamento dei diritti. Il provider Gemini opzionale genera 5 immagini principali più una per notizia e una per passo, fino a 15: controllare i costi prima di abilitarlo.
+- PDF: A4, numero pagine, testo entro i limiti, collisioni tra riquadri testuali, pagine non vuote, link interni, outline, numero pagina, file 100 KB–18 MB. Ogni pagina viene renderizzata e sottoposta a revisione visuale multimodale. Le immagini sono verificate per formato, dimensioni e peso. Le foto vengono dichiarate illustrative e non spacciate per fotografie del prodotto/evento trattato.
 - Preview locale ispezionata visivamente; test automatici distinti dalla prova live con credenziali. La prima esecuzione completa in Actions va controllata prima di abilitare lo schedule.
 
 ## Pubblicazione e recupero

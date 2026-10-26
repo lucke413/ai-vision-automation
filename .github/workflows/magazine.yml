@@ -44,6 +44,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
       MAGAZINE_IMAGE_MODEL: ${{ vars.MAGAZINE_IMAGE_MODEL }}
+      MAGAZINE_IMAGE_SOURCE: ${{ vars.MAGAZINE_IMAGE_SOURCE || 'commons' }}
       WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
       WP_USERNAME: ${{ secrets.WP_USERNAME }}
       WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
@@ -61,11 +62,14 @@ jobs:
         shell: bash
         run: |
           case "$RUN_MODE" in
-            preview) python -m scripts.magazine.run --preview-art magazine/art ;;
+            preview) python -m scripts.magazine.run ;;
             live) python -m scripts.magazine.run --live ;;
             connect) python -m scripts.magazine.run --connect-only ;;
             *) exit 1 ;;
           esac
+      - name: First real preview after merge
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: python -m scripts.magazine.run
       - uses: actions/upload-artifact@v4
         if: always()
         with:
