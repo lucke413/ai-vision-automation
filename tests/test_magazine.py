@@ -72,17 +72,31 @@ class EditorialTests(unittest.TestCase):
         data,sources=fixture();expected=copy.deepcopy(data)
         data['guide']['steps'][2]['body']='Testo troppo breve.'
         data['news'][0]['title']='Un titolo decisamente troppo lungo '*4
-        client=Mock();client.json.return_value={'text0':expected['news'][0]['title'],'text1':expected['guide']['steps'][2]['body']}
+        client=Mock();client.json.return_value={'text0':expected['news'][0]['title'],'text1':expected['guide']['steps'][2]['body'].split()}
         self.assertEqual(repair_lengths(client,data,sources),expected)
         self.assertEqual(client.json.call_count,1)
         validate(data,sources)
     def test_bad_length_repair_is_bounded_and_still_rejected(self):
         from scripts.magazine.content import repair_lengths
         data,sources=fixture();data['editorial']='Troppo breve.'
-        client=Mock();client.json.return_value={'text0':'Ancora breve.'}
+        client=Mock();client.json.return_value={'text0':['Ancora','breve.']}
         repair_lengths(client,data,sources)
         self.assertEqual(client.json.call_count,2)
         with self.assertRaises(ValueError):validate(data,sources)
+    def test_counted_repair_recovers_one_word_short_qa(self):
+        from scripts.magazine.content import repair_lengths
+        data,sources=fixture();expected=copy.deepcopy(data)
+        data['qa']['items'][0]['body']=' '.join(expected['qa']['items'][0]['body'].split()[:54])
+        client=Mock();client.json.return_value={'text0':expected['qa']['items'][0]['body'].split()}
+        self.assertEqual(repair_lengths(client,data,sources),expected)
+        schema=client.json.call_args.kwargs['schema']['properties']['text0']
+        self.assertEqual((schema['minItems'],schema['maxItems']),(55,70))
+        validate(data,sources)
+    def test_counted_repair_rejects_embedded_spaces(self):
+        from scripts.magazine.content import repair_lengths
+        data,sources=fixture();data['editorial']='Breve.'
+        client=Mock();client.json.return_value={'text0':['two words']*95}
+        with self.assertRaisesRegex(ValueError,'tokens'):repair_lengths(client,data,sources)
     def test_contract_and_fabricated_evidence(self):
         data,sources=fixture();validate(data,sources)
         data['original']['evidence'][0]['quote']='This is an invented passage that does not exist in the source.'
