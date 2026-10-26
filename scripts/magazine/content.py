@@ -115,11 +115,17 @@ class Gemini:
         delay=7-(time.monotonic()-self.last_request)
         if delay>0:time.sleep(delay)
         self.last_request=time.monotonic()
-        try:
-            r=requests.post(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
-              headers={'x-goog-api-key':self.key},json={'contents':[{'role':'user','parts':parts}],
-              'generationConfig':config or {'responseMimeType':'application/json','temperature':0.2,'maxOutputTokens':14000}},timeout=(10,180))
-        except requests.RequestException:raise RuntimeError('Gemini network error') from None
+        for attempt in range(3):
+            try:
+                r=requests.post(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
+                  headers={'x-goog-api-key':self.key},json={'contents':[{'role':'user','parts':parts}],
+                  'generationConfig':config or {'responseMimeType':'application/json','temperature':0.2,'maxOutputTokens':14000}},timeout=(10,180))
+            except requests.RequestException:raise RuntimeError('Gemini network error') from None
+            if r.status_code not in (500,502,503,504) or attempt==2:break
+            delay=15*(attempt+1)
+            print(f'Gemini temporarily unavailable (HTTP {r.status_code}); retry {attempt+1}/2 after {delay}s',flush=True)
+            time.sleep(delay)
+            self.last_request=time.monotonic()
         if r.status_code!=200:raise RuntimeError(f'Gemini HTTP {r.status_code}')
         candidate=r.json().get('candidates',[{}])[0]
         if candidate.get('finishReason') not in (None,'STOP'):raise ValueError('Incomplete model response')
