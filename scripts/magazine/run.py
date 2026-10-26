@@ -32,6 +32,7 @@ def main():
     if args.resume and not args.live:raise ValueError('Resume requires --live')
     wp=WordPress(Journal()) if args.live or args.connect_only else None
     if args.connect_only:
+        wp.repair_feed_identity()
         archive=wp.archive();wp.widget(archive[1] if archive else None);print('Existing Connect widget updated');return
     if args.resume:
         m=verify_bundle(args.resume);wp.issue(m,args.resume);archive=wp.archive();wp.widget(archive[1]);return

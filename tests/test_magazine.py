@@ -72,9 +72,11 @@ class EditorialTests(unittest.TestCase):
         data,sources=fixture();expected=copy.deepcopy(data)
         data['guide']['steps'][2]['body']='Testo troppo breve.'
         data['news'][0]['title']='Un titolo decisamente troppo lungo '*4
-        client=Mock();client.json.return_value={'text0':expected['news'][0]['title'],'text1':expected['guide']['steps'][2]['body'].split()}
+        client=Mock();client.json.side_effect=[{'text0':expected['news'][0]['title']},{'text1':expected['guide']['steps'][2]['body'].split()}]
         self.assertEqual(repair_lengths(client,data,sources),expected)
-        self.assertEqual(client.json.call_count,1)
+        self.assertEqual(client.json.call_count,2)
+        for call in client.json.call_args_list:
+            self.assertEqual(len(call.kwargs['schema']['properties']),1)
         validate(data,sources)
     def test_bad_length_repair_is_bounded_and_still_rejected(self):
         from scripts.magazine.content import repair_lengths
@@ -130,6 +132,17 @@ class PublicationTests(unittest.TestCase):
         for s in SOCIALS:self.assertIn(s,new)
         self.assertIn('/feed/',new)
         with self.assertRaises(ValueError):extend_widget('<div>Another widget</div>')
+    def test_feed_identity_fills_only_empty_fields_and_saves_backup(self):
+        self.wp.api=Mock(side_effect=[{'title':'','description':'Existing description'}, {}, {'title':'AIVision','description':'Existing description'}])
+        self.wp.repair_feed_identity()
+        self.assertEqual(self.wp.api.call_args_list[1].kwargs['json'],{'title':'AIVision'})
+        self.assertEqual(self.j.data['rss_identity_backup'],{'title':''})
+        self.j.save.assert_called_once()
+    def test_feed_identity_preserves_existing_brand(self):
+        self.wp.api=Mock(return_value={'title':'My brand','description':'My description'})
+        self.wp.repair_feed_identity()
+        self.assertEqual(self.wp.api.call_count,1)
+        self.j.save.assert_not_called()
     def test_newsletter_disabled_until_doi_verified(self):
         with patch.dict('os.environ',{'NEWSLETTER_FORM_URL':'https://example.sibforms.com/serve/x','NEWSLETTER_DOI_VERIFIED':'false'}):
             with self.assertRaises(ValueError):newsletter_url()
