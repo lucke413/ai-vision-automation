@@ -62,6 +62,17 @@ class ImageSourceFallbackTests(unittest.TestCase):
             self.assertEqual(credits['feature']['artist'],'AIVision')
             self.assertFalse(credits['feature']['source'])
 
+    def test_commons_api_rejection_falls_back_to_original_artwork(self):
+        from scripts.magazine.images import free_images
+        client=Mock()
+        client.json.return_value={'feature':['query one','query two']}
+        with tempfile.TemporaryDirectory() as folder,patch('scripts.magazine.images.candidates',side_effect=ValueError('Commons query rejected')):
+            images,credits=free_images(client,{'feature':'A technology feature illustration'},folder)
+            self.assertTrue(images['feature'].exists())
+            self.assertGreater(images['feature'].stat().st_size,1000)
+            self.assertEqual(credits['feature']['kind'],'original_artwork')
+            self.assertFalse(credits['feature']['source'])
+
     def test_invalid_image_host_is_skipped_when_valid_candidate_exists(self):
         import io
         from PIL import Image
