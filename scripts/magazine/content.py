@@ -198,7 +198,11 @@ a ad al alla alle allo ai agli all agli anche che chi ci come con da dal dalla d
 
 def _has_dangling_ending(value):
     if not isinstance(value,str):return False
-    last=re.findall(r"[A-Za-zÀ-ÿ]+",value.casefold())
+    # A completed sentence ending in punctuation is not treated as incomplete.
+    # The live failure is an abrupt end with no terminal punctuation ("... per").
+    stripped=value.rstrip()
+    if stripped.endswith(('.', '!', '?', '…')):return False
+    last=re.findall(r"[A-Za-zÀ-ÿ]+",stripped.casefold())
     return bool(last and last[-1] in _DANGLING_ENDINGS)
 
 
