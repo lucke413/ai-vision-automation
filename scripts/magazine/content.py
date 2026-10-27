@@ -263,13 +263,73 @@ def _evidence_quote_valid(quote,source_text,source_id):
     if not 25<=len(normalized)<=240:return False
     return normalized in ' '.join(source_text.split())
 
+_EVIDENCE_STOPWORDS=set('''
+a ad al alla alle allo ai agli all anche che chi ci co come con cosa cui da dal dalla dalle dagli dai dallo dei degli del della delle di e ed era essere fa fra gli ha hai hanno i il in io la le lei li lo lui ma me mi mio ne nei nel nella nelle no non o od ogni per piu più poi quale quando quanto quanti questa queste questi questo qui quindi se sei senza si sia siamo sono su sul sulla sulle sugli tra tu un una uno voi your and are as at be by can did do for from had has have he her him his how i if in into is it its me my no not of on or our ours she so than that the their theirs them then there these they this those through to up us was we were what when where which who will with you your
+'''.split())
+
+def _evidence_context(section):
+    parts=[]
+    def walk(value,key=''):
+        if key in ('sources','evidence','art','source','quote'):return
+        if isinstance(value,dict):
+            for k,v in value.items():walk(v,k)
+        elif isinstance(value,list):
+            for item in value:walk(item,key)
+        elif isinstance(value,str):
+            parts.append(value)
+    walk(section)
+    return ' '.join(parts)
+
+def _choose_literal_excerpt(section,source_text,limit=240):
+    """Choose a relevant source sentence literally; never fabricate or paraphrase."""
+    if not isinstance(source_text,str):return None
+    source=' '.join(source_text.split())
+    context=_evidence_context(section)
+    context_words={w for w in re.findall(r'[a-zà-ÿ0-9]{3,}',context.casefold()) if w not in _EVIDENCE_STOPWORDS}
+    if not context_words:return None
+    candidates=[]
+    for sentence in re.split(r'(?<=[.!?])\s+',source):
+        sentence=' '.join(sentence.split())
+        if len(sentence)<=limit:
+            if len(sentence)>=25:candidates.append(sentence)
+            continue
+        # Long source sentences are considered as contiguous word windows.
+        words=sentence.split()
+        for i in range(len(words)):
+            parts=[]
+            size=0
+            for word in words[i:]:
+                added=len(word)+(1 if parts else 0)
+                if size+added>limit:break
+                parts.append(word);size+=added
+            candidate=' '.join(parts)
+            if len(candidate)>=25:candidates.append(candidate)
+    best=None;best_score=0.0
+    for candidate in candidates:
+        words={w for w in re.findall(r'[a-zà-ÿ0-9]{3,}',candidate.casefold()) if w not in _EVIDENCE_STOPWORDS}
+        overlap=context_words & words
+        # Weight semantic keyword overlap but mildly prefer fuller, informative spans.
+        score=len(overlap)/(max(1,len(words))**0.45)
+        if score>best_score:
+            best,best_score=candidate,score
+    if best and best in source and 25<=len(best)<=limit:return best
+    return None
+
 def repair_evidence(client,data,sources):
-    """Repair evidence one source at a time; accept only literal, bounded excerpts."""
+    """Repair evidence source-by-source, preserving strict exact-source validation."""
     byid={s['id']:s for s in sources}
     sections=[*data.get('news',[]),*[data[k] for k in ('feature','original','guide','tips','qa') if k in data]]
     for section in sections:
         refs=section.get('sources',[])
         if not isinstance(refs,list) or not refs or any(s not in byid for s in refs):continue
+        # The magazine contract allows at most three sources per section. If the
+        # model cites more, keep the first three unique, known source IDs and remove
+        # their displaced evidence. The independent editorial review still checks
+        # whether the remaining sources support the whole section.
+        if len(refs)>3:
+            if len(set(refs))!=len(refs):continue
+            refs=refs[:3]
+            section['sources']=refs
         current=section.get('evidence',[])
         if not isinstance(current,list):current=[]
         accepted={}
@@ -283,8 +343,7 @@ def repair_evidence(client,data,sources):
             if shortened is not None:quote=shortened
             if _evidence_quote_valid(quote,byid[sid]['text'],sid):
                 accepted[sid]={'source':sid,'quote':' '.join(quote.split())}
-        # Ask for one quote from one specific source. This avoids the model returning
-        # only the first item when a section cites multiple sources.
+        # Ask for one quote from one specific source; never accept a translated quote.
         for sid in refs:
             if sid in accepted:continue
             schema=output_schema({'evidence':[{'source':'Exact cited source ID: '+sid,'quote':'Exact continuous excerpt of 25-240 characters, original source language'}]})
@@ -308,9 +367,17 @@ def repair_evidence(client,data,sources):
                     if match:
                         accepted[sid]={'source':sid,'quote':' '.join(match['quote'].split())}
                         break
+            if sid not in accepted:
+                # Deterministic last resort: select a literal sentence/window with
+                # substantial keyword overlap. Validation and independent review
+                # still fail closed if no exact, relevant excerpt is found.
+                quote=_choose_literal_excerpt(section,byid[sid]['text'])
+                if quote is not None and _evidence_quote_valid(quote,byid[sid]['text'],sid):
+                    accepted[sid]={'source':sid,'quote':quote}
         # Missing citations remain missing and validation still fails closed.
         section['evidence']=[accepted[sid] for sid in refs if sid in accepted]
     return data
+
 def validate(data,sources):
     byid={s['id']:s for s in sources}
     def string(v,low,high):

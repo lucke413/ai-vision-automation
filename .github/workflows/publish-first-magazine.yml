@@ -1,4 +1,4 @@
-name: Publish first real AIVision Magazine issue
+name: Build, validate and publish first real AIVision Magazine issue
 
 on:
   push:
