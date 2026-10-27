@@ -1,4 +1,4 @@
-name: Build, validate and publish first real AIVision Magazine issue
+name: Build, validate and publish first real AIVision Magazine issue (image fallback)
 
 on:
   push:
