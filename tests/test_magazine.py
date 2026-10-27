@@ -60,6 +60,45 @@ class EditorialTests(unittest.TestCase):
         client=Mock();client.json.return_value={'evidence':expected['original']['evidence']}
         self.assertEqual(repair_evidence(client,data,sources),expected)
         self.assertEqual(client.json.call_count,1);validate(data,sources)
+    def test_evidence_repair_caps_sources_at_three(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        extra2={**sources[1],'id':'extra-two','kind':'primary'}
+        extra3={**sources[1],'id':'extra-three','kind':'primary'}
+        sources.extend([extra2,extra3])
+        ids=['firefox','wp-1','extra-two','extra-three']
+        byid={s['id']:s for s in sources}
+        data['tips']['sources']=ids
+        data['tips']['evidence']=[
+            {'source':sid,'quote':' '.join(byid[sid]['text'].split())[:90]}
+            for sid in ids
+        ]
+        client=Mock()
+        repair_evidence(client,data,sources)
+        self.assertEqual(data['tips']['sources'],ids[:3])
+        self.assertEqual([e['source'] for e in data['tips']['evidence']],ids[:3])
+        self.assertLessEqual(len(data['tips']['sources']),3)
+        client.json.assert_not_called()
+        validate(data,sources)
+
+    def test_missing_source_evidence_uses_exact_relevant_excerpt(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        source=next(s for s in sources if s['id']=='wp-1')
+        source['text'] += ' La leggibilità delle colonne dipende da frasi brevi e margini sufficienti.'
+        data['qa']['sources']=['firefox','wp-1']
+        data['qa']['evidence']=[{'source':'firefox','quote':data['qa']['evidence'][0]['quote']}]
+        client=Mock()
+        client.json.return_value={'evidence':[{'source':'wp-1','quote':'Passaggio inventato che non compare nella fonte.'}]}
+        repair_evidence(client,data,sources)
+        evidence=next(e for e in data['qa']['evidence'] if e['source']=='wp-1')
+        normalized=' '.join(source['text'].split())
+        self.assertGreaterEqual(len(evidence['quote']),25)
+        self.assertLessEqual(len(evidence['quote']),240)
+        self.assertIn(evidence['quote'],normalized)
+        self.assertEqual(client.json.call_count,2)
+        validate(data,sources)
+
     def test_overlong_exact_evidence_is_shortened_without_model_call(self):
         from scripts.magazine.content import repair_evidence
         data,sources=fixture()
