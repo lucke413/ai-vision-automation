@@ -182,6 +182,8 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(extend_widget(new,'https://aivision.altervista.org/aivision-magazine-2026-10-25/'),new)
         for s in SOCIALS:self.assertIn(s,new)
         self.assertIn('/feed/',new)
+        self.assertIn('Newsletter AIVision',new)
+        self.assertIn('Al momento non raccogliamo indirizzi',new)
         with self.assertRaises(ValueError):extend_widget('<div>Another widget</div>')
     def test_feed_identity_fills_only_empty_fields_and_saves_backup(self):
         self.wp.api=Mock(side_effect=[{'title':'','description':'Existing description'}, {}, {'title':'AIVision','description':'Existing description'}])
