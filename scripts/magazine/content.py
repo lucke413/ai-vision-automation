@@ -229,9 +229,14 @@ def repair_lengths(client,data,sources):
         fixed=dict(fixed)
         for key,value in fixed.items():
             if properties[key]['type']=='array':
-                if not isinstance(value,list) or not value or any(not isinstance(token,str) or not re.fullmatch(r'\S+',token) for token in value):
+                if not isinstance(value,list) or not value or any(not isinstance(token,str) for token in value):
                     raise ValueError('Invalid prose repair tokens')
-                fixed[key]=' '.join(value)
+                # Structured-output responses occasionally put multiple words in
+                # a single token. Flatten whitespace; the next bounded pass and
+                # final validator still enforce the real word-count interval.
+                tokens=[word for token in value for word in token.split()]
+                if not tokens:raise ValueError('Invalid prose repair tokens')
+                fixed[key]=' '.join(tokens)
             elif not isinstance(value,str):raise ValueError('Invalid prose repair')
         for key,item in entries.items():
             target=data
