@@ -285,6 +285,29 @@ def _evidence_context(section):
     walk(section)
     return ' '.join(parts)
 
+def _match_unknown_source(section,sources,exclude=(),kind=None):
+    """Resolve a hallucinated source ID only when the visible text identifies one source clearly."""
+    context=' '.join(_evidence_context(section).split()).casefold()
+    context_words={w for w in re.findall(r'[a-zà-ÿ0-9]{3,}',context) if w not in _EVIDENCE_STOPWORDS}
+    if not context_words:return None
+    ranked=[]
+    for source in sources:
+        sid=source.get('id')
+        if not sid or sid in exclude or (kind and source.get('kind')!=kind):continue
+        title=' '.join(str(source.get('title','')).split()).casefold()
+        title_words={w for w in re.findall(r'[a-zà-ÿ0-9]{3,}',title) if w not in _EVIDENCE_STOPWORDS}
+        overlap=context_words & title_words
+        if len(overlap)<3 or not title_words:continue
+        coverage=len(overlap)/len(title_words)
+        # Require a strong title match; broad topical similarity is not enough.
+        if coverage<0.45:continue
+        ranked.append((coverage,len(overlap),sid,source))
+    ranked.sort(key=lambda x:(x[0],x[1]),reverse=True)
+    if not ranked:return None
+    if len(ranked)>1 and ranked[0][0]-ranked[1][0]<0.12 and ranked[0][1]-ranked[1][1]<2:
+        return None
+    return ranked[0][3]
+
 def _choose_literal_excerpt(section,source_text,limit=240):
     """Choose a relevant source sentence literally; never fabricate or paraphrase."""
     if not isinstance(source_text,str):return None
@@ -321,12 +344,37 @@ def _choose_literal_excerpt(section,source_text,limit=240):
     return None
 
 def repair_evidence(client,data,sources):
-    """Repair evidence source-by-source, preserving strict exact-source validation."""
+    """Repair evidence source-by-source; recover unknown IDs only with a strong title match."""
     byid={s['id']:s for s in sources}
-    sections=[*data.get('news',[]),*[data[k] for k in ('feature','original','guide','tips','qa') if k in data]]
-    for section in sections:
+    sections=[*((item,'news') for item in data.get('news',[])),
+              *((data[k],k) for k in ('feature','original','guide','tips','qa') if k in data)]
+    for section,section_type in sections:
         refs=section.get('sources',[])
-        if not isinstance(refs,list) or not refs or any(s not in byid for s in refs):continue
+        if not isinstance(refs,list) or not refs:continue
+        if any(sid not in byid for sid in refs):
+            remapped=[]
+            excluded=set()
+            kind=None
+            if section_type=='news':
+                excluded={sid for other in data.get('news',[]) if other is not section
+                          for sid in other.get('sources',[]) if sid in byid}
+                kind='weekly'
+            elif section_type=='original' and not any(byid.get(sid,{}).get('kind')=='primary' for sid in refs):
+                kind='primary'
+            unresolved=False
+            for sid in refs:
+                candidate=sid if sid in byid else None
+                if candidate is None:
+                    match=_match_unknown_source(section,sources,exclude=excluded|set(remapped),kind=kind)
+                    if match is None:
+                        unresolved=True
+                        break
+                    candidate=match['id']
+                if candidate not in remapped:remapped.append(candidate)
+            # Ambiguous or unmatched IDs stay invalid so the final validator fails closed.
+            if unresolved:continue
+            refs=remapped
+            section['sources']=refs
         # The magazine contract allows at most three sources per section. If the
         # model cites more, keep the first three unique, known source IDs and remove
         # their displaced evidence. The independent editorial review still checks
@@ -373,13 +421,9 @@ def repair_evidence(client,data,sources):
                         accepted[sid]={'source':sid,'quote':' '.join(match['quote'].split())}
                         break
             if sid not in accepted:
-                # Deterministic last resort: select a literal sentence/window with
-                # substantial keyword overlap. Validation and independent review
-                # still fail closed if no exact, relevant excerpt is found.
                 quote=_choose_literal_excerpt(section,byid[sid]['text'])
                 if quote is not None and _evidence_quote_valid(quote,byid[sid]['text'],sid):
                     accepted[sid]={'source':sid,'quote':quote}
-        # Missing citations remain missing and validation still fails closed.
         section['evidence']=[accepted[sid] for sid in refs if sid in accepted]
     return data
 
