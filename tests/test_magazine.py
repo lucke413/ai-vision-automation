@@ -242,11 +242,25 @@ class EditorialTests(unittest.TestCase):
         schema=client.json.call_args.kwargs['schema']['properties']['text0']
         self.assertEqual((schema['minItems'],schema['maxItems']),(55,70))
         validate(data,sources)
-    def test_counted_repair_rejects_embedded_spaces(self):
+    def test_counted_repair_normalizes_phrase_tokens_and_rechecks_word_count(self):
+        from scripts.magazine.content import repair_lengths
+        data,sources=fixture();expected=copy.deepcopy(data)
+        expected_words=expected['qa']['items'][0]['body'].split()
+        data['qa']['items'][0]['body']=' '.join(expected_words[:54])
+        # Simulate a model returning two words in one array token. Flattening
+        # should preserve the exact repaired prose while the count gate remains.
+        returned=[' '.join(expected_words[:2]),*expected_words[2:]]
+        client=Mock();client.json.return_value={'text0':returned}
+        self.assertEqual(repair_lengths(client,data,sources),expected)
+        self.assertEqual(client.json.call_count,1)
+        validate(data,sources)
+
+    def test_counted_repair_still_rejects_out_of_range_after_normalization(self):
         from scripts.magazine.content import repair_lengths
         data,sources=fixture();data['editorial']='Breve.'
         client=Mock();client.json.return_value={'text0':['two words']*95}
-        with self.assertRaisesRegex(ValueError,'tokens'):repair_lengths(client,data,sources)
+        repair_lengths(client,data,sources)
+        with self.assertRaises(ValueError):validate(data,sources)
     def test_contract_and_fabricated_evidence(self):
         data,sources=fixture();validate(data,sources)
         data['original']['evidence'][0]['quote']='This is an invented passage that does not exist in the source.'
