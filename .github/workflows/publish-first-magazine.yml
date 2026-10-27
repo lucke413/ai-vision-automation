@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/publish-first-magazine.yml'
+      - 'scripts/magazine/images.py'
+      - 'tests/test_magazine.py'
 
 permissions:
   contents: write
