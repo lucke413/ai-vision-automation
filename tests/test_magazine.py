@@ -417,6 +417,12 @@ class LayoutTests(unittest.TestCase):
         from scripts.magazine.layout import render,Layout
         d,s=fixture()
         # Reproduce the live issue's long feature copy that previously overflowed by 3 pt.
+        d['tips']['items'][0]['body']=(
+            "Quando interagisci con l'IA, sostituisci i dati personali con esempi fittizi. "
+            "Verifica i risultati confrontandoli con fonti affidabili, soprattutto per date, "
+            "nomi e numeri. Evita di inserire password o informazioni riservate e controlla "
+            "ogni passaggio prima di riutilizzare la risposta."
+        )
         d['feature']['columns'][0]['body']=(
             'Nel panorama dei piccoli elettrodomestici e dei dispositivi connessi, '
             'le nuove funzioni software stanno cambiando il modo in cui le persone '
