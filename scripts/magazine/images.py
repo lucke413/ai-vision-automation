@@ -47,6 +47,26 @@ def candidates(query):
     pages=result.get('query',{}).get('pages',{})
     return [p['imageinfo'][0] for p in sorted(pages.values(),key=lambda p:p.get('index',999)) if p.get('imageinfo')]
 
+def _original_cover(folder):
+    """Create original abstract cover artwork when Commons has no suitable photo."""
+    from PIL import ImageDraw
+    image=Image.new('RGB',(1600,2000))
+    pixels=image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            glow=max(0,1-(((x-1180)/900)**2+((y-570)/850)**2)**0.5)
+            pixels[x,y]=(int(5+20*glow),int(15+25*glow),int(38+85*glow))
+    draw=ImageDraw.Draw(image,'RGBA')
+    draw.ellipse((720,120,1700,1100),outline=(91,190,255,105),width=5)
+    draw.ellipse((850,250,1510,910),outline=(155,112,255,125),width=4)
+    draw.arc((700,130,1640,1070),20,265,fill=(105,220,255,190),width=14)
+    for i in range(7):
+        x=870+i*75
+        draw.line((x,250,x-320,1080),fill=(105,170,255,30),width=2)
+    path=Path(folder)/'cover-art.jpg'
+    image.save(path,quality=92)
+    return path
+
 def free_images(client,briefs,folder,previous_covers=()):
     """Fail closed if rights, relevance or visual quality cannot be established."""
     schema={'type':'object','properties':{k:{'type':'array','items':{'type':'string'},'minItems':2,'maxItems':2} for k in briefs},'required':list(briefs)}
@@ -87,5 +107,11 @@ def free_images(client,briefs,folder,previous_covers=()):
                 credit.update(image_sha256=fingerprint,download_url=source,changes='Ritaglio editoriale e ridimensionamento',kind='licensed')
                 images[key]=path;credits[key]=credit;seen.add(source);selected=True;break
             if selected:break
+        if not selected and key=='cover':
+            # Original locally generated artwork avoids blocking publication when Commons has no fit.
+            path=_original_cover(folder)
+            images[key]=path
+            credits[key]={'kind':'original_artwork','artist':'AIVision','license':'Original artwork created for this issue','license_url':'','source':'','title':'Abstract technology cover','changes':'Generated locally; no third-party image used'}
+            selected=True
         if not selected:raise ValueError('No suitable licensed image for '+key)
     return images,credits
