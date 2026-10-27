@@ -321,34 +321,54 @@ def _choose_literal_excerpt(section,source_text,limit=240):
     return None
 
 def repair_evidence(client,data,sources):
-    """Repair evidence source-by-source, preserving strict exact-source validation."""
+    """Repair source IDs only when they can be reconciled to exact available evidence."""
     byid={s['id']:s for s in sources}
+    normalized_text={sid:' '.join(src['text'].split()) for sid,src in byid.items()}
     sections=[*data.get('news',[]),*[data[k] for k in ('feature','original','guide','tips','qa') if k in data]]
     for section in sections:
-        refs=section.get('sources',[])
-        if not isinstance(refs,list) or not refs or any(s not in byid for s in refs):continue
-        # The magazine contract allows at most three sources per section. If the
-        # model cites more, keep the first three unique, known source IDs and remove
-        # their displaced evidence. The independent editorial review still checks
-        # whether the remaining sources support the whole section.
-        if len(refs)>3:
-            if len(set(refs))!=len(refs):continue
-            refs=refs[:3]
-            section['sources']=refs
+        raw_refs=section.get('sources',[])
+        if not isinstance(raw_refs,list) or not raw_refs:continue
         current=section.get('evidence',[])
         if not isinstance(current,list):current=[]
-        accepted={}
-        # Preserve valid model excerpts and safely shorten only exact overlong quotes.
+        # Drop IDs absent from the collected source set. A missing ID may be
+        # reconciled only if its quote is an exact, unique excerpt of a known source.
+        refs=[]
+        for sid in raw_refs:
+            if sid in byid and sid not in refs:refs.append(sid)
+        refs=refs[:3]
+        remapped=[]
         for ev in current:
             if not isinstance(ev,dict):continue
+            quote=ev.get('quote')
+            if not isinstance(quote,str):continue
+            normalized_quote=' '.join(quote.split())
+            sid=ev.get('source')
+            if sid not in byid or sid not in refs:
+                matches=[candidate for candidate,source_text in normalized_text.items()
+                         if 25<=len(normalized_quote)<=240 and normalized_quote in source_text]
+                if len(matches)==1:
+                    sid=matches[0]
+                    if sid not in refs and len(refs)<3:refs.append(sid)
+            if sid in byid and sid in refs:
+                remapped.append({'source':sid,'quote':quote})
+        section['sources']=refs
+        if not refs:
+            # Leave an invalid section visibly invalid so the final validator
+            # rejects it; never invent or guess a replacement source ID.
+            section['evidence']=[]
+            continue
+        if len(refs)>3:refs=refs[:3];section['sources']=refs
+        accepted={}
+        # Preserve valid excerpts and shorten only exact overlong quotes.
+        for ev in remapped:
             sid=ev.get('source')
             if sid not in refs or sid in accepted:continue
             quote=ev.get('quote')
-            shortened=_shorten_exact_quote(quote,byid[sid]['text'])
+            shortened=_shorten_exact_quote(quote,normalized_text[sid])
             if shortened is not None:quote=shortened
-            if _evidence_quote_valid(quote,byid[sid]['text'],sid):
+            if _evidence_quote_valid(quote,normalized_text[sid],sid):
                 accepted[sid]={'source':sid,'quote':' '.join(quote.split())}
-        # Ask for one quote from one specific source; never accept a translated quote.
+        # Ask for one quote from one specific source; never accept a translation.
         for sid in refs:
             if sid in accepted:continue
             schema=output_schema({'evidence':[{'source':'Exact cited source ID: '+sid,'quote':'Exact continuous excerpt of 25-240 characters, original source language'}]})
@@ -368,18 +388,17 @@ def repair_evidence(client,data,sources):
                 items=fixed.get('evidence',[]) if isinstance(fixed,dict) else []
                 if isinstance(items,list):
                     match=next((e for e in items if isinstance(e,dict) and e.get('source')==sid and
-                        _evidence_quote_valid(e.get('quote'),byid[sid]['text'],sid)),None)
+                        _evidence_quote_valid(e.get('quote'),normalized_text[sid],sid)),None)
                     if match:
                         accepted[sid]={'source':sid,'quote':' '.join(match['quote'].split())}
                         break
             if sid not in accepted:
                 # Deterministic last resort: select a literal sentence/window with
-                # substantial keyword overlap. Validation and independent review
-                # still fail closed if no exact, relevant excerpt is found.
-                quote=_choose_literal_excerpt(section,byid[sid]['text'])
-                if quote is not None and _evidence_quote_valid(quote,byid[sid]['text'],sid):
+                # substantial keyword overlap. Validation still fails closed if
+                # no exact, relevant excerpt can be selected.
+                quote=_choose_literal_excerpt(section,normalized_text[sid])
+                if quote is not None and _evidence_quote_valid(quote,normalized_text[sid],sid):
                     accepted[sid]={'source':sid,'quote':quote}
-        # Missing citations remain missing and validation still fails closed.
         section['evidence']=[accepted[sid] for sid in refs if sid in accepted]
     return data
 

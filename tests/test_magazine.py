@@ -116,6 +116,31 @@ class EditorialTests(unittest.TestCase):
         self.assertIn('guide.steps.1.body',field_schema['enum'])
         self.assertNotIn('guide.steps.0.body',field_schema['enum'])
 
+    def test_unknown_source_id_remaps_only_from_unique_exact_quote(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        weekly=next(s for s in sources if s['id']=='wp-1')
+        quote='Passaggio univoco: verifica le impostazioni di impaginazione e controlla la gerarchia visuale prima di esportare il progetto.'
+        weekly['text']=quote+' '+weekly['text']
+        data['feature']['sources']=['wp-1207']
+        data['feature']['evidence']=[{'source':'wp-1207','quote':quote}]
+        client=Mock()
+        repair_evidence(client,data,sources)
+        self.assertEqual(data['feature']['sources'],['wp-1'])
+        self.assertEqual(data['feature']['evidence'],[{'source':'wp-1','quote':quote}])
+        validate(data,sources)
+
+    def test_unknown_source_id_with_unmatched_quote_stays_invalid(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        data['feature']['sources']=['wp-1207']
+        data['feature']['evidence']=[{'source':'wp-1207','quote':'This invented quotation is not present in any supplied source.'}]
+        repair_evidence(Mock(),data,sources)
+        self.assertEqual(data['feature']['sources'],[])
+        self.assertEqual(data['feature']['evidence'],[])
+        with self.assertRaisesRegex(ValueError,'Invalid source IDs'):
+            validate(data,sources)
+
     def test_evidence_repair_preserves_articles_and_rechecks_literal_source(self):
         from scripts.magazine.content import repair_evidence
         data,sources=fixture();expected=copy.deepcopy(data)
