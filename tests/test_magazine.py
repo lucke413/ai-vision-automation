@@ -233,6 +233,24 @@ class EditorialTests(unittest.TestCase):
         repair_lengths(client,data,sources)
         self.assertEqual(client.json.call_count,2)
         with self.assertRaises(ValueError):validate(data,sources)
+    def test_validation_rejects_dangling_preposition_even_when_word_count_is_valid(self):
+        data,sources=fixture()
+        data['guide']['steps'][1]['body'] += ' per'
+        self.assertGreaterEqual(len(data['guide']['steps'][1]['body'].split()),25)
+        self.assertLessEqual(len(data['guide']['steps'][1]['body'].split()),35)
+        with self.assertRaisesRegex(ValueError,'Incomplete prose ending'):
+            validate(data,sources)
+
+    def test_length_repair_fixes_dangling_preposition_within_valid_word_count(self):
+        from scripts.magazine.content import repair_lengths
+        data,sources=fixture();expected=copy.deepcopy(data)
+        expected_body=expected['guide']['steps'][1]['body']
+        data['guide']['steps'][1]['body']=expected_body+' per'
+        client=Mock();client.json.return_value={'text0':expected_body.split()}
+        self.assertEqual(repair_lengths(client,data,sources),expected)
+        self.assertEqual(client.json.call_count,1)
+        validate(data,sources)
+
     def test_counted_repair_recovers_one_word_short_qa(self):
         from scripts.magazine.content import repair_lengths
         data,sources=fixture();expected=copy.deepcopy(data)
