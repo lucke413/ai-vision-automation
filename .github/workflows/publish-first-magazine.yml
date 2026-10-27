@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: aivision-magazine-release
+  group: aivision-magazine-release-v2
   cancel-in-progress: false
 
 jobs:
