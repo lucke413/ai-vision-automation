@@ -415,7 +415,18 @@ class PublicationTests(unittest.TestCase):
 class LayoutTests(unittest.TestCase):
     def test_complete_pdf_links_images_and_overflow(self):
         from scripts.magazine.layout import render,Layout
-        d,s=fixture();root=Path(__file__).resolve().parents[1]/'magazine/art'
+        d,s=fixture()
+        # Reproduce the live issue's long feature copy that previously overflowed by 3 pt.
+        d['feature']['columns'][0]['body']=(
+            'Nel panorama dei piccoli elettrodomestici e dei dispositivi connessi, '
+            'le nuove funzioni software stanno cambiando il modo in cui le persone '
+            'scelgono, configurano e usano i prodotti. Prima di acquistare conviene '
+            'controllare quali funzioni dipendono da un account, quali dati vengono '
+            'raccolti e per quanto tempo sono conservati. È utile anche verificare '
+            'la disponibilità degli aggiornamenti, la compatibilità con il telefono '
+            'e la possibilità di usare le funzioni essenziali senza servizi cloud. '
+        )*4
+        root=Path(__file__).resolve().parents[1]/'magazine/art'
         art={k:root/v for k,v in {'cover':'cover.jpg','feature':'creative.jpg','guide':'creative.jpg','original':'factcheck.jpg','tips':'archive.jpg'}.items()}
         with tempfile.TemporaryDirectory() as tmp:
             out=Path(tmp)/'test.pdf';report=render(d,s,out,art,'COLLAUDO','18/10/2026 – 25/10/2026')
