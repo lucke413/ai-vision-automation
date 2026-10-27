@@ -288,7 +288,7 @@ def _choose_literal_excerpt(section,source_text,limit=240):
     context_words={w for w in re.findall(r'[a-zà-ÿ0-9]{3,}',context.casefold()) if w not in _EVIDENCE_STOPWORDS}
     if not context_words:return None
     candidates=[]
-    for sentence in re.split(r'(?<=[.!?])\\s+',source):
+    for sentence in re.split(r'(?<=[.!?])\s+',source):
         sentence=' '.join(sentence.split())
         if len(sentence)<=limit:
             if len(sentence)>=25:candidates.append(sentence)
