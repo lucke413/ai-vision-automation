@@ -425,9 +425,9 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaises(ValueError):p.text('overflow '*100,10,10,50,10)
             # Real production failure: a news excerpt was only a few points too tall.
             p.text('Il fondatore Eric Migicovsky ha annunciato nuovi dettagli. '*12,
-                   10,40,140,50,8.6,fit=True,min_size=7)
-            p.text('first',10,100,100,20)
-            with self.assertRaises(ValueError):p.text('overlap',10,100,100,20)
+                   10,40,263,131,8.6,fit=True,min_size=7)
+            p.text('first',10,200,100,20)
+            with self.assertRaises(ValueError):p.text('overlap',10,200,100,20)
     def test_no_weekly_news_reduces_pages(self):
         from scripts.magazine.layout import render
         d,s=fixture();d['news']=[];s=s[1:];validate(d,s)
