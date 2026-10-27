@@ -85,7 +85,7 @@ class EditorialTests(unittest.TestCase):
         client=Mock(return_value=None)
         client.json.return_value={'evidence':[{'source':'firefox','quote':invented}]}
         repair_evidence(client,data,sources)
-        self.assertEqual(data['original']['evidence'][0]['quote'],invented)
+        self.assertEqual(data['original']['evidence'],[])
         self.assertEqual(client.json.call_count,2)
         with self.assertRaises(ValueError):validate(data,sources)
 
