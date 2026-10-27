@@ -98,6 +98,40 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(get.call_count,1)
 
 class EditorialTests(unittest.TestCase):
+    def test_missing_weekly_news_is_filled_from_unused_real_source(self):
+        from scripts.magazine.content import repair_news_count
+        data,sources=fixture()
+        source_template=next(s for s in sources if s['id']=='wp-1')
+        for sid,title in (('wp-2','Second weekly source'),('wp-3','Third weekly source'),('wp-4','Fourth weekly source')):
+            sources.append({**source_template,'id':sid,'title':title,'url':f'https://aivision.altervista.org/{sid}/',
+                            'text':source_template['text']+' '+title+'.'})
+        body=data['news'][0]['body']
+        data['news'].extend([
+            {'title':'Second existing news','body':body,'sources':['wp-2'],'evidence':[]},
+            {'title':'Third existing news','body':body,'sources':['wp-3'],'evidence':[]}
+        ])
+        client=Mock()
+        client.json.return_value={'title':'Moulinex: una superficie di cottura diversa',
+                                  'body':body}
+        repair_news_count(client,data,sources)
+        self.assertEqual(len(data['news']),4)
+        self.assertEqual([item['sources'][0] for item in data['news']],['wp-1','wp-2','wp-3','wp-4'])
+        self.assertEqual(data['news'][3]['title'],'Moulinex: una superficie di cottura diversa')
+        self.assertEqual(client.json.call_count,1)
+        prompt=client.json.call_args.args[0]
+        self.assertIn('wp-4',prompt)
+        self.assertIn('Fourth weekly source',prompt)
+
+    def test_missing_weekly_news_fails_closed_if_no_usable_source_remains(self):
+        from scripts.magazine.content import repair_news_count
+        data,sources=fixture()
+        for sid in ('wp-2','wp-3'):
+            sources.append({'id':sid,'kind':'weekly','title':sid,'url':f'https://aivision.altervista.org/{sid}/','text':''})
+        client=Mock()
+        with self.assertRaisesRegex(ValueError,'Not enough unused weekly sources'):
+            repair_news_count(client,data,sources)
+        client.json.assert_not_called()
+
     def test_targeted_editorial_repair_changes_only_flagged_guide_step(self):
         from scripts.magazine.content import repair_review_issues
         data,sources=fixture()
