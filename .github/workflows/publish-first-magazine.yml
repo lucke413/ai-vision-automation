@@ -1,6 +1,7 @@
 name: Build, validate and publish first real AIVision Magazine issue (news count recovery)
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
