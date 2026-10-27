@@ -1,4 +1,4 @@
-name: Build, validate and publish first real AIVision Magazine issue (editorial review)
+name: Build, validate and publish first real AIVision Magazine issue (isolated queue)
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: aivision-magazine-release
+  group: aivision-magazine-first-issue
   cancel-in-progress: false
 
 jobs:
