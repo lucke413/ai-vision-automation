@@ -105,7 +105,7 @@ class EditorialTests(unittest.TestCase):
         before=copy.deepcopy(data)
         replacement='Raccogli i fatti essenziali e verifica le date, il destinatario e lo scopo della comunicazione prima di scrivere una frase completa che indichi con chiarezza cosa deve essere fatto e quando.'
         review={'passed':False,'issues':["La guida 'Dalla bozza al manifesto', nel passaggio 'Scegli il soggetto', termina con la preposizione sospesa 'per'."]}
-        client=Mock(return_value={'repairs':[{'field':'guide.steps.1.body','text':replacement}]})
+        client=Mock();client.json.return_value={'repairs':[{'field':'guide.steps.1.body','text':replacement}]}
         repair_review_issues(client,data,sources,review)
         self.assertEqual(data['guide']['steps'][1]['body'],replacement)
         self.assertEqual(data['guide']['steps'][0],before['guide']['steps'][0])
