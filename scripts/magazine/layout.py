@@ -24,10 +24,20 @@ class Layout:
         self.issue=issue;self.period=period;self.art=art;self.regions=[]
     def rect(self,x,y,w,h,color):
         self.c.setFillColor(HexColor(color));self.c.rect(x,H-y-h,w,h,fill=1,stroke=0)
-    def text(self,s,x,y,w,h,size=9,color=INK,bold=False,markup=False):
-        style=ParagraphStyle('p',fontName='Bold' if bold else 'Body',fontSize=size,leading=size*(1.05 if bold and size>=16 else 1.31),textColor=HexColor(color))
-        p=Paragraph(s if markup else escape(s),style);_,height=p.wrap(w,h)
-        if height>h+.01:raise ValueError(f'Text overflow on page {self.c.getPageNumber()}: {s[:35]} ({height:.1f}>{h})')
+    def text(self,s,x,y,w,h,size=9,color=INK,bold=False,markup=False,fit=False,min_size=None):
+        # Preserve strict overflow checking by default. Selected variable-length editorial
+        # excerpts may shrink gently to fit their assigned box rather than aborting the issue.
+        font_size=float(size)
+        floor=float(min_size if min_size is not None else max(5.5,font_size*0.82))
+        while True:
+            style=ParagraphStyle('p',fontName='Bold' if bold else 'Body',fontSize=font_size,
+                                 leading=font_size*(1.05 if bold and font_size>=16 else 1.31),
+                                 textColor=HexColor(color))
+            p=Paragraph(s if markup else escape(s),style);_,height=p.wrap(w,h)
+            if height<=h+.01:break
+            if not fit or font_size<=floor+.001:
+                raise ValueError(f'Text overflow on page {self.c.getPageNumber()}: {s[:35]} ({height:.1f}>{h})')
+            font_size=max(floor,font_size*0.96)
         box=fitz.Rect(x,y,x+w,y+height)
         if x<0 or y<0 or box.x1>W+.01 or box.y1>H:raise ValueError('Text outside page')
         for page,other in self.regions:
@@ -109,18 +119,18 @@ def render(data,sources,out,art,issue,period,credits=None):
             if len(data['news'])==1:
                 p.photo(key,26,166,543,332)
                 p.text(n['title'],26,518,543,75,24,NAVY,True)
-                p.text(n['body'],26,612,543,137,12)
+                p.text(n['body'],26,612,543,137,12,fit=True,min_size=9)
                 p.text(f'<link href="{escape(s["url"],quote=True)}" color="{BLUE}">Leggi l’articolo completo →</link>',26,770,543,15,9,markup=True)
             elif len(data['news'])==2 or (len(data['news'])==3 and i==2):
                 y=174+(1 if i==2 else i)*300;p.photo(key,26,y,205,244)
                 p.text(n['title'],250,y,319,75,19,NAVY,True)
-                p.text(n['body'],250,y+90,319,141,10)
+                p.text(n['body'],250,y+90,319,141,10,fit=True,min_size=8)
                 p.text(f'<link href="{escape(s["url"],quote=True)}" color="{BLUE}">Leggi l’articolo completo →</link>',250,y+246,319,13,8,markup=True)
             else:
                 x=26+(i%2)*280;y=166+(i//2)*313
                 p.photo(key,x,y,263,90)
                 p.text(n['title'],x,y+102,263,53,13,NAVY,True)
-                p.text(n['body'],x,y+163,263,131,8.6)
+                p.text(n['body'],x,y+163,263,131,8.6,fit=True,min_size=7)
                 p.text(f'<link href="{escape(s["url"],quote=True)}" color="{BLUE}">Leggi l’articolo completo →</link>',x,y+298,263,12,7,markup=True)
         p.end()
     for key,label in [('feature','Il tema'),('guide','Passo a passo'),('original','Tecnologia da capire')]:
