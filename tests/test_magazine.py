@@ -28,6 +28,43 @@ def fixture():
       'art':{k:'Editorial image for layout testing, with a detailed modern desk composition and blue orange lighting.' for k in ('cover','feature','guide','original','tips')}}
     return data,[source,primary]
 
+class WeeklyNewsCountTests(unittest.TestCase):
+    def test_missing_weekly_news_is_generated_from_unused_source(self):
+        from scripts.magazine.content import repair_news_count
+        data,sources=fixture()
+        weekly2={**sources[0],'id':'weekly-2','title':'Second source'}
+        weekly3={**sources[0],'id':'weekly-3','title':'Third source'}
+        weekly4={**sources[0],'id':'weekly-4','title':'Fourth source'}
+        sources.extend([weekly2,weekly3,weekly4])
+        body=data['news'][0]['body']
+        article1=copy.deepcopy(data['news'][0])
+        article1['sources']=['wp-1']
+        article1['evidence']=[{'source':'wp-1','quote':data['news'][0]['evidence'][0]['quote']}]
+        article2=copy.deepcopy(article1);article2.update(title='Second weekly report',sources=['weekly-2'],evidence=[{'source':'weekly-2','quote':weekly2['text'][:80]}])
+        article3=copy.deepcopy(article1);article3.update(title='Third weekly report',sources=['weekly-3'],evidence=[{'source':'weekly-3','quote':weekly3['text'][:80]}])
+        data['news']=[article1,article2,article3]
+        client=Mock()
+        client.json.return_value={'title':'Fourth distinct weekly report','body':body.split(),'sources':['weekly-4']}
+        repair_news_count(client,data,sources)
+        self.assertEqual(len(data['news']),4)
+        self.assertEqual([n['sources'][0] for n in data['news']],['wp-1','weekly-2','weekly-3','weekly-4'])
+        self.assertEqual(data['news'][3]['evidence'][0]['source'],'weekly-4')
+        self.assertIn(data['news'][3]['evidence'][0]['quote'], ' '.join(weekly4['text'].split()))
+        self.assertEqual(client.json.call_count,1)
+        self.assertEqual(client.json.call_args.kwargs['schema']['properties']['sources']['items']['enum'],['weekly-4'])
+        validate(data,sources)
+
+    def test_weekly_news_repair_fails_closed_when_model_uses_wrong_source_id(self):
+        from scripts.magazine.content import repair_news_count
+        data,sources=fixture()
+        data['news']=[]
+        client=Mock()
+        client.json.return_value={'title':'A news item from the wrong source','body':['Questa']*90,'sources':['firefox']}
+        with self.assertRaisesRegex(ValueError,'required number of source-backed weekly news'):
+            repair_news_count(client,data,sources)
+        self.assertEqual(data['news'],[])
+        self.assertEqual(client.json.call_count,1)
+
 class ImageSourceFallbackTests(unittest.TestCase):
     def _commons_info(self,thumburl,descriptionurl='https://commons.wikimedia.org/wiki/File:Test_photo.jpg'):
         return {
