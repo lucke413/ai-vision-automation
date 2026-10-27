@@ -98,6 +98,41 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(get.call_count,1)
 
 class EditorialTests(unittest.TestCase):
+    def test_unknown_source_id_is_repaired_only_with_strong_title_match(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        source_text=('La Moulinex Ever Fry XXL Surface utilizza una superficie orizzontale e una doppia resistenza '
+                     'per distribuire il calore in modo uniforme. Il dispositivo include programmi automatici '
+                     'e componenti removibili per facilitare la pulizia.')
+        source={'id':'wp-1307','kind':'weekly',
+                'title':'Moulinex Ever Fry XXL Surface: come cambia la cottura con la doppia resistenza',
+                'url':'https://aivision.altervista.org/moulinex-ever-fry-xxl-surface-caratteristiche/',
+                'text':source_text}
+        sources.append(source)
+        data['feature']['title']='Evoluzione delle friggitrici ad aria XXL'
+        data['feature']['deck']='Analisi della Moulinex Ever Fry XXL Surface, friggitrice con superficie orizzontale e doppia resistenza.'
+        data['feature']['sources']=['wp-1207']
+        data['feature']['evidence']=[{'source':'wp-1207','quote':'Estratto associato a un ID non esistente.'}]
+        quote='La Moulinex Ever Fry XXL Surface utilizza una superficie orizzontale e una doppia resistenza per distribuire il calore in modo uniforme.'
+        client=Mock();client.json.return_value={'evidence':[{'source':'wp-1307','quote':quote}]}
+        repair_evidence(client,data,sources)
+        self.assertEqual(data['feature']['sources'],['wp-1307'])
+        self.assertEqual(data['feature']['evidence'],[{'source':'wp-1307','quote':quote}])
+        self.assertEqual(client.json.call_count,1)
+        validate(data,sources)
+
+    def test_unknown_source_id_without_clear_match_fails_closed(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        data['feature']['sources']=['wp-unknown-777']
+        data['feature']['evidence']=[{'source':'wp-unknown-777','quote':'Estratto non verificabile.'}]
+        client=Mock()
+        repair_evidence(client,data,sources)
+        self.assertEqual(data['feature']['sources'],['wp-unknown-777'])
+        client.json.assert_not_called()
+        with self.assertRaisesRegex(ValueError,'Invalid source IDs'):
+            validate(data,sources)
+
     def test_targeted_editorial_repair_changes_only_flagged_guide_step(self):
         from scripts.magazine.content import repair_review_issues
         data,sources=fixture()
