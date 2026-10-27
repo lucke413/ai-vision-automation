@@ -264,9 +264,13 @@ class StructuredOutputTests(unittest.TestCase):
         with patch('scripts.magazine.content.requests.post',return_value=busy) as post,patch('scripts.magazine.content.time.sleep'):
             with self.assertRaises(RuntimeError):client.call([{'text':'test'}])
             self.assertEqual(post.call_count,3)
-        with patch('scripts.magazine.content.requests.post',return_value=Mock(status_code=429)) as post,patch('scripts.magazine.content.time.sleep'):
+        limited=Mock(status_code=429,headers={'Retry-After':'1'})
+        with patch('scripts.magazine.content.requests.post',side_effect=[limited,ok]) as post,patch('scripts.magazine.content.time.sleep'):
+            self.assertEqual(client.call([{'text':'test'}]),[{'text':'{}'}])
+            self.assertEqual(post.call_count,2)
+        with patch('scripts.magazine.content.requests.post',return_value=Mock(status_code=429,headers={})) as post,patch('scripts.magazine.content.time.sleep'):
             with self.assertRaises(RuntimeError):client.call([{'text':'test'}])
-            self.assertEqual(post.call_count,1)
+            self.assertEqual(post.call_count,3)
     def test_provider_schema_and_malformed_retry(self):
         from scripts.magazine.content import Gemini,output_schema,SCHEMA
         client=Gemini.__new__(Gemini)
