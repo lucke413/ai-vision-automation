@@ -28,6 +28,51 @@ def fixture():
       'art':{k:'Editorial image for layout testing, with a detailed modern desk composition and blue orange lighting.' for k in ('cover','feature','guide','original','tips')}}
     return data,[source,primary]
 
+class ImageSourceFallbackTests(unittest.TestCase):
+    def _commons_info(self,thumburl,descriptionurl='https://commons.wikimedia.org/wiki/File:Test_photo.jpg'):
+        return {
+            'descriptionurl':descriptionurl,
+            'thumburl':thumburl,
+            'url':'https://upload.wikimedia.org/wikipedia/commons/test.jpg',
+            'mime':'image/jpeg','width':1200,'height':1200,
+            'extmetadata':{
+                'LicenseShortName':{'value':'CC BY 4.0'},
+                'LicenseUrl':{'value':'https://creativecommons.org/licenses/by/4.0/'},
+                'Restrictions':{'value':''},
+                'Artist':{'value':'Test photographer'},
+                'ObjectName':{'value':'Test technology photograph'},
+                'Copyrighted':{'value':'true'}
+            }
+        }
+
+    def test_untrusted_description_origin_is_rejected_without_crashing(self):
+        from scripts.magazine.images import rights
+        info=self._commons_info('https://upload.wikimedia.org/test.jpg','https://evil.example/file')
+        self.assertIsNone(rights(info))
+
+    def test_invalid_image_host_is_skipped_when_valid_candidate_exists(self):
+        import io
+        from PIL import Image
+        from scripts.magazine.images import free_images
+        bad=self._commons_info('https://evil.example/image.jpg')
+        good=self._commons_info('https://upload.wikimedia.org/wikipedia/commons/thumb/test.jpg')
+        buffer=io.BytesIO()
+        Image.new('RGB',(1200,900),(40,100,160)).save(buffer,format='JPEG')
+        image_bytes=buffer.getvalue()
+        client=Mock()
+        client.json.side_effect=[
+            {'cover':['technology workspace','laptop desk']},
+            {'passed':True,'issues':[]}
+        ]
+        def fake_download(url,hosts,limit):
+            if 'evil.example' in url:raise ValueError('Source origin is not allowed')
+            return image_bytes,'image/jpeg',url
+        with tempfile.TemporaryDirectory() as folder,patch('scripts.magazine.images.candidates',return_value=[bad,good]),patch('scripts.magazine.images.download',side_effect=fake_download):
+            images,credits=free_images(client,{'cover':'Laptop and technology workspace'},folder)
+            self.assertTrue(images['cover'].exists())
+            self.assertEqual(credits['cover']['source'],'https://commons.wikimedia.org/wiki/File:Test_photo.jpg')
+            self.assertEqual(credits['cover']['kind'],'licensed')
+
 class SelectionTests(unittest.TestCase):
     def test_dst_boundaries_and_sunday_before_nine(self):
         start,end=week(datetime(2026,10,25,9,tzinfo=timezone.utc))
