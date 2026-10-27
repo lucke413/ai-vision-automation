@@ -89,6 +89,28 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(client.json.call_count,2)
         with self.assertRaises(ValueError):validate(data,sources)
 
+    def test_multisource_evidence_is_repaired_one_source_at_a_time(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        sentence='La verifica puntuale delle impostazioni aiuta a esportare il documento senza perdere i dettagli.'
+        q2='Questa guida descrive un secondo metodo documentato per esportare il documento in formato PDF.'
+        q3='La valutazione dei rischi dell’intelligenza artificiale richiede procedure e verifiche appropriate.'
+        s2={'id':'libreoffice','kind':'primary','title':'Guida PDF','url':'https://help.libreoffice.org/latest/it/text/shared/01/ref_pdf_export.html','text':q2+' '+(sentence+' ')*10}
+        s3={'id':'nist','kind':'primary','title':'Rischi IA','url':'https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf','text':q3+' '+(sentence+' ')*10}
+        sources.extend([s2,s3])
+        data['tips']['sources']=['firefox','libreoffice','nist']
+        first=data['tips']['evidence'][0]['quote']
+        client=Mock()
+        client.json.side_effect=[
+          {'evidence':[{'source':'libreoffice','quote':q2}]},
+          {'evidence':[{'source':'nist','quote':q3}]}
+        ]
+        repair_evidence(client,data,sources)
+        self.assertEqual([e['source'] for e in data['tips']['evidence']],['firefox','libreoffice','nist'])
+        self.assertEqual(data['tips']['evidence'][0]['quote'],first)
+        self.assertEqual(client.json.call_count,2)
+        validate(data,sources)
+
     def test_invented_evidence_cannot_pass_repair(self):
         from scripts.magazine.content import repair_evidence
         data,sources=fixture();data['original']['evidence'][0]['quote']='An invented translation of the original source passage.'
