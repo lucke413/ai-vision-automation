@@ -138,6 +138,11 @@ class Gemini:
                     self.last_request=time.monotonic()
                     continue
                 if r.status_code==200:break
+                # A rate limit may affect one model but leave the configured fallback usable.
+                # Switch immediately rather than spending another minute retrying the same model.
+                if r.status_code==429 and model_index<len(models)-1:
+                    print(f'Gemini rate-limited on {active_model}; switching immediately to {models[model_index+1]}',flush=True)
+                    break
                 if r.status_code not in (429,500,502,503,504) or attempt==2:break
                 if r.status_code==429:
                     try:retry_after=float(r.headers.get('Retry-After',''))
@@ -156,10 +161,12 @@ class Gemini:
                     print(f'Gemini network unavailable on {active_model}; switching to {models[model_index+1]}',flush=True)
                     continue
                 raise RuntimeError('Gemini network error')
-            # A 5xx indicates backend instability/overload; switch once to a
-            # cheaper, stable Flash-Lite model when using the default text/vision
-            # model. Never change an explicitly requested model (e.g. image model).
-            if r.status_code not in (500,502,503,504) or model_index==len(models)-1:break
+            # Backend overload and rate limiting can be model-specific. The fallback
+            # is only used for implicit/default model selection, never an explicitly requested
+            # model (for example the image model).
+            if r.status_code not in (429,500,502,503,504) or model_index==len(models)-1:break
+            if r.status_code==429:
+                continue
             print(f'Gemini backend still unavailable on {active_model}; switching to {models[model_index+1]}',flush=True)
         if r is None or r.status_code!=200:raise RuntimeError(f'Gemini HTTP {r.status_code if r is not None else "unknown"}')
         candidate=r.json().get('candidates',[{}])[0]
