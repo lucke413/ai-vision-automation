@@ -145,7 +145,7 @@ def render(data,sources,out,art,issue,period,credits=None):
             p.text('Immagine illustrativa; fonti e licenze nei crediti, non una prova del prodotto citato.' if credits else 'Illustrazione editoriale generata con IA; non rappresenta una prova o una schermata reale.',26,440,543,18,7)
             for i,col in enumerate(item['columns']):
                 x=26+i*186;p.text(col['title'].upper(),x,471,171,40,11,RED,True)
-                p.text(col['body'],x,520,171,222,8.6)
+                p.text(col['body'],x,520,171,222,8.6,fit=True,min_size=7.2)
             p.rect(26,749,543,28,YELLOW);p.text(item['box'],34,754,527,22,7.8)
         else:
             p.rect(18,159,559,610,BLUE);p.rect(25,166,545,596,'#FFFFFF')
