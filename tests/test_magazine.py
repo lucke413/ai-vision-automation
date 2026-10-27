@@ -509,6 +509,20 @@ class StructuredOutputTests(unittest.TestCase):
         self.assertTrue(all(call.kwargs['timeout']==(10,60) for call in post.call_args_list))
         self.assertEqual(post.call_args_list[-1].args[0],'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent')
 
+    def test_429_switches_to_fallback_model_immediately(self):
+        from scripts.magazine.content import Gemini
+        client=Gemini.__new__(Gemini);client.key='test';client.model='gemini-3.5-flash-lite';client.last_request=0
+        limited=Mock(status_code=429,headers={});ok=Mock(status_code=200)
+        ok.json.return_value={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'{}'}]}}]}
+        with patch.dict('os.environ',{'GEMINI_FALLBACK_MODEL':'gemini-3.1-flash-lite'}),patch('scripts.magazine.content.requests.post',side_effect=[limited,ok]) as post,patch('scripts.magazine.content.time.sleep'):
+            self.assertEqual(client.call([{'text':'test'}]),[{'text':'{}'}])
+        self.assertEqual(post.call_count,2)
+        urls=[call.args[0] for call in post.call_args_list]
+        self.assertEqual(urls,[
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent'
+        ])
+
     def test_503_uses_low_cost_fallback_model(self):
         from scripts.magazine.content import Gemini
         client=Gemini.__new__(Gemini);client.key='test';client.model='gemini-3.5-flash-lite';client.last_request=0
