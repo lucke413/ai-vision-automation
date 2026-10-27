@@ -198,10 +198,9 @@ a ad al alla alle allo ai agli all agli anche che chi ci come con da dal dalla d
 
 def _has_dangling_ending(value):
     if not isinstance(value,str):return False
-    normalized=value.rstrip().rstrip('.,;:!?…—-–"\\'»”’)]}').strip()
-    if not normalized:return False
-    last=re.findall(r"[A-Za-zÀ-ÿ]+",normalized.casefold())
+    last=re.findall(r"[A-Za-zÀ-ÿ]+",value.casefold())
     return bool(last and last[-1] in _DANGLING_ENDINGS)
+
 
 def repair_lengths(client,data,sources):
     """Repair prose outside length bounds or ending in an incomplete connector."""
