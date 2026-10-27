@@ -65,7 +65,7 @@ class EditorialTests(unittest.TestCase):
         data,sources=fixture()
         exact=' '.join(['passaggio documentato']*18)+'. Il resto della fonte resta verificabile.'
         source=next(s for s in sources if s['id']=='firefox')
-        source['text']=exact+' Altra frase della fonte.'
+        source['text'] += ' '+exact+' Altra frase della fonte.'
         data['original']['evidence']=[{'source':'firefox','quote':exact}]
         client=Mock()
         repair_evidence(client,data,sources)
