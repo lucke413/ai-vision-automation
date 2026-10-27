@@ -60,6 +60,35 @@ class EditorialTests(unittest.TestCase):
         client=Mock();client.json.return_value={'evidence':expected['original']['evidence']}
         self.assertEqual(repair_evidence(client,data,sources),expected)
         self.assertEqual(client.json.call_count,1);validate(data,sources)
+    def test_overlong_exact_evidence_is_shortened_without_model_call(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        exact=' '.join(['passaggio documentato']*18)+'. Il resto della fonte resta verificabile.'
+        source=next(s for s in sources if s['id']=='firefox')
+        source['text'] += ' '+exact+' Altra frase della fonte.'
+        data['original']['evidence']=[{'source':'firefox','quote':exact}]
+        client=Mock()
+        repair_evidence(client,data,sources)
+        quote=data['original']['evidence'][0]['quote']
+        normalized_source=' '.join(source['text'].split())
+        self.assertGreaterEqual(len(quote),25)
+        self.assertLessEqual(len(quote),240)
+        self.assertIn(quote,normalized_source)
+        client.json.assert_not_called()
+        validate(data,sources)
+
+    def test_overlong_invented_evidence_is_not_trimmed_or_accepted(self):
+        from scripts.magazine.content import repair_evidence
+        data,sources=fixture()
+        invented='passaggio inventato non presente nella fonte '*8
+        data['original']['evidence']=[{'source':'firefox','quote':invented}]
+        client=Mock(return_value=None)
+        client.json.return_value={'evidence':[{'source':'firefox','quote':invented}]}
+        repair_evidence(client,data,sources)
+        self.assertEqual(data['original']['evidence'][0]['quote'],invented)
+        self.assertEqual(client.json.call_count,2)
+        with self.assertRaises(ValueError):validate(data,sources)
+
     def test_invented_evidence_cannot_pass_repair(self):
         from scripts.magazine.content import repair_evidence
         data,sources=fixture();data['original']['evidence'][0]['quote']='An invented translation of the original source passage.'

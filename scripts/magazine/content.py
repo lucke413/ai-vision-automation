@@ -217,12 +217,39 @@ def repair_lengths(client,data,sources):
             target[item['path'][-1]]=fixed[key]
     return data
 
+def _shorten_exact_quote(quote,source_text,limit=240):
+    """Shorten only a literal source excerpt; never manufacture evidence."""
+    if not isinstance(quote,str) or not isinstance(source_text,str):return None
+    normalized=' '.join(quote.split())
+    source=' '.join(source_text.split())
+    if len(normalized)<=limit or len(normalized)<25 or normalized not in source:return None
+    prefix=normalized[:limit]
+    # Prefer a natural sentence boundary; otherwise stop at the last full word.
+    boundary=max(prefix.rfind('.'),prefix.rfind('!'),prefix.rfind('?'))
+    if boundary>=24:
+        candidate=prefix[:boundary+1]
+    else:
+        boundary=prefix.rfind(' ')
+        if boundary<25:return None
+        candidate=prefix[:boundary]
+    if 25<=len(candidate)<=limit and candidate in source:return candidate
+    return None
+
 def repair_evidence(client,data,sources):
     byid={s['id']:s for s in sources}
     sections=[*data.get('news',[]),*[data[k] for k in ('feature','original','guide','tips','qa') if k in data]]
     for section in sections:
         refs=section.get('sources',[])
         if not refs or any(s not in byid for s in refs):continue
+        # Structured output services may ignore string-length hints. Before spending
+        # another model call, deterministically shorten overlong quotes only when
+        # the original quote is already an exact excerpt of the cited source.
+        for ev in section.get('evidence',[]):
+            if not isinstance(ev,dict):continue
+            sid=ev.get('source')
+            if sid not in refs or sid not in byid:continue
+            shortened=_shorten_exact_quote(ev.get('quote'),byid[sid]['text'])
+            if shortened is not None:ev['quote']=shortened
         def valid():
             evidence=section.get('evidence',[])
             return {e.get('source') for e in evidence}==set(refs) and all(
@@ -236,7 +263,6 @@ def repair_evidence(client,data,sources):
             section['evidence']=fixed.get('evidence',[])
             if valid():break
     return data
-
 def validate(data,sources):
     byid={s['id']:s for s in sources}
     def string(v,low,high):
