@@ -54,19 +54,28 @@ class SelectionTests(unittest.TestCase):
 
 class EditorialTests(unittest.TestCase):
     def test_evidence_repair_preserves_articles_and_rechecks_literal_source(self):
-        from scripts.magazine.content import repair_evidence
+        from scripts.magazine.content import repair_evidence,source_excerpts
         data,sources=fixture();expected=copy.deepcopy(data)
         data['original']['evidence'][0]['quote']='An invented translation of the original source passage.'
-        client=Mock();client.json.return_value={'evidence':expected['original']['evidence']}
+        expected['original']['evidence']=[{'source':'firefox','quote':source_excerpts(sources[1]['text'])['e0']}]
+        client=Mock();client.json.return_value={'firefox':'e0'}
         self.assertEqual(repair_evidence(client,data,sources),expected)
         self.assertEqual(client.json.call_count,1);validate(data,sources)
     def test_invented_evidence_cannot_pass_repair(self):
         from scripts.magazine.content import repair_evidence
         data,sources=fixture();data['original']['evidence'][0]['quote']='An invented translation of the original source passage.'
-        client=Mock();client.json.return_value={'evidence':data['original']['evidence']}
+        client=Mock();client.json.return_value={'firefox':'invented-id'}
         repair_evidence(client,data,sources)
         self.assertEqual(client.json.call_count,2)
         with self.assertRaises(ValueError):validate(data,sources)
+    def test_excerpt_windows_are_verbatim_and_bounded(self):
+        from scripts.magazine.content import source_excerpts
+        text=('Prima frase italiana con dettagli verificabili.\n' * 70)+'Fine del documento con informazioni utili.'
+        normalized=' '.join(text.split());choices=source_excerpts(text)
+        self.assertGreater(len(choices),5)
+        for value in choices.values():
+            self.assertTrue(25<=len(value)<=240);self.assertIn(value,normalized)
+        self.assertTrue(list(choices.values())[-1].endswith('informazioni utili.'))
     def test_length_repair_changes_only_invalid_fields(self):
         from scripts.magazine.content import repair_lengths
         data,sources=fixture();expected=copy.deepcopy(data)
