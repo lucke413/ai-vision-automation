@@ -27,7 +27,11 @@ def rights(info):
     artist=value('Artist')
     if not artist or len(artist)>180 or not value('ObjectName') or len(value('ObjectName'))>160:return None
     source=info.get('descriptionurl','')
-    safe_url(source,{'commons.wikimedia.org'})
+    try:
+        safe_url(source,{'commons.wikimedia.org','commons.m.wikimedia.org'})
+    except (ValueError,TypeError):
+        # One malformed/untrusted Commons record must not abort the entire issue.
+        return None
     return {'license':license,'license_url':url,'artist':artist,'source':source,'title':value('ObjectName')}
 
 def candidates(query):
@@ -61,12 +65,17 @@ def free_images(client,briefs,folder,previous_covers=()):
                 if not credit or info.get('mime') not in ('image/jpeg','image/png') or min(info.get('width',0),info.get('height',0))<1000:continue
                 source=info.get('thumburl') or info['url']
                 if source in seen:continue
-                raw,_,_=download(source,{'upload.wikimedia.org'},12_000_000)
-                # Decode before review, bound dimensions and normalize orientation.
-                with Image.open(io.BytesIO(raw)) as im:
-                    if im.width*im.height>36_000_000 or min(im.size)<800:continue
-                    normalized=ImageOps.exif_transpose(im).convert('RGB');normalized.thumbnail((1600,1600))
-                    path=Path(folder)/(key+'-art.jpg');normalized.save(path,quality=91)
+                try:
+                    raw,_,_=download(source,{'upload.wikimedia.org'},12_000_000)
+                    # Decode before review, bound dimensions and normalize orientation.
+                    with Image.open(io.BytesIO(raw)) as im:
+                        if im.width*im.height>36_000_000 or min(im.size)<800:continue
+                        normalized=ImageOps.exif_transpose(im).convert('RGB');normalized.thumbnail((1600,1600))
+                        path=Path(folder)/(key+'-art.jpg');normalized.save(path,quality=91)
+                except (ValueError,TypeError,KeyError,OSError,requests.RequestException):
+                    # Skip this individual candidate (including untrusted redirect origins)
+                    # and continue with other openly licensed Commons images.
+                    continue
                 fingerprint=sha(path.read_bytes())
                 if key=='cover' and fingerprint in previous_covers:continue
                 review_path=Path(folder)/'image-review.png';normalized.save(review_path)
