@@ -433,10 +433,9 @@ def _constrained_text_fields(data,schema,path=()):
     return fields
 
 def _review_candidate_fields(data,issues,all_fields):
-    """Narrow repairs to the section/paragraph named by the independent reviewer."""
+    """Narrow repairs to the section/subsection explicitly named by reviewer feedback."""
     issue_text=' '.join(str(x) for x in issues).casefold()
-    candidates={}
-    # Prefer exact section + subsection/step matches in reviewer feedback.
+    specific={};broad={}
     for field,entry in all_fields.items():
         path=entry['path']
         if not path:continue
@@ -445,27 +444,26 @@ def _review_candidate_fields(data,issues,all_fields):
             if title and title in issue_text:
                 if len(path)>=4 and path[1]=='steps':
                     child=str(data['guide']['steps'][path[2]].get('title','')).casefold()
-                    if child and child in issue_text:candidates[field]=entry
-                elif len(path)==2:
-                    candidates[field]=entry
+                    if child and child in issue_text:specific[field]=entry
+                else:broad[field]=entry
         elif path[0] in ('feature','original') and path[0] in issue_text:
             section=data.get(path[0],{})
             title=str(section.get('title','')).casefold()
             if title and title in issue_text:
                 if len(path)>=4 and path[1]=='columns':
                     child=str(section['columns'][path[2]].get('title','')).casefold()
-                    if child and child in issue_text:candidates[field]=entry
-                elif len(path)==2:candidates[field]=entry
+                    if child and child in issue_text:specific[field]=entry
+                else:broad[field]=entry
         elif path[0]=='news' and len(path)>=3 and path[1]<len(data.get('news',[])):
             title=str(data['news'][path[1]].get('title','')).casefold()
-            if title and title in issue_text:candidates[field]=entry
+            if title and title in issue_text:specific[field]=entry
         elif path[0] in ('tips','qa') and path[0] in issue_text:
             section=data.get(path[0],{})
             if len(path)>=4 and path[1]=='items':
                 child=str(section['items'][path[2]].get('title','')).casefold()
-                if child and child in issue_text:candidates[field]=entry
-            elif len(path)==2:candidates[field]=entry
-    return candidates or all_fields
+                if child and child in issue_text:specific[field]=entry
+            else:broad[field]=entry
+    return specific or broad or all_fields
 
 def repair_review_issues(client,data,sources,review):
     """Repair only fields named by independent editorial feedback; preserve gates."""
