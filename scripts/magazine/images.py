@@ -47,23 +47,42 @@ def candidates(query):
     pages=result.get('query',{}).get('pages',{})
     return [p['imageinfo'][0] for p in sorted(pages.values(),key=lambda p:p.get('index',999)) if p.get('imageinfo')]
 
-def _original_cover(folder):
-    """Create original abstract cover artwork when Commons has no suitable photo."""
+def _original_artwork(folder,key,brief):
+    """Create a distinct, locally generated abstract illustration if Commons has no usable image.
+
+    This is deliberately illustrative rather than a fake photograph or purported evidence
+    of a product/event. It keeps publication resilient without relaxing image-license checks.
+    """
     from PIL import ImageDraw
-    image=Image.new('RGB',(1600,2000))
+    import hashlib
+    width,height=1600,1200
+    digest=hashlib.sha256((key+' '+brief).encode('utf-8')).digest()
+    accents=[(91,190,255),(155,112,255),(60,220,190),(255,170,80),(255,105,145)]
+    accent=accents[digest[0]%len(accents)]
+    image=Image.new('RGB',(width,height))
     pixels=image.load()
-    for y in range(image.height):
-        for x in range(image.width):
-            glow=max(0,1-(((x-1180)/900)**2+((y-570)/850)**2)**0.5)
-            pixels[x,y]=(int(5+20*glow),int(15+25*glow),int(38+85*glow))
+    for y in range(height):
+        for x in range(width):
+            glow=max(0,1-(((x-(800+digest[1]*2))/950)**2+((y-(250+digest[2]*2))/780)**2)**0.5)
+            pixels[x,y]=(int(5+18*glow),int(15+25*glow),int(38+80*glow))
     draw=ImageDraw.Draw(image,'RGBA')
-    draw.ellipse((720,120,1700,1100),outline=(91,190,255,105),width=5)
-    draw.ellipse((850,250,1510,910),outline=(155,112,255,125),width=4)
-    draw.arc((700,130,1640,1070),20,265,fill=(105,220,255,190),width=14)
-    for i in range(7):
-        x=870+i*75
-        draw.line((x,250,x-320,1080),fill=(105,170,255,30),width=2)
-    path=Path(folder)/'cover-art.jpg'
+    # A distinct geometric editorial motif; no text, logo, UI screenshot or external asset.
+    cx=780+(digest[3]-128)*2
+    cy=510+(digest[4]-128)
+    for i in range(6):
+        inset=i*52
+        draw.ellipse((cx-120-inset,cy-120-inset,cx+120+inset,cy+120+inset),
+                     outline=(*accent,max(28,125-i*14)),width=5)
+    for i in range(12):
+        x=100+i*125
+        draw.line((x,100,x+((digest[i+5]-128)*2),height-100),
+                  fill=(*accent,28+i*3),width=3 if i%3==0 else 1)
+    for i in range(9):
+        x=150+(i*173+digest[10])%1300
+        y=100+(i*97+digest[11])%1000
+        radius=8+(digest[(i+12)%len(digest)]%24)
+        draw.ellipse((x-radius,y-radius,x+radius,y+radius),fill=(*accent,150))
+    path=Path(folder)/(key+'-original-art.jpg')
     image.save(path,quality=92)
     return path
 
@@ -107,11 +126,11 @@ def free_images(client,briefs,folder,previous_covers=()):
                 credit.update(image_sha256=fingerprint,download_url=source,changes='Ritaglio editoriale e ridimensionamento',kind='licensed')
                 images[key]=path;credits[key]=credit;seen.add(source);selected=True;break
             if selected:break
-        if not selected and key=='cover':
-            # Original locally generated artwork avoids blocking publication when Commons has no fit.
-            path=_original_cover(folder)
+        if not selected:
+            # Commons is optional: retain strict license validation for sourced photos, but
+            # use clearly credited original artwork instead of aborting the entire issue.
+            path=_original_artwork(folder,key,brief)
             images[key]=path
-            credits[key]={'kind':'original_artwork','artist':'AIVision','license':'Original artwork created for this issue','license_url':'','source':'','title':'Abstract technology cover','changes':'Generated locally; no third-party image used'}
+            credits[key]={'kind':'original_artwork','artist':'AIVision','license':'Original artwork created for this issue','license_url':'','source':'','title':f'Original abstract illustration: {key}','changes':'Generated locally; no third-party image used'}
             selected=True
-        if not selected:raise ValueError('No suitable licensed image for '+key)
     return images,credits
