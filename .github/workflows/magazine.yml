@@ -18,7 +18,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: aivision-magazine
+  group: aivision-magazine-release
   cancel-in-progress: false
 jobs:
   tests:
@@ -67,9 +67,6 @@ jobs:
             connect) python -m scripts.magazine.run --connect-only ;;
             *) exit 1 ;;
           esac
-      - name: First real preview after merge
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: python -m scripts.magazine.run
       - uses: actions/upload-artifact@v4
         if: always()
         with:
