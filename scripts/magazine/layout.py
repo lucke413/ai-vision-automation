@@ -84,11 +84,11 @@ def render(data,sources,out,art,issue,period,credits=None):
     p.title(data['cover_title'],146,211,431,144,32,'#FFFFFF')
     p.rect(0,172,132,557,'#FFFFFF');p.tag('DENTRO IL NUMERO',7,181,118)
     p.title('PASSO A PASSO',10,215,112,102,24)
-    p.text(data['guide']['title'],10,328,110,112,12,NAVY,True)
+    p.text(data['guide']['title'],10,328,110,112,12,NAVY,True,fit=True,min_size=10)
     p.rect(10,450,111,24,YELLOW);p.text(f'LA GUIDA / {pages["guide"]}',15,455,101,17,9,RED,True)
     p.title('IDEE DA PROVARE',10,497,110,100,19)
     p.text('Cinque consigli pratici e le risposte ai dubbi più comuni.',10,621,110,90,10)
-    p.rect(146,594,429,112,NAVY);p.text(data['cover_deck'],159,608,402,90,14,'#FFFFFF',True)
+    p.rect(146,594,429,112,NAVY);p.text(data['cover_deck'],159,608,402,90,14,'#FFFFFF',True,fit=True,min_size=11)
     p.rect(0,729,W,87,YELLOW);p.title('TECNOLOGIA DA USARE',13,739,569,45,31)
     p.text('NOTIZIE / APPROFONDIMENTI ORIGINALI / GUIDE / RISORSE',15,788,565,20,10,NAVY,True)
     p.text('aivision.altervista.org',13,824,290,12,8,'#FFFFFF',True)
@@ -101,7 +101,7 @@ def render(data,sources,out,art,issue,period,credits=None):
     p.photo('original',26,448,168,115);p.photo('guide',212,448,168,115)
     p.tag(f'{pages["original"]:02} / APPROFONDIMENTO',26,563,168);p.tag(f'{pages["guide"]:02} / LA GUIDA',212,563,168,BLUE)
     p.text(data['original']['title'],26,597,168,75,12,NAVY,True);p.text(data['guide']['title'],212,597,168,75,12,NAVY,True)
-    p.rect(399,160,170,514,GRAY);p.tag('L’EDITORIALE',408,170,152,NAVY);p.text(data['editorial'],411,211,146,445,9.4)
+    p.rect(399,160,170,514,GRAY);p.tag('L’EDITORIALE',408,170,152,NAVY);p.text(data['editorial'],411,211,146,445,9.4,fit=True,min_size=8.2)
     for x,y,w,h,key in [(26,160,354,270,'feature'),(26,448,168,224,'original'),(212,448,168,224,'guide')]:
         c.linkRect('',key,(x,H-y-h,x+w,H-y),relative=0,thickness=0)
     y=695
@@ -137,36 +137,36 @@ def render(data,sources,out,art,issue,period,credits=None):
         item=data[key];p.start(key,label)
         if key=='guide':
             size=min(30,543/pdfmetrics.stringWidth(item['title'].upper(),'Bold',1))
-            p.title(item['title'],26,58,543,44,size);p.text(item['deck'],26,111,543,39,10)
+            p.title(item['title'],26,58,543,44,size);p.text(item['deck'],26,111,543,39,10,fit=True,min_size=8.5)
         else:
-            p.title(item['title'],26,58,543,89,30);p.text(item['deck'],26,151,543,44,10.5)
+            p.title(item['title'],26,58,543,89,30);p.text(item['deck'],26,151,543,44,10.5,fit=True,min_size=9)
         if key!='guide':
             p.photo(key,26,206,543,228)
             p.text('Immagine illustrativa; fonti e licenze nei crediti, non una prova del prodotto citato.' if credits else 'Illustrazione editoriale generata con IA; non rappresenta una prova o una schermata reale.',26,440,543,18,7)
             for i,col in enumerate(item['columns']):
                 x=26+i*186;p.text(col['title'].upper(),x,471,171,40,11,RED,True)
                 p.text(col['body'],x,520,171,222,8.6,fit=True,min_size=7.2)
-            p.rect(26,749,543,28,YELLOW);p.text(item['box'],34,754,527,22,7.8)
+            p.rect(26,749,543,28,YELLOW);p.text(item['box'],34,754,527,22,7.8,fit=True,min_size=6.5)
         else:
             p.rect(18,159,559,610,BLUE);p.rect(25,166,545,596,'#FFFFFF')
             for i,step in enumerate(item['steps']):
                 x=38+(i%2)*270;y=177+(i//2)*192
                 p.text(str(i+1),x,y,27,37,27,RED,True);p.text(step['title'],x+33,y+5,211,33,11,NAVY,True)
                 p.photo(f'step{i}' if f'step{i}' in art else 'guide',x,y+43,244,76)
-                p.text(step['body'],x,y+128,244,57,8.2)
+                p.text(step['body'],x,y+128,244,57,8.2,fit=True,min_size=6.8)
             p.text('Illustrazione concettuale: i numeri indicano l’ordine dei passaggi, non comandi sullo schermo.',33,768,530,10,6)
         p.sources(item,byid);p.end()
     p.start('tips','Tips & Tricks');p.title('5 IDEE DA METTERE IN PRATICA',26,58,543,90,30)
     p.photo('tips',26,158,543,185);p.text('Immagine illustrativa: fonte e licenza nei crediti.' if credits else 'Illustrazione editoriale generata con IA.',26,350,543,15,7)
     for i,item in enumerate(data['tips']['items']):
         y=384+i*76;p.text(str(i+1),26,y,34,40,28,RED,True)
-        p.text(item['title'],70,y,499,24,12,NAVY,True);p.text(item['body'],70,y+26,499,44,9)
+        p.text(item['title'],70,y,499,24,12,NAVY,True);p.text(item['body'],70,y+26,499,44,9,fit=True,min_size=7.2)
     p.sources(data['tips'],byid);p.end()
     p.start('qa','Domande e risorse');p.title('RISPONDE LA REDAZIONE',26,58,543,90,31)
     p.tag('DOMANDE REDAZIONALI / NESSUN LETTORE INVENTATO',26,150,543,BLUE)
     for i,item in enumerate(data['qa']['items']):
         y=195+i*140;p.rect(26,y,5,123,YELLOW)
-        p.text(item['title'],43,y,526,44,14,NAVY,True);p.text(item['body'],43,y+50,526,78,9.4)
+        p.text(item['title'],43,y,526,44,14,NAVY,True,fit=True,min_size=11.5);p.text(item['body'],43,y+50,526,78,9.4,fit=True,min_size=7.4)
     p.tag('TUTTE LE FONTI DEL NUMERO',26,630,543,NAVY)
     used=list(dict.fromkeys(sid for item in [*data['news'],*[data[k] for k in ('feature','guide','original','tips','qa')]] for sid in item['sources']))
     for i,sid in enumerate(used):
@@ -181,8 +181,8 @@ def render(data,sources,out,art,issue,period,credits=None):
             x=26+(i%3)*186;y=208+(i//3)*190
             p.photo(key,x,y,171,55)
             p.text(labels.get(key,'Notizia '+key.removeprefix('news')),x,y+63,171,16,9,NAVY,True)
-            p.text(credit['title'],x,y+84,171,36,7)
-            p.text(credit['artist'],x,y+124,171,36,6.8)
+            p.text(credit['title'],x,y+84,171,36,7,fit=True,min_size=5.8)
+            p.text(credit['artist'],x,y+124,171,36,6.8,fit=True,min_size=5.5)
             p.text(f'<link href="{escape(credit["source"],quote=True)}" color="{BLUE}">Fonte originale</link> · <link href="{escape(credit["license_url"],quote=True)}" color="{BLUE}">{escape(credit["license"])}</link>',x,y+164,171,24,6.8,markup=True)
         p.end()
     c.save()
