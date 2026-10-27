@@ -263,7 +263,7 @@ class StructuredOutputTests(unittest.TestCase):
             self.assertEqual(client.call([{'text':'test'}]),[{'text':'{}'}]);self.assertEqual(post.call_count,2)
         with patch('scripts.magazine.content.requests.post',return_value=busy) as post,patch('scripts.magazine.content.time.sleep'):
             with self.assertRaises(RuntimeError):client.call([{'text':'test'}])
-            self.assertEqual(post.call_count,3)
+            self.assertEqual(post.call_count,6)
         limited=Mock(status_code=429,headers={'Retry-After':'1'})
         with patch('scripts.magazine.content.requests.post',side_effect=[limited,ok]) as post,patch('scripts.magazine.content.time.sleep'):
             self.assertEqual(client.call([{'text':'test'}]),[{'text':'{}'}])
@@ -271,6 +271,25 @@ class StructuredOutputTests(unittest.TestCase):
         with patch('scripts.magazine.content.requests.post',return_value=Mock(status_code=429,headers={})) as post,patch('scripts.magazine.content.time.sleep'):
             with self.assertRaises(RuntimeError):client.call([{'text':'test'}])
             self.assertEqual(post.call_count,3)
+
+    def test_503_uses_low_cost_fallback_model(self):
+        from scripts.magazine.content import Gemini
+        client=Gemini.__new__(Gemini);client.key='test';client.model='gemini-3.5-flash-lite';client.last_request=0
+        busy=Mock(status_code=503,headers={});ok=Mock(status_code=200)
+        ok.json.return_value={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'{}'}]}}]}
+        with patch.dict('os.environ',{'GEMINI_FALLBACK_MODEL':'gemini-3.1-flash-lite'}),patch('scripts.magazine.content.requests.post',side_effect=[busy,busy,busy,ok]) as post,patch('scripts.magazine.content.time.sleep'):
+            self.assertEqual(client.call([{'text':'test'}]),[{'text':'{}'}])
+        urls=[c.args[0] for c in post.call_args_list]
+        self.assertEqual(urls[:3],[f'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent']*3)
+        self.assertEqual(urls[3],'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent')
+
+    def test_explicit_model_does_not_silently_fallback(self):
+        from scripts.magazine.content import Gemini
+        client=Gemini.__new__(Gemini);client.key='test';client.model='gemini-3.5-flash-lite';client.last_request=0
+        busy=Mock(status_code=503,headers={})
+        with patch.dict('os.environ',{'GEMINI_FALLBACK_MODEL':'gemini-3.1-flash-lite'}),patch('scripts.magazine.content.requests.post',return_value=busy) as post,patch('scripts.magazine.content.time.sleep'):
+            with self.assertRaises(RuntimeError):client.call([{'text':'test'}],model='gemini-3.1-flash-image')
+        self.assertEqual(post.call_count,3)
     def test_provider_schema_and_malformed_retry(self):
         from scripts.magazine.content import Gemini,output_schema,SCHEMA
         client=Gemini.__new__(Gemini)

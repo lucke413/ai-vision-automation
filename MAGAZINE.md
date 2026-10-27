@@ -24,7 +24,8 @@ Riutilizza esclusivamente i segreti già previsti dal progetto: `GEMINI_API_KEY`
 
 | Variabile | Significato |
 |---|---|
-| `GEMINI_MODEL` | Modello testuale e multimodale già usato dal progetto |
+| `GEMINI_MODEL` | Modello testuale e multimodale principale; predefinito `gemini-3.5-flash-lite` |
+| `GEMINI_FALLBACK_MODEL` | Modello di riserva predefinito `gemini-3.1-flash-lite`; usato solo dopo errori backend 5xx ripetuti sul modello principale. Entrambi sono disponibili nel livello gratuito secondo la tabella prezzi Gemini API consultata il 27/10/2026. |
 | `MAGAZINE_IMAGE_SOURCE` | `commons` di default: immagini gratuite con licenza e crediti. `gemini` opzionale |
 | `MAGAZINE_IMAGE_MODEL` | Necessario solo per il provider `gemini`; nessun valore di default |
 | `MAGAZINE_ENABLED` | `true` solo dopo collaudo completo del primo numero reale |

@@ -110,28 +110,45 @@ class Gemini:
         self.key=os.environ.get('GEMINI_API_KEY','');self.model=os.environ.get('GEMINI_MODEL','gemini-3.5-flash-lite')
         if not self.key:raise ValueError('GEMINI_API_KEY missing')
     def call(self,parts,model=None,config=None):
-        model=model or self.model
-        if not re.fullmatch(r'[\w.-]+',model):raise ValueError('Invalid model name')
+        explicit_model=model is not None
+        primary=model or self.model
+        if not re.fullmatch(r'[\w.-]+',primary):raise ValueError('Invalid model name')
+        models=[primary]
+        if not explicit_model:
+            fallback=os.environ.get('GEMINI_FALLBACK_MODEL','gemini-3.1-flash-lite').strip()
+            if fallback and fallback!=primary and re.fullmatch(r'[\w.-]+',fallback):
+                models.append(fallback)
         delay=7-(time.monotonic()-self.last_request)
         if delay>0:time.sleep(delay)
         self.last_request=time.monotonic()
-        for attempt in range(3):
-            try:
-                r=requests.post(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
-                  headers={'x-goog-api-key':self.key},json={'contents':[{'role':'user','parts':parts}],
-                  'generationConfig':config or {'responseMimeType':'application/json','temperature':0.2,'maxOutputTokens':14000}},timeout=(10,180))
-            except requests.RequestException:raise RuntimeError('Gemini network error') from None
-            if r.status_code not in (429,500,502,503,504) or attempt==2:break
-            if r.status_code==429:
-                try:retry_after=float(r.headers.get('Retry-After',''))
-                except (TypeError,ValueError):retry_after=0
-                delay=max(15,min(60,retry_after)) if retry_after>0 else 20*(attempt+1)
-            else:
-                delay=15*(attempt+1)
-            print(f'Gemini temporarily unavailable (HTTP {r.status_code}); retry {attempt+1}/2 after {delay}s',flush=True)
-            time.sleep(delay)
-            self.last_request=time.monotonic()
-        if r.status_code!=200:raise RuntimeError(f'Gemini HTTP {r.status_code}')
+        r=None
+        for model_index,active_model in enumerate(models):
+            for attempt in range(3):
+                try:
+                    r=requests.post(f'https://generativelanguage.googleapis.com/v1beta/models/{active_model}:generateContent',
+                      headers={'x-goog-api-key':self.key},json={'contents':[{'role':'user','parts':parts}],
+                      'generationConfig':config or {'responseMimeType':'application/json','temperature':0.2,'maxOutputTokens':14000}},timeout=(10,180))
+                except requests.RequestException:raise RuntimeError('Gemini network error') from None
+                if r.status_code==200:break
+                if r.status_code not in (429,500,502,503,504) or attempt==2:break
+                if r.status_code==429:
+                    try:retry_after=float(r.headers.get('Retry-After',''))
+                    except (TypeError,ValueError):retry_after=0
+                    delay=max(15,min(60,retry_after)) if retry_after>0 else 20*(attempt+1)
+                else:
+                    try:retry_after=float(r.headers.get('Retry-After',''))
+                    except (TypeError,ValueError):retry_after=0
+                    delay=max(15,min(60,retry_after)) if retry_after>0 else 15*(attempt+1)
+                print(f'Gemini temporarily unavailable (HTTP {r.status_code}); retry {attempt+1}/2 after {delay}s on {active_model}',flush=True)
+                time.sleep(delay)
+                self.last_request=time.monotonic()
+            if r.status_code==200:break
+            # A 5xx indicates backend instability/overload; switch once to a
+            # cheaper, stable Flash-Lite model when using the default text/vision
+            # model. Never change an explicitly requested model (e.g. image model).
+            if r.status_code not in (500,502,503,504) or model_index==len(models)-1:break
+            print(f'Gemini backend still unavailable on {active_model}; switching to {models[model_index+1]}',flush=True)
+        if r is None or r.status_code!=200:raise RuntimeError(f'Gemini HTTP {r.status_code if r is not None else "unknown"}')
         candidate=r.json().get('candidates',[{}])[0]
         if candidate.get('finishReason') not in (None,'STOP'):raise ValueError('Incomplete model response')
         return candidate['content']['parts']
