@@ -50,6 +50,18 @@ class ImageSourceFallbackTests(unittest.TestCase):
         info=self._commons_info('https://upload.wikimedia.org/test.jpg','https://evil.example/file')
         self.assertIsNone(rights(info))
 
+    def test_missing_licensed_image_uses_original_artwork_instead_of_aborting(self):
+        from scripts.magazine.images import free_images
+        client=Mock()
+        client.json.return_value={'feature':['unavailable photo query','second unavailable query']}
+        with tempfile.TemporaryDirectory() as folder,patch('scripts.magazine.images.candidates',return_value=[]):
+            images,credits=free_images(client,{'feature':'A technology feature illustration'},folder)
+            self.assertTrue(images['feature'].exists())
+            self.assertGreater(images['feature'].stat().st_size,1000)
+            self.assertEqual(credits['feature']['kind'],'original_artwork')
+            self.assertEqual(credits['feature']['artist'],'AIVision')
+            self.assertFalse(credits['feature']['source'])
+
     def test_invalid_image_host_is_skipped_when_valid_candidate_exists(self):
         import io
         from PIL import Image
