@@ -8,6 +8,7 @@ on:
       - '.github/workflows/publish-first-magazine.yml'
       - 'scripts/magazine/images.py'
       - 'scripts/magazine/layout.py'
+      - 'scripts/magazine/content.py'
       - 'tests/test_magazine.py'
 
 permissions:
