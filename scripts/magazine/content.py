@@ -121,8 +121,13 @@ class Gemini:
                   headers={'x-goog-api-key':self.key},json={'contents':[{'role':'user','parts':parts}],
                   'generationConfig':config or {'responseMimeType':'application/json','temperature':0.2,'maxOutputTokens':14000}},timeout=(10,180))
             except requests.RequestException:raise RuntimeError('Gemini network error') from None
-            if r.status_code not in (500,502,503,504) or attempt==2:break
-            delay=15*(attempt+1)
+            if r.status_code not in (429,500,502,503,504) or attempt==2:break
+            if r.status_code==429:
+                try:retry_after=float(r.headers.get('Retry-After',''))
+                except (TypeError,ValueError):retry_after=0
+                delay=max(15,min(60,retry_after)) if retry_after>0 else 20*(attempt+1)
+            else:
+                delay=15*(attempt+1)
             print(f'Gemini temporarily unavailable (HTTP {r.status_code}); retry {attempt+1}/2 after {delay}s',flush=True)
             time.sleep(delay)
             self.last_request=time.monotonic()
