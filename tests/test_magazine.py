@@ -109,11 +109,19 @@ class EditorialTests(unittest.TestCase):
                 'url':'https://aivision.altervista.org/moulinex-ever-fry-xxl-surface-caratteristiche/',
                 'text':source_text}
         sources.append(source)
+        quote='La Moulinex Ever Fry XXL Surface utilizza una superficie orizzontale e una doppia resistenza per distribuire il calore in modo uniforme.'
+        # Adding a second weekly source means the synthetic fixture also needs
+        # the second news item required by the magazine schema.
+        data['news'].append({
+            'title':'Moulinex Ever Fry XXL Surface e doppia resistenza',
+            'body':' '.join([source_text]*3),
+            'sources':['wp-1307'],
+            'evidence':[{'source':'wp-1307','quote':quote}]
+        })
         data['feature']['title']='Evoluzione delle friggitrici ad aria XXL'
         data['feature']['deck']='Analisi della Moulinex Ever Fry XXL Surface, friggitrice con superficie orizzontale e doppia resistenza.'
         data['feature']['sources']=['wp-1207']
         data['feature']['evidence']=[{'source':'wp-1207','quote':'Estratto associato a un ID non esistente.'}]
-        quote='La Moulinex Ever Fry XXL Surface utilizza una superficie orizzontale e una doppia resistenza per distribuire il calore in modo uniforme.'
         client=Mock();client.json.return_value={'evidence':[{'source':'wp-1307','quote':quote}]}
         repair_evidence(client,data,sources)
         self.assertEqual(data['feature']['sources'],['wp-1307'])
