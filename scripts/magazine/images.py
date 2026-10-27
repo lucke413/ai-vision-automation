@@ -97,7 +97,15 @@ def free_images(client,briefs,folder,previous_covers=()):
         if not isinstance(queries,list) or len(queries)!=2:raise ValueError('Image search plan needs two queries')
         selected=False
         for query in queries:
-            if query not in cache:cache[query]=candidates(query)
+            if query not in cache:
+                try:
+                    cache[query]=candidates(query)
+                except (ValueError,TypeError,KeyError,requests.RequestException) as exc:
+                    # Commons occasionally returns malformed/rejected responses or is briefly
+                    # unavailable. Treat search as optional and fall back to original artwork
+                    # after both queries; never let this external service abort the whole issue.
+                    print(f'Commons image search unavailable for {key}: {type(exc).__name__}')
+                    cache[query]=[]
             attempts=0
             for info in cache[query]:
                 credit=rights(info)
