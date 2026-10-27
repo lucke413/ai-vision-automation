@@ -107,6 +107,18 @@ class WordPress:
         if form:body+=f'<p><a href="{escape(form,quote=True)}">Iscriviti alla newsletter</a></p>'
         page=self.api('POST',f'pages/{page["id"]}',json={'content':body,'status':'publish'})
         return page['link'],records[0]['url']
+    def repair_feed_identity(self):
+        """Fill only missing public site identity used by WordPress RSS."""
+        settings=self.api('GET','settings')
+        defaults={'title':'AIVision','description':'Intelligenza artificiale, tecnologia e guide pratiche.'}
+        changes={key:value for key,value in defaults.items() if key in settings and isinstance(settings[key],str) and not settings[key].strip()}
+        if not changes:return
+        self.journal.data.setdefault('rss_identity_backup',{key:settings[key] for key in changes})
+        self.journal.save()
+        self.api('POST','settings',json=changes)
+        check=self.api('GET','settings')
+        if any(check.get(key)!=value for key,value in changes.items()):raise ValueError('RSS identity readback failed')
+
     def widget(self,latest=None):
         import xml.etree.ElementTree as ET
         feed,_,_=download(BASE+'/feed/',{'aivision.altervista.org'})
@@ -142,7 +154,13 @@ def extend_widget(content,latest=None,form=''):
     pos=clean.rfind('</div>')
     if pos<0:raise ValueError('Widget container missing')
     extra=START+'<div class="aiv-connect-extra" style="display:grid;gap:10px;margin-top:14px">'
-    extra+=f'<a href="{BASE}/feed/" style="display:block;padding:12px;border-radius:10px;background:#f68b24;color:#fff;font-weight:700">RSS · Segui gli aggiornamenti</a>'
+    extra+=f'''<details style="padding:12px;border-radius:10px;background:#fff3e6;color:#082c4b;border:1px solid #f68b24">
+<summary style="cursor:pointer;font-weight:700">RSS · Segui gli aggiornamenti</summary>
+<p style="margin:10px 0">Ricevi i nuovi articoli nel tuo lettore RSS. Copia questo indirizzo e aggiungilo come nuova fonte:</p>
+<code style="display:block;overflow-wrap:anywhere;user-select:all;background:#fff;padding:8px;color:#082c4b">{BASE}/feed/</code>
+<p style="margin:10px 0 0"><a href="{BASE}/feed/" type="application/rss+xml" style="color:#082c4b;text-decoration:underline">Apri il feed RSS (XML)</a></p>
+<small>Se nel browser vedi codice XML, è normale: il feed va aperto con un lettore RSS.</small>
+</details>'''
     if latest:
         safe_url(latest,{'aivision.altervista.org'})
         extra+=f'<a href="{escape(latest,quote=True)}" style="display:block;padding:12px;border-radius:10px;background:#ffe326;color:#082c4b;font-weight:700">Leggi l’ultimo Magazine</a>'
