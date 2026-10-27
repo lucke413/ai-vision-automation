@@ -1,4 +1,4 @@
-name: Build, validate and publish first real AIVision Magazine issue (source reconciliation)
+name: Build, validate and publish first real AIVision Magazine issue (news count repair)
 
 on:
   push:
