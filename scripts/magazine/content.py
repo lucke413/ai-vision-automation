@@ -428,7 +428,7 @@ def _constrained_text_fields(data,schema,path=()):
             if key in data:fields.update(_constrained_text_fields(data[key],spec,path+(key,)))
     elif isinstance(schema,list) and isinstance(data,list) and schema:
         for i,value in enumerate(data):fields.update(_constrained_text_fields(value,schema[0],path+(i,)))
-    elif isinstance(data,str) and isinstance(schema,str) and re.fullmatch(r'\\d+-\\d+ (?:words|characters)',schema):
+    elif isinstance(data,str) and isinstance(schema,str) and re.fullmatch(r'\d+-\d+ (?:words|characters)',schema):
         fields['.'.join(map(str,path))]={'path':list(path),'text':data,'constraint':schema}
     return fields
 
