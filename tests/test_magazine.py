@@ -425,7 +425,8 @@ class LayoutTests(unittest.TestCase):
             'raccolti e per quanto tempo sono conservati. È utile anche verificare '
             'la disponibilità degli aggiornamenti, la compatibilità con il telefono '
             'e la possibilità di usare le funzioni essenziali senza servizi cloud. '
-        )*2
+            'Controllare anche assistenza, garanzia e politiche sulla privacy aiuta a evitare costi inattesi. '
+        )
         root=Path(__file__).resolve().parents[1]/'magazine/art'
         art={k:root/v for k,v in {'cover':'cover.jpg','feature':'creative.jpg','guide':'creative.jpg','original':'factcheck.jpg','tips':'archive.jpg'}.items()}
         with tempfile.TemporaryDirectory() as tmp:
