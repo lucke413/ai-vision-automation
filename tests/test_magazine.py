@@ -422,8 +422,10 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(report['pages'],8);self.assertGreaterEqual(report['links'],15)
             self.assertEqual(len(list(Path(tmp).glob('page-*.png'))),8)
             p=Layout(Path(tmp)/'bad.pdf','test','test',art)
-            with self.assertRaises(ValueError):p.text('overflow '*100,10,10,50,10)
-            p.text('first',10,10,100,20)
+            # Real production failure: a news excerpt was only a few points too tall.
+            p.text('Il fondatore Eric Migicovsky ha annunciato nuovi dettagli. '*12,
+                   10,40,140,50,8.6,fit=True,min_size=7)
+            p.text('first',10,100,100,20)
             with self.assertRaises(ValueError):p.text('overlap',10,10,100,20)
     def test_no_weekly_news_reduces_pages(self):
         from scripts.magazine.layout import render
