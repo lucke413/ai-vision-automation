@@ -104,7 +104,10 @@ class WordPress:
             body+=f'<p><a href="{escape(record["url"],quote=True)}">Pagina del numero</a></p>'
         body+=f'<p><a href="{BASE}/feed/">Segui AIVision via RSS</a></p>'
         form=newsletter_url()
-        if form:body+=f'<p><a href="{escape(form,quote=True)}">Iscriviti alla newsletter</a></p>'
+        if form:
+            body+=f'<section style="margin:24px 0;padding:18px;border-radius:12px;background:#eef7ff"><h2>Newsletter AIVision</h2><p>Ricevi il nuovo numero via email. Conferma l’iscrizione dal messaggio che riceverai; la disiscrizione è sempre disponibile.</p><p><a href="{escape(form,quote=True)}">Iscriviti alla newsletter</a></p></section>'
+        else:
+            body+='<section style="margin:24px 0;padding:18px;border-radius:12px;background:#eef7ff"><h2>Newsletter AIVision</h2><p>Il modulo di iscrizione è in configurazione. Al momento il sito non raccoglie indirizzi email. La newsletter sarà attivata dopo la verifica del consenso, della conferma email e della disiscrizione.</p></section>'
         page=self.api('POST',f'pages/{page["id"]}',json={'content':body,'status':'publish'})
         return page['link'],records[0]['url']
     def repair_feed_identity(self):
@@ -168,6 +171,8 @@ def extend_widget(content,latest=None,form=''):
         # Lazy hosted form provides the email field, provider errors, consent and DOI. No local email storage.
         extra+=f'<iframe src="{escape(form,quote=True)}" title="Iscriviti alla newsletter AIVision" loading="lazy" style="width:100%;height:480px;border:0;background:white;border-radius:10px"></iframe>'
         extra+=f'<a href="{escape(form,quote=True)}" style="display:block;padding:12px;border-radius:10px;background:#fff;color:#082c4b;font-weight:700">Iscriviti alla newsletter</a><small>Inserisci l’email nel modulo e conferma dal messaggio ricevuto. Puoi disiscriverti in ogni momento.</small>'
+    else:
+        extra+='<div style="padding:14px;border-radius:10px;background:#eef7ff;color:#082c4b"><strong>Newsletter AIVision</strong><p style="margin:8px 0 0">Iscrizione via email in configurazione. Al momento non raccogliamo indirizzi: il modulo sarà attivato dopo il collaudo di consenso, conferma e disiscrizione.</p></div>'
     extra+='</div>'+END
     return clean[:pos]+extra+clean[pos:]
 
