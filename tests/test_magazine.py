@@ -98,6 +98,24 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(get.call_count,1)
 
 class EditorialTests(unittest.TestCase):
+    def test_targeted_editorial_repair_changes_only_flagged_guide_step(self):
+        from scripts.magazine.content import repair_review_issues
+        data,sources=fixture()
+        data['guide']['steps'][1]['body']='Questa frase è incompleta per'
+        before=copy.deepcopy(data)
+        replacement='Raccogli i fatti essenziali e verifica le date, il destinatario e lo scopo della comunicazione prima di scrivere una frase completa che indichi con chiarezza cosa deve essere fatto e quando.'
+        review={'passed':False,'issues':["La guida 'Dalla bozza al manifesto', nel passaggio 'Scegli il soggetto', termina con la preposizione sospesa 'per'."]}
+        client=Mock(return_value={'repairs':[{'field':'guide.steps.1.body','text':replacement}]})
+        repair_review_issues(client,data,sources,review)
+        self.assertEqual(data['guide']['steps'][1]['body'],replacement)
+        self.assertEqual(data['guide']['steps'][0],before['guide']['steps'][0])
+        self.assertEqual(data['guide']['title'],before['guide']['title'])
+        self.assertEqual(data['guide']['sources'],before['guide']['sources'])
+        self.assertEqual(client.json.call_count,1)
+        field_schema=client.json.call_args.kwargs['schema']['properties']['repairs']['items']['properties']['field']
+        self.assertIn('guide.steps.1.body',field_schema['enum'])
+        self.assertNotIn('guide.steps.0.body',field_schema['enum'])
+
     def test_evidence_repair_preserves_articles_and_rechecks_literal_source(self):
         from scripts.magazine.content import repair_evidence
         data,sources=fixture();expected=copy.deepcopy(data)
