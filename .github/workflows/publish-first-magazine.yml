@@ -1,4 +1,4 @@
-name: Build, validate and publish first real AIVision Magazine issue (source reconciliation)
+name: Build, validate and publish first real AIVision Magazine issue (network recovery)
 
 on:
   push:
@@ -11,12 +11,12 @@ permissions:
 
 concurrency:
   group: aivision-magazine-first-issue
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}

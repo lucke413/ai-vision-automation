@@ -123,12 +123,20 @@ class Gemini:
         self.last_request=time.monotonic()
         r=None
         for model_index,active_model in enumerate(models):
+            r=None
             for attempt in range(3):
                 try:
                     r=requests.post(f'https://generativelanguage.googleapis.com/v1beta/models/{active_model}:generateContent',
                       headers={'x-goog-api-key':self.key},json={'contents':[{'role':'user','parts':parts}],
-                      'generationConfig':config or {'responseMimeType':'application/json','temperature':0.2,'maxOutputTokens':14000}},timeout=(10,180))
-                except requests.RequestException:raise RuntimeError('Gemini network error') from None
+                      'generationConfig':config or {'responseMimeType':'application/json','temperature':0.2,'maxOutputTokens':14000}},timeout=(10,60))
+                except requests.RequestException:
+                    r=None
+                    if attempt==2:break
+                    delay=10*(attempt+1)
+                    print(f'Gemini network timeout/error; retry {attempt+1}/2 after {delay}s on {active_model}',flush=True)
+                    time.sleep(delay)
+                    self.last_request=time.monotonic()
+                    continue
                 if r.status_code==200:break
                 if r.status_code not in (429,500,502,503,504) or attempt==2:break
                 if r.status_code==429:
@@ -142,7 +150,12 @@ class Gemini:
                 print(f'Gemini temporarily unavailable (HTTP {r.status_code}); retry {attempt+1}/2 after {delay}s on {active_model}',flush=True)
                 time.sleep(delay)
                 self.last_request=time.monotonic()
-            if r.status_code==200:break
+            if r is not None and r.status_code==200:break
+            if r is None:
+                if model_index<len(models)-1:
+                    print(f'Gemini network unavailable on {active_model}; switching to {models[model_index+1]}',flush=True)
+                    continue
+                raise RuntimeError('Gemini network error')
             # A 5xx indicates backend instability/overload; switch once to a
             # cheaper, stable Flash-Lite model when using the default text/vision
             # model. Never change an explicitly requested model (e.g. image model).

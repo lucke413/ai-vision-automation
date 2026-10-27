@@ -426,6 +426,18 @@ class StructuredOutputTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):client.call([{'text':'test'}])
             self.assertEqual(post.call_count,3)
 
+    def test_network_timeout_retries_then_uses_fallback_model(self):
+        from requests import Timeout
+        from scripts.magazine.content import Gemini
+        client=Gemini.__new__(Gemini);client.key='test';client.model='test-model';client.last_request=0
+        ok=Mock(status_code=200)
+        ok.json.return_value={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'{}'}]}}]}
+        with patch.dict('os.environ',{'GEMINI_FALLBACK_MODEL':'gemini-3.1-flash-lite'}),patch('scripts.magazine.content.requests.post',side_effect=[Timeout('one'),Timeout('two'),Timeout('three'),ok]) as post,patch('scripts.magazine.content.time.sleep'):
+            self.assertEqual(client.call([{'text':'test'}]),[{'text':'{}'}])
+        self.assertEqual(post.call_count,4)
+        self.assertTrue(all(call.kwargs['timeout']==(10,60) for call in post.call_args_list))
+        self.assertEqual(post.call_args_list[-1].args[0],'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent')
+
     def test_503_uses_low_cost_fallback_model(self):
         from scripts.magazine.content import Gemini
         client=Gemini.__new__(Gemini);client.key='test';client.model='gemini-3.5-flash-lite';client.last_request=0
