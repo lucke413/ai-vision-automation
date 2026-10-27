@@ -112,11 +112,11 @@ class Gemini:
     def call(self,parts,model=None,config=None):
         explicit_model=model is not None
         primary=model or self.model
-        if not re.fullmatch(r'[\\w.-]+',primary):raise ValueError('Invalid model name')
+        if not re.fullmatch(r'[\w.-]+',primary):raise ValueError('Invalid model name')
         models=[primary]
         if not explicit_model:
             fallback=os.environ.get('GEMINI_FALLBACK_MODEL','gemini-3.1-flash-lite').strip()
-            if fallback and fallback!=primary and re.fullmatch(r'[\\w.-]+',fallback):
+            if fallback and fallback!=primary and re.fullmatch(r'[\w.-]+',fallback):
                 models.append(fallback)
         delay=7-(time.monotonic()-self.last_request)
         if delay>0:time.sleep(delay)
