@@ -495,7 +495,8 @@ class StructuredOutputTests(unittest.TestCase):
             self.assertEqual(post.call_count,2)
         with patch('scripts.magazine.content.requests.post',return_value=Mock(status_code=429,headers={})) as post,patch('scripts.magazine.content.time.sleep'):
             with self.assertRaises(RuntimeError):client.call([{'text':'test'}])
-            self.assertEqual(post.call_count,3)
+            # One request on the rate-limited primary, then the fallback's three retries.
+            self.assertEqual(post.call_count,4)
 
     def test_network_timeout_retries_then_uses_fallback_model(self):
         from requests import Timeout
