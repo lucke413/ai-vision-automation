@@ -176,7 +176,9 @@ class EditorialExpansionTests(unittest.TestCase):
             "fact_check_notes": []
         }
         repaired = {"body_markdown": " ".join(["passaggio"] * 675)}
-        with patch.object(generator, "enrich_source", side_effect=lambda x: x), patch.object(
+        with patch.object(generator, "EXPANSION_TRIGGER_WORDS", 675), patch.object(
+            generator, "enrich_source", side_effect=lambda x: x
+        ), patch.object(
             generator, "call_gemini", side_effect=[original, repaired]
         ) as call:
             draft = generator.generate_valid_draft(source, "fake-key")
