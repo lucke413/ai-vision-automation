@@ -120,6 +120,12 @@ class EditorialExpansionTests(unittest.TestCase):
             self.assertEqual(len(result["errors"]), 1)
             self.assertIn("simulated HTTP 429", result["errors"][0]["error"])
 
+    def test_longform_target_and_fallback_floor_stay_aligned(self):
+        self.assertEqual(generator.TARGET_BODY_WORDS, 950)
+        self.assertEqual(generator.QUALITY_MIN_BODY_WORDS, 550)
+        self.assertEqual(publisher.MIN_PUBLISH_WORDS, 550)
+        self.assertEqual(generator.MAX_RETRIES, 4)
+
     def test_quality_mode_six_posts_with_quality_gates(self):
         from zoneinfo import ZoneInfo
         self.assertEqual(selector.DAILY_LIMIT, 6)
