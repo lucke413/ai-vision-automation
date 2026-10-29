@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.1"
+VERSION = "4.2"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 6
@@ -893,10 +893,14 @@ def main() -> int:
         try:
             drafts.append(generate_valid_draft(item, api_key))
         except GeneratorRateLimitError as exc:
+            # Un singolo 429 persistente non deve far saltare tutte le
+            # successive notizie di scorta: call_gemini ha già atteso e
+            # ritentato; proseguiamo con il lotto residuo e conserviamo
+            # tutte le bozze valide già create.
             stopped_reason = str(exc)
             errors.append({"article_id": item.get("article_id"), "error": stopped_reason})
-            print(f"    AVVISO: {stopped_reason}")
-            break
+            print(f"    AVVISO: {stopped_reason}; provo il prossimo articolo.")
+            continue
         except GeneratorFatalError as exc:
             message = str(exc)
             errors.append({"article_id": item.get("article_id"), "error": message})
