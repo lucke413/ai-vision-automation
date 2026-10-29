@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.0"
+VERSION = "4.1"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 6
@@ -41,13 +41,13 @@ REQUEST_DELAY = 6.0
 GEMINI_MIN_INTERVAL = 7.0
 REQUEST_TIMEOUT = 90
 _LAST_GEMINI_REQUEST_AT = 0.0
-TARGET_BODY_WORDS = 850
+TARGET_BODY_WORDS = 950
 # Soglia minima di pubblicazione: sotto questo valore la bozza viene riscritta
 # una volta e, se resta troppo breve, viene scartata.
 MIN_BODY_WORDS = 500
 # Soglia che attiva l'espansione automatica anche se la bozza supera il minimo.
-QUALITY_MIN_BODY_WORDS = 650
-MAX_BODY_WORDS = 1250
+QUALITY_MIN_BODY_WORDS = 600
+MAX_BODY_WORDS = 1500
 # Un solo tentativo aggiuntivo per contenere il consumo API e recuperare le
 # bozze troppo corte senza trasformare il filtro qualità in un blocco totale.
 MAX_REPAIR_ATTEMPTS = 2
@@ -553,7 +553,7 @@ Regole per l'espansione mirata:
 - se un paragrafo è già completo, lascialo sostanzialmente invariato;
 - usa 2-3 sottotitoli ## solo quando separano informazioni realmente distinte;
 - prima di rispondere conta le parole del body_markdown e, se è ancora sotto
-  {MIN_BODY_WORDS}, sviluppa ulteriormente soltanto elementi supportati.
+  {QUALITY_MIN_BODY_WORDS}, sviluppa ulteriormente soltanto elementi supportati.
 
 BOZZA DA ESPANDERE:
 {json.dumps(previous, ensure_ascii=False)}
@@ -668,7 +668,7 @@ def build_body_repair_prompt(item: dict, raw: dict, reason: str) -> str:
     return (
         "Sei il redattore di AI Vision. Rispondi SOLO con JSON: "
         "{\"body_markdown\": \"testo completo in italiano\"}.\n"
-        "Riscrivi il corpo in 700-900 parole reali, usando 3-5 sezioni utili.\n"
+        "Riscrivi il corpo in 800-1050 parole reali, usando 3-5 sezioni utili.\n"
         "Rifiuto precedente: " + reason[:350] + "\n"
         "Argomento: " + str(item.get("title") or "")[:300] + "\n"
         "Descrizione: " + str(item.get("description") or "")[:4000] + "\n"
@@ -941,7 +941,7 @@ def main() -> int:
             is_offer = draft.get("category") == "Offerte & Prezzi" or draft.get("story_type") == "OFFERTA"
             if (len(promoted) < missing_daily
                     and expansion_room(daily_drafts + promoted, draft)
-                    and editorial_room(daily_drafts + promoted, draft)
+                    and editorial_room(daily_drafts + promoted, draft, allow_news_overflow=True)
                     and not draft.get("editorial_kind")
                     and (not is_offer or current_offers < MAX_DAILY_OFFERS)):
                 draft["publication_slot"] = "today"
@@ -956,8 +956,9 @@ def main() -> int:
     practical = [d for d in daily_drafts if d.get("editorial_kind") in {"GUIDA", "TUTORIAL"}]
     if len(practical) > MAX_PRACTICAL_PER_DAY or sum(d.get("editorial_kind") == "GUIDA" for d in practical) > MAX_GUIDES_PER_DAY or sum(d.get("editorial_kind") == "TUTORIAL" for d in practical) > MAX_TUTORIALS_PER_DAY:
         raise RuntimeError("Quote guide/tutorial superate.")
-    if sum(d.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for d in daily_drafts) > MAX_NEWS_PER_DAY:
-        raise RuntimeError("Quota notizie superata.")
+    news_count = sum(d.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for d in daily_drafts)
+    if news_count > DAILY_LIMIT - len(practical):
+        raise RuntimeError("Numero articoli non coerente con gli slot giornalieri.")
     if stopped_reason:
         warnings = [stopped_reason]
     else:
