@@ -40,16 +40,24 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = [item(i, cat) for i, cat in enumerate(
             ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(x['category'] in selector.EXPANSION_CATEGORIES for x in chosen), 1)
         self.assertIn('AI', {x['category'] for x in chosen})
         self.assertLessEqual(len(reserves), selector.RESERVE_LIMIT)
+
+    def test_unused_slots_are_filled_with_news_when_no_practical_candidates(self):
+        candidates = [item(i, cat) for i, cat in enumerate(
+            ['AI', 'Sicurezza', 'Gaming', 'Software & App', 'Tecnologia',
+             'PC & Hardware', 'Smartphone & Mobile', 'Streaming & Entertainment'])]
+        chosen, _ = selector.select_daily(candidates)
+        self.assertEqual(len(chosen), selector.DAILY_LIMIT)
+        self.assertEqual(sum(x.get('editorial_kind') not in {'GUIDA', 'TUTORIAL'} for x in chosen), 6)
 
     def test_no_forced_new_topic_and_one_offer(self):
         candidates = [item(i, cat, 'OFFERTA' if i < 2 else 'NEWS') for i, cat in enumerate(
             ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, _ = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
 
     def test_reserve_promotion_preserves_topic_cap(self):
@@ -168,7 +176,8 @@ class EditorialExpansionTests(unittest.TestCase):
             for i in range(8)
         )
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(reserves), 6)
+        self.assertGreater(len(reserves), 0)
+        self.assertLessEqual(len(reserves), selector.RESERVE_LIMIT)
         self.assertTrue(all(not selector.is_offer(x) for x in reserves))
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
 
@@ -183,7 +192,7 @@ class EditorialExpansionTests(unittest.TestCase):
         client.get_or_create_term.side_effect=lambda kind,name: {'id':{'Guide':1,'Casa smart':2}[name]}
         client.related_link.return_value='';client.existing_post.return_value=None
         client.upload_media.return_value={'id':0};client.create_post.return_value={'id':123}
-        draft={**item(0,'Casa smart','GUIDA'), 'body_markdown':' '.join(['parola']*510)}
+        draft={**item(0,'Casa smart','GUIDA'), 'body_markdown':' '.join(['parola']*650)}
         with patch.object(publisher,'fallback_png',return_value=b'png'):
             publisher.publish_one(draft,datetime.now(timezone.utc),client,None)
         self.assertEqual(client.create_post.call_args.args[0]['categories'],[1,2])
@@ -206,7 +215,7 @@ class EditorialExpansionTests(unittest.TestCase):
         client.dry_run = False
         client.existing_post.return_value = {"id": 88, "link": "https://example.com/post",
                                              "status": "future"}
-        draft = {**item(12, "AI"), "body_markdown": " ".join(["fatto"] * 520),
+        draft = {**item(12, "AI"), "body_markdown": " ".join(["fatto"] * 650),
                  "slug": "articolo-esistente"}
         result = publisher.publish_one(draft, datetime.now(timezone.utc), client, None)
         self.assertEqual(result["status"], "already_exists")
@@ -234,4 +243,34 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(term["name"], "Tecnologia e prodotti")
         self.assertIsInstance(term, dict)
         self.assertEqual(term.get("id"), 17)
+
+    def test_wordpress_unreadable_existing_term_does_not_raise(self):
+        client = publisher.WordPressClient("https://example.com", "", "", dry_run=False)
+        first_lookup = MagicMock()
+        first_lookup.json.return_value = []
+        conflict = MagicMock()
+        conflict.status_code = 400
+        refetch = MagicMock()
+        refetch.json.return_value = []
+        client.session.get = MagicMock(side_effect=[first_lookup, refetch])
+        client.session.post = MagicMock(return_value=conflict)
+        term = client.get_or_create_term("categories", "PC & Hardware")
+        self.assertIsNone(term.get("id"))
+        self.assertTrue(term.get("unavailable"))
+
+    def test_unavailable_category_does_not_block_article(self):
+        client = MagicMock()
+        client.dry_run = False
+        client.get_or_create_term.side_effect = publisher.PublisherError("taxonomy unavailable")
+        client.related_link.return_value = ""
+        client.existing_post.return_value = None
+        client.upload_media.return_value = {"id": 1}
+        client.create_post.return_value = {"id": 321, "link": "https://example.com/articolo", "status": "future"}
+        client.save_seo.return_value = "warning"
+        draft = {**item(80, "AI"), "title": "Un articolo informativo approfondito",
+                 "body_markdown": " ".join(["parola"] * 650), "slug": "articolo-prova"}
+        with patch.object(publisher, "fallback_png", return_value=b"png"):
+            result = publisher.publish_one(draft, datetime.now(timezone.utc), client, client.session)
+        self.assertEqual(result["status"], "scheduled")
+        self.assertEqual(client.create_post.call_args.args[0]["categories"], [])
 

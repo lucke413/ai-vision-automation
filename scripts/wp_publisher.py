@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.4"
+VERSION = "2.5"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -77,7 +77,7 @@ SOURCE_CATEGORY_MAP = {
 }
 
 VALID_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-MIN_PUBLISH_WORDS = 500
+MIN_PUBLISH_WORDS = 600
 PUBLIC_FORBIDDEN_PATTERNS = (
     re.compile(r"\bprima della pubblicazione\b", re.IGNORECASE),
     re.compile(r"\b(?:da|dati? da) verificare\b", re.IGNORECASE),
@@ -918,7 +918,10 @@ class WordPressClient:
                     if isinstance(match, dict) and str(match.get("name", "")).casefold() == key:
                         cache[key] = match
                         return match
-                raise PublisherError(f"Termine WordPress già presente ma non recuperabile: {name}")
+                print(f"AVVISO tassonomia: il termine {name!r} esiste ma non è leggibile via REST; continuo senza assegnarlo.")
+                result = {"id": None, "name": name, "slug": slugify(name), "unavailable": True}
+                cache[key] = result
+                return result
         response.raise_for_status()
         result = response.json()
         if not isinstance(result, dict):
@@ -1130,14 +1133,23 @@ def publish_one(
     body += guide_resources(draft)
 
     category_name = category_for(draft)
-    category = client.get_or_create_term("categories", category_name)
+    try:
+        category = client.get_or_create_term("categories", category_name)
+    except Exception as exc:
+        # Un problema del catalogo categorie non deve scartare un articolo.
+        # Senza ID esplicito WordPress applica la categoria predefinita del sito.
+        print(f"AVVISO categoria: impossibile assegnare {category_name!r}; continuo con la categoria predefinita ({type(exc).__name__}).")
+        category = {"id": None, "name": category_name, "slug": slugify(category_name)}
     category_ids = [category["id"]] if category.get("id") else []
     # Guide, Confronti e Offerte restano primarie; aggiunge la sezione tematica.
     topic = SOURCE_CATEGORY_MAP.get(str(draft.get("category") or ""))
     if topic in {"Gaming e console", "Casa smart", "Accessori e postazioni"} and topic != category_name:
-        topic_term = client.get_or_create_term("categories", topic)
-        if topic_term.get("id") and topic_term["id"] not in category_ids:
-            category_ids.append(topic_term["id"])
+        try:
+            topic_term = client.get_or_create_term("categories", topic)
+            if topic_term.get("id") and topic_term["id"] not in category_ids:
+                category_ids.append(topic_term["id"])
+        except Exception as exc:
+            print(f"AVVISO categoria secondaria: salto {topic!r} ({type(exc).__name__}); la pubblicazione continua.")
     related = client.related_link(draft, category.get("id"))
     if related:
         body += "\n" + related
@@ -1149,7 +1161,10 @@ def publish_one(
         if not tag or tag.casefold() in seen_tags:
             continue
         seen_tags.add(tag.casefold())
-        tags.append(client.get_or_create_term("tags", tag))
+        try:
+            tags.append(client.get_or_create_term("tags", tag))
+        except Exception as exc:
+            print(f"AVVISO tag: salto {tag!r} ({type(exc).__name__}); la pubblicazione continua.")
 
     source_url = str(draft.get("source_url") or "").strip()
 
@@ -1231,6 +1246,8 @@ def main() -> int:
             "dry_run": dry_run,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "requested": 0,
+            "source_daily_requested": data.get("daily_requested", 0),
+            "source_daily_generated": data.get("daily_generated", 0),
             "completed": 0,
             "errors": [],
             "items": [],
@@ -1269,6 +1286,8 @@ def main() -> int:
         "timezone": os.environ.get("WP_TIMEZONE", DEFAULT_TIMEZONE),
         "slot_times": [value.strftime("%H:%M") for value in parse_slot_times()],
         "requested": len(drafts),
+        "source_daily_requested": data.get("daily_requested", 0),
+        "source_daily_generated": data.get("daily_generated", 0),
         "completed": len(results),
         "scheduled": sum(x.get("status") == "scheduled" for x in results),
         "already_existing": sum(x.get("status") == "already_exists" for x in results),

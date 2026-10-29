@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "2.9"
+VERSION = "3.0"
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 6
 MAX_OFFERS = 1
@@ -110,12 +110,12 @@ def valid_candidates(data: dict) -> list[dict]:
     return sorted(result, key=score_key, reverse=True)
 
 
-def editorial_room(selected: list[dict], candidate: dict) -> bool:
+def editorial_room(selected: list[dict], candidate: dict, allow_news_overflow: bool = False) -> bool:
     """Rispetta i tetti indipendenti: fino a 3 notizie, 2 guide e 1 tutorial."""
     kind = candidate.get("editorial_kind")
     limits = {"GUIDA": MAX_GUIDES_PER_DAY, "TUTORIAL": MAX_TUTORIALS_PER_DAY}
     if kind not in limits:
-        return sum(x.get("editorial_kind") not in limits for x in selected) < MAX_NEWS_PER_DAY
+        return allow_news_overflow or sum(x.get("editorial_kind") not in limits for x in selected) < MAX_NEWS_PER_DAY
     if sum(x.get("editorial_kind") in {"GUIDA", "TUTORIAL"} for x in selected) >= MAX_PRACTICAL_PER_DAY:
         return False
     return sum(x.get("editorial_kind") == kind for x in selected) < limits[kind]
@@ -129,9 +129,10 @@ def is_offer(item: dict) -> bool:
 
 
 def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Fino a sei articoli: tre notizie, due guide e un tutorial al massimo.
+    """Fino a sei articoli con mix preferito 3 notizie, 2 guide e 1 tutorial.
 
-    Ogni formato ha i propri slot; se manca materiale valido, si pubblica meno.
+    Quando le guide o i tutorial mancano, altre notizie valide riempiono gli
+    slot residui, senza abbassare i controlli anti-duplicato e sulle offerte.
     """
     if not items:
         return [], []
@@ -144,12 +145,12 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
     def offer_ok(item: dict) -> bool:
         return not is_offer(item) or offers < MAX_OFFERS
 
-    def add(item: dict) -> bool:
+    def add(item: dict, allow_news_overflow: bool = False) -> bool:
         nonlocal offers
         identifier = item["article_id"]
         if identifier in selected_ids or not offer_ok(item):
             return False
-        if not expansion_room(selected, item) or not editorial_room(selected, item):
+        if not expansion_room(selected, item) or not editorial_room(selected, item, allow_news_overflow=allow_news_overflow):
             return False
         if len(selected) >= DAILY_LIMIT:
             return False
@@ -175,6 +176,14 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
         add(item)
     for item in tutorials:
         add(item)
+
+    # Le quote restano la priorità editoriale, non un tetto che lascia slot vuoti.
+    # Se mancano guide/tutorial validi, riempi gli slot restanti con altre notizie
+    # selezionate e deduplicate invece di fermare la giornata a tre articoli.
+    for item in news:
+        if len(selected) >= DAILY_LIMIT:
+            break
+        add(item, allow_news_overflow=True)
 
     # Never replace failed news with an extra tutorial or guide.
     # Reserve candidates come from RSS only, and retain their quality gates.

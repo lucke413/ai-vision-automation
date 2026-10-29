@@ -2,6 +2,15 @@ name: AIVision Full SEO Audit
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/article_generator.py'
+      - 'scripts/daily_selector.py'
+      - 'scripts/wp_publisher.py'
+      - 'scripts/seo_site_audit.py'
+      - '.github/workflows/ai-vision.yml'
+      - '.github/workflows/full-seo-audit.yml'
   schedule:
     - cron: '45 7 * * 0'
       timezone: Europe/Rome
