@@ -756,10 +756,12 @@ def source_reference_link(draft: dict, base_url: str) -> str:
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
         return ""
     source_url = str(draft.get("source_url") or "").strip()
+    if not source_url:
+        return ""
     try:
         parts = urlsplit(source_url)
         base = urlsplit(base_url)
-    except ValueError:
+    except (TypeError, ValueError):
         return ""
     if (
         parts.scheme not in {"https", "http"}
@@ -791,7 +793,7 @@ def category_archive_link(category: dict, base_url: str) -> str:
         return ""
     try:
         parts, base = urlsplit(link), urlsplit(base_url)
-    except ValueError:
+    except (TypeError, ValueError):
         return ""
     if (
         parts.scheme != "https"
