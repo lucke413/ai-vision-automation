@@ -182,7 +182,9 @@ class EditorialExpansionTests(unittest.TestCase):
             "fact_check_notes": []
         }
         repaired = {"body_markdown": " ".join(["passaggio"] * 675)}
-        with patch.object(generator, "enrich_source", side_effect=lambda x: x), patch.object(
+        with patch.object(generator, "EXPANSION_TRIGGER_WORDS", 675), patch.object(
+            generator, "enrich_source", side_effect=lambda x: x
+        ), patch.object(
             generator, "call_gemini", side_effect=[original, repaired]
         ) as call:
             draft = generator.generate_valid_draft(source, "fake-key")
@@ -191,6 +193,100 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(draft["title"], original["title"])
         self.assertEqual(call.call_count, 2)
         self.assertIn("SOLO con JSON", call.call_args.args[0])
+
+    def test_short_valid_draft_attempts_nonblocking_expansion(self):
+        source = {
+            "article_id": "long-form-check",
+            "title": "WhatsApp introduce nuovi strumenti per i pagamenti Android",
+            "description": " ".join(["Informazione documentata sul servizio e sulle sue funzioni."] * 35),
+            "url": "https://example.com/news",
+            "category": "Software & App",
+            "story_type": "NEWS",
+        }
+        original = {
+            "title": "WhatsApp prepara nuovi strumenti per i pagamenti su Android",
+            "excerpt": "Le novità riguardano la sezione dei pagamenti nell'app.",
+            "body_markdown": " ".join(["fatto"] * 650),
+            "seo_title": "WhatsApp: novità sui pagamenti Android",
+            "seo_description": "I dettagli sulla nuova sezione pagamenti di WhatsApp su Android.",
+            "slug": "whatsapp-pagamenti-android",
+            "tags": ["WhatsApp", "Android"],
+            "fact_check_notes": [],
+        }
+        with patch.object(generator, "enrich_source", side_effect=lambda value: value), patch.object(
+            generator, "call_gemini", return_value=original
+        ), patch.object(
+            generator, "repair_body",
+            side_effect=generator.GeneratorRateLimitError("simulated 429 during optional expansion"),
+        ) as repair:
+            draft = generator.generate_valid_draft(source, "fake-key")
+        self.assertEqual(draft["body_word_count"], 650)
+        self.assertEqual(repair.call_count, 1)
+
+    def test_short_valid_draft_uses_successful_expansion(self):
+        source = {
+            "article_id": "long-form-success",
+            "title": "WhatsApp introduce nuovi strumenti per i pagamenti Android",
+            "description": " ".join(["Informazione documentata sul servizio e sulle sue funzioni."] * 35),
+            "url": "https://example.com/news",
+            "category": "Software & App",
+            "story_type": "NEWS",
+        }
+        original = {
+            "title": "WhatsApp prepara nuovi strumenti per i pagamenti su Android",
+            "excerpt": "Le novità riguardano la sezione dei pagamenti nell'app.",
+            "body_markdown": " ".join(["fatto"] * 650),
+            "seo_title": "WhatsApp: novità sui pagamenti Android",
+            "seo_description": "I dettagli sulla nuova sezione pagamenti di WhatsApp su Android.",
+            "slug": "whatsapp-pagamenti-android",
+            "tags": ["WhatsApp", "Android"],
+            "fact_check_notes": [],
+        }
+        expanded = {**original, "body_markdown": " ".join(["dettaglio"] * 850)}
+        with patch.object(generator, "enrich_source", side_effect=lambda value: value), patch.object(
+            generator, "call_gemini", return_value=original
+        ), patch.object(generator, "repair_body", return_value=expanded):
+            draft = generator.generate_valid_draft(source, "fake-key")
+        self.assertEqual(draft["body_word_count"], 850)
+        self.assertEqual(draft["title"], original["title"])
+
+    def test_reserves_are_not_generated_when_daily_slots_are_filled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            inp = Path(directory) / "daily.json"
+            out = Path(directory) / "drafts.json"
+            inp.write_text(json.dumps({
+                "items": [item(0, "Sicurezza"), item(1, "Gaming")],
+                "reserve_items": [item(2, "Software & App")],
+            }), encoding="utf-8")
+
+            titles = {
+                "0": "Nuove protezioni per dispositivi connessi",
+                "1": "Aggiornamento importante per videogiochi su console",
+            }
+
+            def make_draft(source, key):
+                return {
+                    **source,
+                    "title": titles[source["article_id"]],
+                    "body_markdown": " ".join(["parola"] * 650),
+                    "body_word_count": 650,
+                    "quality_warnings": [],
+                    "source_text_status": "page_extracted",
+                    "source_text_word_count": 650,
+                }
+
+            with patch.object(generator, "INPUT_FILE", inp), patch.object(
+                generator, "OUTPUT_FILE", out
+            ), patch.dict("os.environ", {"GEMINI_API_KEY": "test-not-a-real-key"}), patch.object(
+                generator, "generate_valid_draft", side_effect=make_draft
+            ) as generated, patch.object(generator.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
+                generator.main()
+
+            result = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(result["daily_generated"], 2)
+            self.assertEqual(result["reserve_attempted"], 0)
+            self.assertEqual(generated.call_count, 2)
+            self.assertEqual({x["article_id"] for x in result["items"]}, {"0", "1"})
 
     def test_invalid_repair_still_fails_quality_gate(self):
         source = {
