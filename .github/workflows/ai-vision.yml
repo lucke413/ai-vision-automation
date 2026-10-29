@@ -14,7 +14,7 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - '.github/workflows/ai-vision.yml'
-  # Run one explicit QA from a tagged commit; ordinary pushes never publish. The QA tag forces WP_DRY_RUN.
+  # A commit tagged [AI-VISION-QA] runs the full pipeline in dry-run; never publishes to WordPress.
   push:
     branches: [main]
     paths:
