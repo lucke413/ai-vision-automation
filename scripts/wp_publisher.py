@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.6"
+VERSION = "2.7"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -77,7 +77,7 @@ SOURCE_CATEGORY_MAP = {
 }
 
 VALID_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-MIN_PUBLISH_WORDS = 600
+MIN_PUBLISH_WORDS = 550
 PUBLIC_FORBIDDEN_PATTERNS = (
     re.compile(r"\bprima della pubblicazione\b", re.IGNORECASE),
     re.compile(r"\b(?:da|dati? da) verificare\b", re.IGNORECASE),
