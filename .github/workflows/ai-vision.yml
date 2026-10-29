@@ -119,9 +119,9 @@ jobs:
           expected = {
               "scripts/rss_collector.py": "2.3.3",
               "scripts/ai_filter.py": "3.1.1",
-              "scripts/daily_selector.py": "2.9",
-              "scripts/article_generator.py": "4.0",
-              "scripts/wp_publisher.py": "2.4",
+              "scripts/daily_selector.py": "3.0",
+              "scripts/article_generator.py": "4.1",
+              "scripts/wp_publisher.py": "2.5",
           }
 
           for filename, wanted in expected.items():
@@ -247,11 +247,11 @@ jobs:
                   raise SystemExit("ERRORE: slot di pubblicazione mancante.")
               if item.get("publication_slot") == "today":
                   word_count = int(item.get("body_word_count", 0))
-                  if word_count < 500:
+                  if word_count < 600:
                       # Non bloccare l'intero lotto per una singola bozza breve.
                       # Il publisher applica il controllo per singolo articolo e
                       # può pubblicare gli altri contenuti validi.
-                      print(f"AVVISO qualità: articolo sotto 500 parole ({word_count}); il publisher lo valuterà singolarmente: {item.get('title', 'articolo')}")
+                      print(f"AVVISO qualità: articolo sotto 600 parole ({word_count}); il publisher lo valuterà singolarmente: {item.get('title', 'articolo')}")
                   if item.get("quality_warnings"):
                       print(f"AVVISO qualità: {item.get('title', 'articolo')} -> {item.get('quality_warnings')}")
           daily = sum(1 for item in items if item.get("publication_slot") == "today")
@@ -262,12 +262,12 @@ jobs:
           PY
 
       - name: Pubblica o pianifica su WordPress
-        if: ${{ vars.WP_PUBLISH_MODE == 'dry-run' || vars.WP_PUBLISH_MODE == 'live' }}
+        if: ${{ github.event_name != 'pull_request' }}
         env:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-          WP_DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && !inputs.publish_live) || vars.WP_PUBLISH_MODE != 'live') && 'true' || 'false' }}
+          WP_DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && !inputs.publish_live) || (github.event_name != 'workflow_dispatch' && vars.WP_PUBLISH_MODE == 'dry-run')) && 'true' || 'false' }}
           WP_TIMEZONE: Europe/Rome
           WP_SLOT_TIMES: "08:00,10:30,14:00,16:30,18:30,20:30"
         run: python scripts/wp_publisher.py
@@ -289,6 +289,12 @@ jobs:
           print("Online verificati: 0 (il report non esegue una verifica HTTP pubblica dei post).")
           for error in data.get("errors", []):
               print(f"AVVISO publisher: {error}")
+          source_requested = int(data.get("source_daily_requested", 0) or 0)
+          completed = int(data.get("completed", 0) or 0)
+          if not data.get("dry_run") and source_requested > 0 and completed == 0:
+              raise SystemExit("ERRORE: il generatore aveva articoli giornalieri ma WordPress ne ha elaborati zero. Consultare gli errori e gli artefatti del run.")
+          if not data.get("dry_run") and source_requested > completed:
+              print(f"AVVISO: pubblicazione parziale {completed}/{source_requested}; controllare gli errori per articolo.")
           PY
 
       - name: Audit tecnico AdSense
