@@ -40,16 +40,24 @@ class EditorialExpansionTests(unittest.TestCase):
         candidates = [item(i, cat) for i, cat in enumerate(
             ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(x['category'] in selector.EXPANSION_CATEGORIES for x in chosen), 1)
         self.assertIn('AI', {x['category'] for x in chosen})
         self.assertLessEqual(len(reserves), selector.RESERVE_LIMIT)
+
+    def test_unused_slots_are_filled_with_news_when_no_practical_candidates(self):
+        candidates = [item(i, cat) for i, cat in enumerate(
+            ['AI', 'Sicurezza', 'Gaming', 'Software & App', 'Tecnologia',
+             'PC & Hardware', 'Smartphone & Mobile', 'Streaming & Entertainment'])]
+        chosen, _ = selector.select_daily(candidates)
+        self.assertEqual(len(chosen), selector.DAILY_LIMIT)
+        self.assertEqual(sum(x.get('editorial_kind') not in {'GUIDA', 'TUTORIAL'} for x in chosen), 6)
 
     def test_no_forced_new_topic_and_one_offer(self):
         candidates = [item(i, cat, 'OFFERTA' if i < 2 else 'NEWS') for i, cat in enumerate(
             ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
         chosen, _ = selector.select_daily(candidates)
-        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
 
     def test_reserve_promotion_preserves_topic_cap(self):
