@@ -525,7 +525,7 @@ Restituisci esclusivamente JSON con i campi:
  "affiliate_candidate": false,
  "needs_review": true
 }}
-{("Sviluppa la versione precedente in 700-850 parole, rimuovi false esperienze dirette e non inventare dati. Versione precedente: " + json.dumps(previous, ensure_ascii=False)) if previous else ""}
+{("Sviluppa la versione precedente in 850-1050 parole, rimuovi false esperienze dirette e non inventare dati. Versione precedente: " + json.dumps(previous, ensure_ascii=False)) if previous else ""}
 """
     title = str(item.get("title") or "")[:500]
     description = str(item.get("description") or "")[:5000]
