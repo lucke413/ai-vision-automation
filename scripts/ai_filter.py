@@ -58,13 +58,13 @@ MAX_FINAL_CANDIDATES = 30
 # RATE LIMIT GEMINI
 # ------------------------------------------------------------
 
-# Il limite rilevato sul progetto è 15 richieste/minuto.
-# 6 secondi = circa 10 richieste/minuto.
+# Mantiene un ritmo prudente tra articoli e rispetta Retry-After quando disponibile.
 REQUEST_DELAY = 6.0
 
-# Numero massimo di tentativi per una singola richiesta. Il 429 non viene
-# ritentato: è un limite di quota, non un errore transitorio.
+# Retry brevi per i limiti temporanei; una quota giornaliera esaurita non viene
+# ritentata e non si aggira il controllo editoriale.
 MAX_RETRIES = 3
+RATE_LIMIT_MAX_WAIT = 45.0
 
 # Timeout HTTP
 REQUEST_TIMEOUT = 60
@@ -427,10 +427,39 @@ def call_gemini(prompt, api_key):
                     f"Gemini HTTP {response.status_code}: verificare chiave, permessi, modello e richiesta."
                 )
             if response.status_code == 429:
-                raise GeminiRateLimitError(
-                    "Gemini HTTP 429: rate limit raggiunto; analisi fermata "
-                    "per evitare retry che consumano altra quota."
+                error_payload = {}
+                try:
+                    error_payload = response.json()
+                except (ValueError, TypeError):
+                    pass
+                message = str(
+                    (error_payload.get("error") or {}).get("message") or ""
+                ).strip()
+                message_lower = message.lower()
+                # Le quote giornaliere/mensili esaurite non si risolvono
+                # aspettando qualche secondo: segnala l'arresto controllato.
+                hard_quota = any(
+                    token in message_lower
+                    for token in ("per day", "per month", "per day per project",
+                                  "generaterequestsperday", "daily quota")
                 )
+                if hard_quota or attempt >= MAX_RETRIES:
+                    raise GeminiRateLimitError(
+                        "Gemini HTTP 429: limite persistente o quota non temporanea; "
+                        "conservo i candidati già validati e fermo le nuove chiamate."
+                    )
+                retry_after = str(response.headers.get("Retry-After") or "").strip()
+                try:
+                    wait_rate = float(retry_after)
+                except (TypeError, ValueError):
+                    wait_rate = 10.0 * attempt
+                wait_rate = max(2.0, min(RATE_LIMIT_MAX_WAIT, wait_rate))
+                print(
+                    f"    Gemini HTTP 429: riprovo tra {wait_rate:.0f}s "
+                    f"({attempt + 1}/{MAX_RETRIES})."
+                )
+                time.sleep(wait_rate)
+                continue
             elif not 500 <= response.status_code < 600:
                 raise GeminiFatalError(f"Gemini HTTP {response.status_code}: richiesta interrotta.")
             print(f"    Gemini HTTP {response.status_code}, tentativo {attempt}/{MAX_RETRIES}.")

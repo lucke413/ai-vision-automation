@@ -28,6 +28,46 @@ class EditorialExpansionTests(unittest.TestCase):
         for title, expected in examples:
             self.assertEqual(collector.classify_category(title, '', 'tech'), expected)
 
+    def test_ai_filter_retries_transient_429(self):
+        limited = MagicMock()
+        limited.status_code = 429
+        limited.headers = {"Retry-After": "0"}
+        limited.json.return_value = {
+            "error": {"message": "Too many requests per minute"}
+        }
+        success = MagicMock()
+        success.status_code = 200
+        success.json.return_value = {
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": '{"ai_score": 80, "reader_value": 72}'
+                    }]
+                }
+            }]
+        }
+        with patch.object(ai_filter.requests, "post", side_effect=[limited, success]) as post, patch.object(
+            ai_filter.time, "sleep"
+        ):
+            result = ai_filter.call_gemini("prompt di test", "fake-key")
+        self.assertEqual(result, {"ai_score": 80, "reader_value": 72})
+        self.assertEqual(post.call_count, 2)
+
+    def test_ai_filter_does_not_retry_daily_quota_exhaustion(self):
+        limited = MagicMock()
+        limited.status_code = 429
+        limited.headers = {}
+        limited.json.return_value = {
+            "error": {"message": "Quota exceeded for quota metric GenerateRequestsPerDay"}
+        }
+        with patch.object(ai_filter.requests, "post", return_value=limited) as post, patch.object(
+            ai_filter.time, "sleep"
+        ) as sleep:
+            with self.assertRaises(ai_filter.GeminiRateLimitError):
+                ai_filter.call_gemini("prompt di test", "fake-key")
+        self.assertEqual(post.call_count, 1)
+        sleep.assert_not_called()
+
     def test_categories_consistent(self):
         for name in selector.EXPANSION_CATEGORIES:
             self.assertIn(name, collector.CATEGORY_KEYWORDS)
