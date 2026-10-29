@@ -280,7 +280,9 @@ class EditorialExpansionTests(unittest.TestCase):
             "source": "Source Example",
             "tags": [],
         }
-        with patch.object(publisher, "fallback_png", return_value=b"png"):
+        with patch.object(publisher, "fallback_png", return_value=b"png"), patch.object(
+            publisher, "extract_og_image", return_value=""
+        ):
             result = publisher.publish_one(
                 draft, datetime.now(timezone.utc), client, client.session
             )
