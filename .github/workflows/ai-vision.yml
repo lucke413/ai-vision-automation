@@ -14,6 +14,14 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - '.github/workflows/ai-vision.yml'
+  # Run one explicit QA from a tagged commit; ordinary pushes never publish.
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/article_generator.py'
+      - 'scripts/daily_selector.py'
+      - 'scripts/wp_publisher.py'
+      - '.github/workflows/ai-vision.yml'
   schedule:
     - cron: '17 11 * * *'
       timezone: Europe/Rome
@@ -54,7 +62,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
   ai-pipeline:
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -267,7 +275,7 @@ jobs:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-          WP_DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && !inputs.publish_live) || (github.event_name != 'workflow_dispatch' && vars.WP_PUBLISH_MODE == 'dry-run')) && 'true' || 'false' }}
+          WP_DRY_RUN: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) || (github.event_name == 'workflow_dispatch' && !inputs.publish_live) || (github.event_name == 'schedule' && vars.WP_PUBLISH_MODE == 'dry-run')) && 'true' || 'false' }}
           WP_TIMEZONE: Europe/Rome
           WP_SLOT_TIMES: "08:00,10:30,14:00,16:30,18:30,20:30"
         run: python scripts/wp_publisher.py
