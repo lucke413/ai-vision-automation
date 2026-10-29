@@ -1031,10 +1031,17 @@ class WordPressClient:
                 timeout=REQUEST_TIMEOUT,
             )
             response.raise_for_status()
-            saved = response.json().get("aivision_seo", {})
-            if all(saved.get(key) == value for key, value in fields.items()):
+            payload = response.json()
+            saved = payload.get("aivision_seo", {}) if isinstance(payload, dict) else {}
+            # Alcune installazioni/plugin WordPress restituiscono il campo SEO
+            # in una forma diversa (per esempio una lista). I metadati SEO sono
+            # facoltativi: una risposta inattesa non deve far risultare fallita
+            # la pubblicazione dell'articolo già creato.
+            if isinstance(saved, dict) and all(
+                saved.get(key) == value for key, value in fields.items()
+            ):
                 return "saved"
-            print("AVVISO SEO: attivare AI Vision SEO Bridge in WordPress; articolo programmato.")
+            print("AVVISO SEO: metadati non confermati dal bridge; articolo pubblicato/programmmato comunque.")
             return "bridge_unavailable"
         except (requests.RequestException, ValueError, AttributeError):
             print("AVVISO SEO: metadati non confermati; articolo programmato regolarmente.")
