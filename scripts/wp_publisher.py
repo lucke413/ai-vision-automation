@@ -1041,7 +1041,7 @@ class WordPressClient:
                 saved.get(key) == value for key, value in fields.items()
             ):
                 return "saved"
-            print("AVVISO SEO: metadati non confermati dal bridge; articolo pubblicato/programmmato comunque.")
+            print("AVVISO SEO: metadati non confermati dal bridge; articolo pubblicato o programmato comunque.")
             return "bridge_unavailable"
         except (requests.RequestException, ValueError, AttributeError):
             print("AVVISO SEO: metadati non confermati; articolo programmato regolarmente.")
