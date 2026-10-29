@@ -191,7 +191,7 @@ class EditorialExpansionTests(unittest.TestCase):
         client.get_or_create_term.side_effect=lambda kind,name: {'id':{'Guide':1,'Casa smart':2}[name]}
         client.related_link.return_value='';client.existing_post.return_value=None
         client.upload_media.return_value={'id':0};client.create_post.return_value={'id':123}
-        draft={**item(0,'Casa smart','GUIDA'), 'body_markdown':' '.join(['parola']*510)}
+        draft={**item(0,'Casa smart','GUIDA'), 'body_markdown':' '.join(['parola']*650)}
         with patch.object(publisher,'fallback_png',return_value=b'png'):
             publisher.publish_one(draft,datetime.now(timezone.utc),client,None)
         self.assertEqual(client.create_post.call_args.args[0]['categories'],[1,2])
@@ -214,7 +214,7 @@ class EditorialExpansionTests(unittest.TestCase):
         client.dry_run = False
         client.existing_post.return_value = {"id": 88, "link": "https://example.com/post",
                                              "status": "future"}
-        draft = {**item(12, "AI"), "body_markdown": " ".join(["fatto"] * 520),
+        draft = {**item(12, "AI"), "body_markdown": " ".join(["fatto"] * 650),
                  "slug": "articolo-esistente"}
         result = publisher.publish_one(draft, datetime.now(timezone.utc), client, None)
         self.assertEqual(result["status"], "already_exists")
@@ -242,4 +242,34 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(term["name"], "Tecnologia e prodotti")
         self.assertIsInstance(term, dict)
         self.assertEqual(term.get("id"), 17)
+
+    def test_wordpress_unreadable_existing_term_does_not_raise(self):
+        client = publisher.WordPressClient("https://example.com", "", "", dry_run=False)
+        first_lookup = MagicMock()
+        first_lookup.json.return_value = []
+        conflict = MagicMock()
+        conflict.status_code = 400
+        refetch = MagicMock()
+        refetch.json.return_value = []
+        client.session.get = MagicMock(side_effect=[first_lookup, refetch])
+        client.session.post = MagicMock(return_value=conflict)
+        term = client.get_or_create_term("categories", "PC & Hardware")
+        self.assertIsNone(term.get("id"))
+        self.assertTrue(term.get("unavailable"))
+
+    def test_unavailable_category_does_not_block_article(self):
+        client = MagicMock()
+        client.dry_run = False
+        client.get_or_create_term.side_effect = publisher.PublisherError("taxonomy unavailable")
+        client.related_link.return_value = ""
+        client.existing_post.return_value = None
+        client.upload_media.return_value = {"id": 1}
+        client.create_post.return_value = {"id": 321, "link": "https://example.com/articolo", "status": "future"}
+        client.save_seo.return_value = "warning"
+        draft = {**item(80, "AI"), "title": "Un articolo informativo approfondito",
+                 "body_markdown": " ".join(["parola"] * 650), "slug": "articolo-prova"}
+        with patch.object(publisher, "fallback_png", return_value=b"png"):
+            result = publisher.publish_one(draft, datetime.now(timezone.utc), client, client.session)
+        self.assertEqual(result["status"], "scheduled")
+        self.assertEqual(client.create_post.call_args.args[0]["categories"], [])
 
