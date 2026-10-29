@@ -210,6 +210,86 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertNotIn("Menu da escludere", result)
         self.assertNotIn("no_script", result)
 
+    def test_source_reference_link_is_safe_and_external(self):
+        draft = {
+            "source_url": "https://news.example.com/ai-story?a=1&b=2",
+            "source": "News & Tech",
+        }
+        link = publisher.source_reference_link(draft, "https://aivision.altervista.org")
+        self.assertIn('href="https://news.example.com/ai-story?a=1&amp;b=2"', link)
+        self.assertIn("News &amp; Tech", link)
+        self.assertIn('rel="noopener noreferrer"', link)
+        self.assertEqual(
+            publisher.source_reference_link(
+                {"source_url": "https://aivision.altervista.org/post/" },
+                "https://aivision.altervista.org",
+            ),
+            "",
+        )
+        self.assertEqual(
+            publisher.source_reference_link(
+                {"source_url": "javascript:alert(1)", "source": "malicious"},
+                "https://aivision.altervista.org",
+            ),
+            "",
+        )
+
+    def test_category_archive_link_only_accepts_same_site_https(self):
+        category = {
+            "name": "News",
+            "link": "https://aivision.altervista.org/category/news/",
+        }
+        link = publisher.category_archive_link(category, "https://aivision.altervista.org")
+        self.assertIn('href="https://aivision.altervista.org/category/news/"', link)
+        self.assertIn("News", link)
+        self.assertEqual(
+            publisher.category_archive_link(
+                {"name": "External", "link": "https://example.com/category/news/"},
+                "https://aivision.altervista.org",
+            ),
+            "",
+        )
+        self.assertEqual(
+            publisher.category_archive_link(
+                {"name": "Insecure", "link": "http://aivision.altervista.org/category/news/"},
+                "https://aivision.altervista.org",
+            ),
+            "",
+        )
+
+    def test_publish_adds_source_and_category_links_when_available(self):
+        client = MagicMock()
+        client.dry_run = False
+        client.base_url = "https://aivision.altervista.org"
+        client.get_or_create_term.return_value = {
+            "id": 3, "name": "News", "link": "https://aivision.altervista.org/category/news/"
+        }
+        client.related_link.return_value = ""
+        client.existing_post.return_value = None
+        client.upload_media.return_value = {"id": 1}
+        client.create_post.return_value = {
+            "id": 321, "link": "https://aivision.altervista.org/post/", "status": "future"
+        }
+        client.save_seo.return_value = "saved"
+        draft = {
+            **item(81, "AI"),
+            "title": "Approfondimento tecnico con fonti",
+            "slug": "approfondimento-tecnico-con-fonti",
+            "body_markdown": " ".join(["parola"] * 650),
+            "source_url": "https://source.example.com/story",
+            "source": "Source Example",
+            "tags": [],
+        }
+        with patch.object(publisher, "fallback_png", return_value=b"png"):
+            result = publisher.publish_one(
+                draft, datetime.now(timezone.utc), client, client.session
+            )
+        self.assertEqual(result["status"], "scheduled")
+        payload = client.create_post.call_args.args[0]
+        self.assertIn("Source Example", payload["content"])
+        self.assertIn("source.example.com/story", payload["content"])
+        self.assertIn("/category/news/", payload["content"])
+
     def test_existing_wordpress_post_does_not_upload_images(self):
         client = MagicMock()
         client.dry_run = False
