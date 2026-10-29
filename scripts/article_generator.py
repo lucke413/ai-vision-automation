@@ -47,6 +47,9 @@ TARGET_BODY_WORDS = 950
 MIN_BODY_WORDS = 500
 # Soglia che attiva l'espansione automatica anche se la bozza supera il minimo.
 QUALITY_MIN_BODY_WORDS = 600
+# Se l’articolo è valido ma breve, proviamo ad ampliarlo senza bloccare il lotto.
+EXPANSION_TRIGGER_WORDS = 800
+MIN_EXPANSION_GAIN_WORDS = 60
 MAX_BODY_WORDS = 1500
 # Un solo tentativo aggiuntivo per contenere il consumo API e recuperare le
 # bozze troppo corte senza trasformare il filtro qualità in un blocco totale.
@@ -802,9 +805,11 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
         )
     raw = call_gemini(build_prompt(item), api_key)
     reason = ""
+    normalized = None
     for attempt in range(MAX_REPAIR_ATTEMPTS + 1):
         try:
-            return normalize_draft(raw, item)
+            normalized = normalize_draft(raw, item)
+            break
         except GeneratorFatalError as exc:
             reason = str(exc)
             if "URL originale non valido" in reason or attempt >= MAX_REPAIR_ATTEMPTS:
@@ -823,8 +828,47 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
                     print(f"    Recupero del solo corpo non riuscito: {repair_exc}")
             time.sleep(2.0)
             raw = call_gemini(build_prompt(item, previous=raw), api_key)
-    raise GeneratorFatalError(f"Bozza non conforme: {reason}")
 
+    if normalized is None:
+        raise GeneratorFatalError(f"Bozza non conforme: {reason or 'errore di validazione'}")
+
+    # L'espansione è un miglioramento facoltativo: se Gemini è in quota,
+    # restituisce testo insufficiente o introduce errori, conserviamo la
+    # bozza originale già valida. Un tentativo fallito non blocca la giornata.
+    if normalized["body_word_count"] < EXPANSION_TRIGGER_WORDS:
+        original_words = normalized["body_word_count"]
+        try:
+            expanded_raw = repair_body(
+                raw,
+                item,
+                api_key,
+                (
+                    f"Espansione editoriale non bloccante: il corpo valido contiene "
+                    f"{original_words} parole. Porta il testo almeno a {EXPANSION_TRIGGER_WORDS} "
+                    "parole, idealmente 850-950, soltanto se la fonte offre materiale "
+                    "distinto sufficiente. Non aggiungere riempitivi né fatti non supportati."
+                ),
+            )
+            expanded = normalize_draft(expanded_raw, item)
+            required_words = max(EXPANSION_TRIGGER_WORDS, original_words + MIN_EXPANSION_GAIN_WORDS)
+            if expanded["body_word_count"] >= required_words:
+                return expanded
+            print(
+                f"    Espansione non sufficiente ({expanded['body_word_count']} parole); "
+                f"mantengo la bozza valida di {original_words} parole."
+            )
+        except GeneratorFatalError as exc:
+            print(
+                f"    Espansione non riuscita ({exc}); "
+                f"mantengo la bozza valida di {original_words} parole."
+            )
+        except Exception as exc:
+            print(
+                f"    Errore nell'espansione ({type(exc).__name__}); "
+                f"mantengo la bozza valida di {original_words} parole."
+            )
+
+    return normalized
 
 def _editorial_tokens(value: str) -> set[str]:
     import unicodedata
@@ -873,13 +917,11 @@ def main() -> int:
         raise RuntimeError("La selezione giornaliera non contiene liste valide.")
     if len(daily_items) > DAILY_LIMIT or len(reserve_items) > RESERVE_LIMIT:
         raise RuntimeError("La selezione supera il limite di articoli giornalieri o di scorta.")
+    # Genera prima il lotto giornaliero. Le riserve vengono chiamate solo se
+    # servono davvero a colmare slot rimasti vuoti, riducendo quota e tempi Gemini.
     items = [
         {**item, "publication_slot": "today"}
         for item in daily_items
-        if isinstance(item, dict)
-    ] + [
-        {**item, "publication_slot": "reserve"}
-        for item in reserve_items
         if isinstance(item, dict)
     ]
     if items and not api_key:
@@ -893,10 +935,6 @@ def main() -> int:
         try:
             drafts.append(generate_valid_draft(item, api_key))
         except GeneratorRateLimitError as exc:
-            # Un singolo 429 persistente non deve far saltare tutte le
-            # successive notizie di scorta: call_gemini ha già atteso e
-            # ritentato; proseguiamo con il lotto residuo e conserviamo
-            # tutte le bozze valide già create.
             stopped_reason = str(exc)
             errors.append({"article_id": item.get("article_id"), "error": stopped_reason})
             print(f"    AVVISO: {stopped_reason}; provo il prossimo articolo.")
@@ -907,8 +945,6 @@ def main() -> int:
             print(f"    AVVISO: articolo saltato: {message}")
             continue
         except Exception as exc:
-            # Un singolo dato anomalo non deve annullare le altre bozze.
-            # L'errore viene registrato nell'output per la verifica successiva.
             message = f"Errore imprevisto: {type(exc).__name__}: {exc}"
             errors.append({"article_id": item.get("article_id"), "error": message})
             print(f"    AVVISO: articolo saltato: {message}")
@@ -916,8 +952,8 @@ def main() -> int:
         if index < len(items):
             time.sleep(REQUEST_DELAY)
 
-    # Qualità prima della quantità: controlla tutto il lotto, senza riempire
-    # automaticamente gli slot con notizie duplicate o prive di evidenze.
+    # Rimuovi prima eventuali bozze duplicate; le riserve vengono controllate
+    # rispetto alle bozze giornaliere già accettate.
     accepted = []
     for draft in drafts:
         reason = editorial_distinctiveness(draft, accepted)
@@ -927,35 +963,73 @@ def main() -> int:
         else:
             accepted.append(draft)
     drafts = accepted
-
     daily_drafts = [draft for draft in drafts if draft.get("publication_slot") == "today"]
-    reserve_drafts = [draft for draft in drafts if draft.get("publication_slot") == "reserve"]
+    reserve_drafts = []
+    reserve_attempted = 0
+    target_daily = min(DAILY_LIMIT, len(daily_items))
+    missing_daily = max(0, target_daily - len(daily_drafts))
+    current_offers = sum(
+        1 for draft in daily_drafts
+        if draft.get("category") == "Offerte & Prezzi" or draft.get("story_type") == "OFFERTA"
+    )
 
-    # Se una notizia giornaliera viene scartata dal quality gate, usa una
-    # riserva valida invece di pubblicare un articolo debole o lasciare il buco.
-    missing_daily = max(0, min(DAILY_LIMIT, len(daily_items)) - len(daily_drafts))
-    if missing_daily and reserve_drafts:
-        current_offers = sum(
-            1 for draft in daily_drafts
-            if draft.get("category") == "Offerte & Prezzi" or draft.get("story_type") == "OFFERTA"
-        )
-        promoted = []
-        remaining_reserves = []
-        for draft in reserve_drafts:
-            is_offer = draft.get("category") == "Offerte & Prezzi" or draft.get("story_type") == "OFFERTA"
-            if (len(promoted) < missing_daily
-                    and expansion_room(daily_drafts + promoted, draft)
-                    and editorial_room(daily_drafts + promoted, draft, allow_news_overflow=True)
-                    and not draft.get("editorial_kind")
-                    and (not is_offer or current_offers < MAX_DAILY_OFFERS)):
-                draft["publication_slot"] = "today"
-                draft["promoted_from_reserve"] = True
-                promoted.append(draft)
-                current_offers += int(is_offer)
-            else:
-                remaining_reserves.append(draft)
-        daily_drafts.extend(promoted)
-        reserve_drafts = remaining_reserves
+    # Usa le riserve in modo sequenziale e interrompi appena gli slot sono pieni.
+    # Un errore di una singola riserva non annulla le bozze già valide.
+    if missing_daily:
+        for reserve_index, source_item in enumerate(reserve_items, 1):
+            if missing_daily <= 0:
+                break
+            if not isinstance(source_item, dict):
+                continue
+            reserve_item = {**source_item, "publication_slot": "reserve"}
+            reserve_attempted += 1
+            print(f"[Riserva {reserve_index}/{len(reserve_items)}] {reserve_item.get('title', '')}")
+            candidate = None
+            try:
+                candidate = generate_valid_draft(reserve_item, api_key)
+            except GeneratorRateLimitError as exc:
+                stopped_reason = str(exc)
+                errors.append({"article_id": reserve_item.get("article_id"), "error": stopped_reason})
+                print(f"    AVVISO: riserva saltata: {stopped_reason}")
+            except GeneratorFatalError as exc:
+                errors.append({"article_id": reserve_item.get("article_id"), "error": str(exc)})
+                print(f"    AVVISO: riserva saltata: {exc}")
+            except Exception as exc:
+                message = f"Errore imprevisto nella riserva: {type(exc).__name__}: {exc}"
+                errors.append({"article_id": reserve_item.get("article_id"), "error": message})
+                print(f"    AVVISO: riserva saltata: {message}")
+
+            if candidate is not None:
+                reason = editorial_distinctiveness(candidate, drafts)
+                is_offer = (
+                    candidate.get("category") == "Offerte & Prezzi"
+                    or candidate.get("story_type") == "OFFERTA"
+                )
+                allowed = (
+                    reason is None
+                    and expansion_room(daily_drafts, candidate)
+                    and editorial_room(daily_drafts, candidate, allow_news_overflow=True)
+                    and (not is_offer or current_offers < MAX_DAILY_OFFERS)
+                )
+                if not allowed:
+                    message = reason or "riserva non compatibile con il mix editoriale giornaliero"
+                    errors.append({
+                        "article_id": candidate.get("article_id"),
+                        "error": "Quality gate: " + message,
+                    })
+                    print(f"    AVVISO: riserva non promossa: {message}")
+                else:
+                    candidate["publication_slot"] = "today"
+                    candidate["promoted_from_reserve"] = True
+                    drafts.append(candidate)
+                    daily_drafts.append(candidate)
+                    current_offers += int(is_offer)
+                    missing_daily -= 1
+                    print("    Riserva promossa: slot giornaliero recuperato.")
+
+            if missing_daily > 0 and reserve_index < len(reserve_items):
+                time.sleep(REQUEST_DELAY)
+
     # Rispetta le quote pratiche indipendenti anche dopo le promozioni.
     practical = [d for d in daily_drafts if d.get("editorial_kind") in {"GUIDA", "TUTORIAL"}]
     if len(practical) > MAX_PRACTICAL_PER_DAY or sum(d.get("editorial_kind") == "GUIDA" for d in practical) > MAX_GUIDES_PER_DAY or sum(d.get("editorial_kind") == "TUTORIAL" for d in practical) > MAX_TUTORIALS_PER_DAY:
@@ -974,11 +1048,9 @@ def main() -> int:
     if errors:
         warnings.append(f"{len(errors)} articolo/i non generato/i; gli altri proseguono.")
 
-    if not items:
+    if not items and not daily_drafts:
         status = "empty"
-    elif len(drafts) < len(items):
-        # Anche zero bozze, quando Gemini ha risposto con un errore, è un
-        # risultato parziale da segnalare: non nasconderlo come input vuoto.
+    elif len(daily_drafts) < min(DAILY_LIMIT, len(daily_items)):
         status = "ok_with_warnings"
     else:
         status = "ok"
@@ -990,12 +1062,13 @@ def main() -> int:
         "status": status,
         "error": None,
         "warnings": warnings,
-        "total_requested": len(items),
+        "total_requested": len(items) + reserve_attempted,
         "total_generated": len(drafts),
         "daily_requested": len(daily_items),
         "daily_generated": len(daily_drafts),
         "reserve_requested": len(reserve_items),
         "reserve_generated": len(reserve_drafts),
+        "reserve_attempted": reserve_attempted,
         "daily_news": sum(d.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for d in daily_drafts),
         "daily_guides": sum(d.get("editorial_kind") == "GUIDA" for d in daily_drafts),
         "daily_tutorials": sum(d.get("editorial_kind") == "TUTORIAL" for d in daily_drafts),
