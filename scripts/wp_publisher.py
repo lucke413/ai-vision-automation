@@ -886,10 +886,15 @@ class WordPressClient:
         )
         response.raise_for_status()
         matches = response.json()
-        for match in matches:
-            if str(match.get("name", "")).casefold() == key:
-                cache[key] = match
-                return match
+        # L'endpoint REST di WordPress dovrebbe restituire una lista di termini
+        # (dizionari), ma alcuni plugin/risposte anomale possono annidare liste.
+        # Ignora gli elementi non-dizionario invece di interrompere la
+        # pubblicazione di un singolo articolo con AttributeError su .get().
+        if isinstance(matches, list):
+            for match in matches:
+                if isinstance(match, dict) and str(match.get("name", "")).casefold() == key:
+                    cache[key] = match
+                    return match
 
         response = self.session.post(
             self._url(kind),
