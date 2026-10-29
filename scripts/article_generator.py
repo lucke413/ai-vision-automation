@@ -606,10 +606,10 @@ Non inventare voti o valutazioni: un punteggio di selezione della pipeline
 non è mai una recensione o una prova del prodotto.
 
 Il campo body_markdown deve essere un articolo sostanzioso di circa
-{TARGET_BODY_WORDS} parole e comunque tra {MIN_BODY_WORDS} e {MAX_BODY_WORDS}
+{TARGET_BODY_WORDS} parole e comunque tra {QUALITY_MIN_BODY_WORDS} e {MAX_BODY_WORDS}
 parole. Sviluppa fatti distinti, contesto realmente presente nei dati e
 conseguenze pratiche supportate. Se il materiale disponibile non consente di
-raggiungere almeno {MIN_BODY_WORDS} parole senza ripetizioni o invenzioni, non
+raggiungere almeno {QUALITY_MIN_BODY_WORDS} parole senza ripetizioni o invenzioni, non
 riempire: produci comunque la versione più completa possibile; il controllo
 automatico la escluderà dalla pubblicazione. Non aggiungere riempitivi e non
 inventare dettagli per raggiungere una lunghezza prestabilita. Ogni paragrafo
