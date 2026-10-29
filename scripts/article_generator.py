@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "3.9"
+VERSION = "4.0"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 6
@@ -41,13 +41,13 @@ REQUEST_DELAY = 6.0
 GEMINI_MIN_INTERVAL = 7.0
 REQUEST_TIMEOUT = 90
 _LAST_GEMINI_REQUEST_AT = 0.0
-TARGET_BODY_WORDS = 750
+TARGET_BODY_WORDS = 850
 # Soglia minima di pubblicazione: sotto questo valore la bozza viene riscritta
 # una volta e, se resta troppo breve, viene scartata.
-MIN_BODY_WORDS = 400
+MIN_BODY_WORDS = 500
 # Soglia che attiva l'espansione automatica anche se la bozza supera il minimo.
-QUALITY_MIN_BODY_WORDS = 550
-MAX_BODY_WORDS = 1100
+QUALITY_MIN_BODY_WORDS = 650
+MAX_BODY_WORDS = 1250
 # Un solo tentativo aggiuntivo per contenere il consumo API e recuperare le
 # bozze troppo corte senza trasformare il filtro qualità in un blocco totale.
 MAX_REPAIR_ATTEMPTS = 2
@@ -99,9 +99,10 @@ REGOLE EDITORIALI:
 - non copiare frasi dalla fonte;
 - non inventare numeri, date, prezzi, caratteristiche o dichiarazioni;
 - distingui i fatti dalle interpretazioni e scrivi una sintesi originale;
-- per le normali notizie non nominare il sito aggregatore o la testata di
-  provenienza: evita "secondo il sito X", "come riporta X", "la fonte segnala"
-  e formule equivalenti, anche in titolo ed excerpt;
+- evita di usare la testata come cornice ripetitiva ("secondo il sito X" o
+  "la fonte segnala"), ma non nascondere la provenienza: attribuisci in modo
+  naturale dichiarazioni, studi, prove, dati esclusivi e informazioni non
+  direttamente verificabili, nominando l'autore o l'organizzazione quando serve;
 - conserva le attribuzioni necessarie per dichiarazioni, studi, risultati
   esclusivi e prove di terzi; non trasformarli in verifiche di AI Vision;
 - se un dato non è disponibile, non aggiungerlo;
@@ -137,7 +138,14 @@ REGOLE EDITORIALI:
 - ogni notizia deve spiegare che cosa cambia concretamente per il lettore,
   soltanto se tale conseguenza è documentabile nella fonte;
 - elimina le notizie con informazioni insufficienti invece di amplificarle;
-- differenzia titoli, apertura e struttura in base al fatto specifico;
+- differenzia titoli, apertura, ordine delle informazioni e struttura in base
+  al fatto specifico: non riutilizzare un'introduzione standard da notizia a notizia;
+- individua l'elemento nuovo rispetto al contesto già noto e spiega perché conta,
+  senza inventare confronti o precedenti non presenti nei dati;
+- aggiungi valore editoriale con spiegazioni, implicazioni pratiche, condizioni
+  e limiti documentati, non limitandoti a sostituire parole della fonte;
+- non imitare la struttura della fonte: organizza il testo secondo le domande
+  utili al lettore e usa sottotitoli che descrivano davvero i contenuti;
 - per le guide includi un esempio riproducibile, prerequisiti e limiti,
   senza dichiarare di avere eseguito verifiche non svolte.
 
@@ -158,8 +166,10 @@ CONTROLLO ANTI-RIEMPITIVO:
 - per un'offerta, non inventare prezzo, percentuale di sconto o condizioni:
   se la fonte indica solo il risparmio o il minimo storico, riporta soltanto
   quello;
-- se la fonte è breve, riduci il testo invece di ripetere lo stesso concetto
-  o aggiungere informazioni plausibili ma non verificate;
+- mira a un articolo di circa {TARGET_BODY_WORDS} parole, ma non usare la
+  lunghezza come obiettivo autonomo: se i dati non sostengono un approfondimento
+  utile, non inventare e non ripetere; il sistema può ricorrere a una riserva;
+- se la fonte è breve, sviluppa solo contesto e implicazioni realmente supportati;
 - preferisci una frase concreta e documentata a una frase elegante ma generica.
 
 Il risultato verrà revisionato prima della pubblicazione.
@@ -496,7 +506,7 @@ REGOLE OBBLIGATORIE:
   non inventare nuovi URL e non inserire marcatori Markdown di link.
 - Non presentare la guida come una recensione, un articolo di attualità
   o una pubblicità del servizio.
-- Il testo finale deve avere da {MIN_BODY_WORDS} a {MAX_BODY_WORDS} parole,
+- Il testo finale deve avere da {QUALITY_MIN_BODY_WORDS} a {MAX_BODY_WORDS} parole,
   idealmente circa {TARGET_BODY_WORDS}; NON aggiungere riempitivi.
 - Non scrivere note redazionali nel corpo; elenca eventuali limiti di
   verifica solo in fact_check_notes.
@@ -658,7 +668,7 @@ def build_body_repair_prompt(item: dict, raw: dict, reason: str) -> str:
     return (
         "Sei il redattore di AI Vision. Rispondi SOLO con JSON: "
         "{\"body_markdown\": \"testo completo in italiano\"}.\n"
-        "Riscrivi il corpo in 620-780 parole reali, usando 3-5 sezioni utili.\n"
+        "Riscrivi il corpo in 700-900 parole reali, usando 3-5 sezioni utili.\n"
         "Rifiuto precedente: " + reason[:350] + "\n"
         "Argomento: " + str(item.get("title") or "")[:300] + "\n"
         "Descrizione: " + str(item.get("description") or "")[:4000] + "\n"

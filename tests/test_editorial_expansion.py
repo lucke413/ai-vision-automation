@@ -122,12 +122,12 @@ class EditorialExpansionTests(unittest.TestCase):
             "slug": "email-esempio", "tags": ["AI"],
             "fact_check_notes": []
         }
-        repaired = {"body_markdown": " ".join(["passaggio"] * 625)}
+        repaired = {"body_markdown": " ".join(["passaggio"] * 675)}
         with patch.object(generator, "enrich_source", side_effect=lambda x: x), patch.object(
             generator, "call_gemini", side_effect=[original, repaired]
         ) as call:
             draft = generator.generate_valid_draft(source, "fake-key")
-        self.assertEqual(draft["body_word_count"], 625)
+        self.assertEqual(draft["body_word_count"], 675)
         self.assertEqual(draft["slug"], original["slug"])
         self.assertEqual(draft["title"], original["title"])
         self.assertEqual(call.call_count, 2)
