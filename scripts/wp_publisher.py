@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.5"
+VERSION = "2.6"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -751,6 +751,65 @@ def guide_resources(draft: dict) -> str:
     return '<h2>Prova lo strumento</h2><p>Qui trovi il servizio con cui mettere in pratica i prompt. Aprilo e segui la guida, senza bisogno di leggere manuali tecnici.</p><ul>' + ''.join(links) + '</ul>' if links else ""
 
 
+def source_reference_link(draft: dict, base_url: str) -> str:
+    """Aggiunge una fonte esterna verificabile all'articolo, se disponibile."""
+    if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
+        return ""
+    source_url = str(draft.get("source_url") or "").strip()
+    if not source_url:
+        return ""
+    try:
+        parts = urlsplit(source_url)
+        base = urlsplit(base_url)
+    except (TypeError, ValueError):
+        return ""
+    if (
+        parts.scheme not in {"https", "http"}
+        or not parts.hostname
+        or parts.username
+        or parts.password
+        or parts.hostname.casefold() == (base.hostname or "").casefold()
+    ):
+        return ""
+    label = str(draft.get("source") or "").strip()
+    if not label or len(label) > 100:
+        label = (parts.hostname or "").removeprefix("www.")
+    if not label:
+        return ""
+    return (
+        '<p><strong>Fonte di riferimento:</strong> <a href="'
+        + html.escape(source_url, quote=True)
+        + '" rel="noopener noreferrer" target="_blank">'
+        + html.escape(label)
+        + '</a>.</p>'
+    )
+
+
+def category_archive_link(category: dict, base_url: str) -> str:
+    """Link interno alla categoria come fallback se manca un articolo correlato."""
+    link = str(category.get("link") or "").strip() if isinstance(category, dict) else ""
+    label = str(category.get("name") or "").strip() if isinstance(category, dict) else ""
+    if not link or not label:
+        return ""
+    try:
+        parts, base = urlsplit(link), urlsplit(base_url)
+    except (TypeError, ValueError):
+        return ""
+    if (
+        parts.scheme != "https"
+        or not parts.hostname
+        or parts.hostname.casefold() != (base.hostname or "").casefold()
+    ):
+        return ""
+    return (
+        '<p>Esplora altri contenuti nella categoria <a href="'
+        + html.escape(link, quote=True)
+        + '">'
+        + html.escape(label)
+        + '</a>.</p>'
+    )
+
+
 def image_url_from_draft(draft: dict) -> str:
     for key in ("source_image_url", "image", "image_url"):
         value = str(draft.get(key) or "").strip()
@@ -1153,6 +1212,15 @@ def publish_one(
     related = client.related_link(draft, category.get("id"))
     if related:
         body += "\n" + related
+    else:
+        category_link = category_archive_link(category, client.base_url)
+        if category_link:
+            body += "\n" + category_link
+
+    source_link = source_reference_link(draft, client.base_url)
+    if source_link:
+        body += "\n" + source_link
+
     raw_tags = draft.get("tags") if isinstance(draft.get("tags"), list) else []
     tags = []
     seen_tags: set[str] = set()
