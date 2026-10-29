@@ -75,6 +75,51 @@ class EditorialExpansionTests(unittest.TestCase):
             daily=[x for x in result['items'] if x['publication_slot']=='today']
             self.assertEqual({x['category'] for x in daily}, {'Casa smart','Sicurezza'})
 
+    def test_generator_continues_after_rate_limit_and_promotes_reserve(self):
+        with tempfile.TemporaryDirectory() as directory:
+            inp = Path(directory) / "daily.json"
+            out = Path(directory) / "drafts.json"
+            inp.write_text(json.dumps({
+                "items": [item(0, "Sicurezza"), item(1, "Gaming")],
+                "reserve_items": [item(2, "Software & App")],
+            }), encoding="utf-8")
+
+            def draft_or_rate_limit(source, key):
+                if source["article_id"] == "0":
+                    raise generator.GeneratorRateLimitError("simulated HTTP 429")
+                titles = {
+                    "1": "Aggiornamento importante per il gaming su PC",
+                    "2": "Nuovo strumento software utile agli utenti",
+                }
+                return {
+                    **source,
+                    "title": titles[source["article_id"]],
+                    "body_markdown": " ".join(["parola"] * 650),
+                    "body_word_count": 650,
+                    "quality_warnings": [],
+                    "source_text_status": "page_extracted",
+                    "source_text_word_count": 650,
+                }
+
+            with patch.object(generator, "INPUT_FILE", inp), patch.object(
+                generator, "OUTPUT_FILE", out
+            ), patch.dict("os.environ", {"GEMINI_API_KEY": "test-not-a-real-key"}), patch.object(
+                generator, "generate_valid_draft", side_effect=draft_or_rate_limit
+            ), patch.object(generator.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
+                generator.main()
+
+            result = json.loads(out.read_text(encoding="utf-8"))
+            daily = [draft for draft in result["items"] if draft["publication_slot"] == "today"]
+            self.assertEqual(result["daily_requested"], 2)
+            self.assertEqual(result["daily_generated"], 2)
+            self.assertEqual(len(daily), 2)
+            self.assertEqual(
+                {draft["article_id"] for draft in daily},
+                {"1", "2"},
+            )
+            self.assertEqual(len(result["errors"]), 1)
+            self.assertIn("simulated HTTP 429", result["errors"][0]["error"])
+
     def test_quality_mode_six_posts_with_quality_gates(self):
         from zoneinfo import ZoneInfo
         self.assertEqual(selector.DAILY_LIMIT, 6)
