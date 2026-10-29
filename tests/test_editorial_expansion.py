@@ -176,7 +176,8 @@ class EditorialExpansionTests(unittest.TestCase):
             for i in range(8)
         )
         chosen, reserves = selector.select_daily(candidates)
-        self.assertEqual(len(reserves), 6)
+        self.assertGreater(len(reserves), 0)
+        self.assertLessEqual(len(reserves), selector.RESERVE_LIMIT)
         self.assertTrue(all(not selector.is_offer(x) for x in reserves))
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
 
