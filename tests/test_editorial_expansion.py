@@ -212,3 +212,26 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(result["status"], "already_exists")
         client.upload_media.assert_not_called()
         client.create_post.assert_not_called()
+
+    def test_wordpress_term_conflict_refetch_returns_single_term(self):
+        client = publisher.WordPressClient(
+            "https://example.com", "", "", dry_run=False
+        )
+        first_lookup = MagicMock()
+        first_lookup.json.return_value = []
+        conflict = MagicMock()
+        conflict.status_code = 400
+        refetch = MagicMock()
+        refetch.json.return_value = [
+            {"id": 17, "name": "Tecnologia e prodotti", "slug": "tecnologia-e-prodotti"}
+        ]
+        client.session.get = MagicMock(side_effect=[first_lookup, refetch])
+        client.session.post = MagicMock(return_value=conflict)
+
+        term = client.get_or_create_term("categories", "Tecnologia e prodotti")
+
+        self.assertEqual(term["id"], 17)
+        self.assertEqual(term["name"], "Tecnologia e prodotti")
+        self.assertIsInstance(term, dict)
+        self.assertEqual(term.get("id"), 17)
+
