@@ -27,13 +27,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.2"
+VERSION = "4.3"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 6
 MAX_DAILY_OFFERS = 1
 MAX_ITEMS = DAILY_LIMIT + RESERVE_LIMIT
-MAX_RETRIES = 3
+MAX_RETRIES = 4
 REQUEST_DELAY = 6.0
 # Intervallo globale tra TUTTE le chiamate Gemini, comprese le riscritture
 # dello stesso articolo. Prima il delay era applicato solo tra articoli:
@@ -42,11 +42,12 @@ GEMINI_MIN_INTERVAL = 7.0
 REQUEST_TIMEOUT = 90
 _LAST_GEMINI_REQUEST_AT = 0.0
 TARGET_BODY_WORDS = 950
-# Soglia minima di pubblicazione: sotto questo valore la bozza viene riscritta
-# una volta e, se resta troppo breve, viene scartata.
+# Soglia tecnica: sotto questo valore si tenta una riparazione mirata.
 MIN_BODY_WORDS = 500
-# Soglia che attiva l'espansione automatica anche se la bozza supera il minimo.
-QUALITY_MIN_BODY_WORDS = 600
+# Soglia di riserva dopo le riparazioni; l'obiettivo rimane 950 parole.
+# Non scartare un testo documentato di 550-599 parole se l'espansione non
+# riesce ad aggiungere informazioni senza ripetizioni o affermazioni inventate.
+QUALITY_MIN_BODY_WORDS = 550
 MAX_BODY_WORDS = 1500
 # Un solo tentativo aggiuntivo per contenere il consumo API e recuperare le
 # bozze troppo corte senza trasformare il filtro qualità in un blocco totale.
