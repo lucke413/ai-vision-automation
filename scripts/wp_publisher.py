@@ -897,14 +897,27 @@ class WordPressClient:
             timeout=REQUEST_TIMEOUT,
         )
         if response.status_code == 400:
-            # Race condition or termine già esistente: rileggilo.
+            # Race condition o termine già esistente: la rilettura restituisce
+            # una LISTA, non un singolo termine. Normalizzala prima di restituire
+            # il risultato, altrimenti category.get()/tag.get() può interrompere
+            # la pubblicazione del singolo articolo.
             response = self.session.get(
                 self._url(kind),
                 params={"search": name, "per_page": 100},
                 timeout=REQUEST_TIMEOUT,
             )
+            response.raise_for_status()
+            matches = response.json()
+            if isinstance(matches, list):
+                for match in matches:
+                    if isinstance(match, dict) and str(match.get("name", "")).casefold() == key:
+                        cache[key] = match
+                        return match
+                raise PublisherError(f"Termine WordPress già presente ma non recuperabile: {name}")
         response.raise_for_status()
         result = response.json()
+        if not isinstance(result, dict):
+            raise PublisherError(f"Risposta WordPress non valida per il termine: {name}")
         cache[key] = result
         return result
 
