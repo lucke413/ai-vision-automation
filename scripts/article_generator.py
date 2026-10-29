@@ -41,13 +41,13 @@ REQUEST_DELAY = 6.0
 GEMINI_MIN_INTERVAL = 7.0
 REQUEST_TIMEOUT = 90
 _LAST_GEMINI_REQUEST_AT = 0.0
-TARGET_BODY_WORDS = 650
+TARGET_BODY_WORDS = 750
 # Soglia minima di pubblicazione: sotto questo valore la bozza viene riscritta
 # una volta e, se resta troppo breve, viene scartata.
 MIN_BODY_WORDS = 400
 # Soglia che attiva l'espansione automatica anche se la bozza supera il minimo.
-QUALITY_MIN_BODY_WORDS = 500
-MAX_BODY_WORDS = 950
+QUALITY_MIN_BODY_WORDS = 550
+MAX_BODY_WORDS = 1100
 # Un solo tentativo aggiuntivo per contenere il consumo API e recuperare le
 # bozze troppo corte senza trasformare il filtro qualità in un blocco totale.
 MAX_REPAIR_ATTEMPTS = 2
@@ -515,7 +515,7 @@ Restituisci esclusivamente JSON con i campi:
  "affiliate_candidate": false,
  "needs_review": true
 }}
-{("Sviluppa la versione precedente in 620-780 parole, rimuovi false esperienze dirette e non inventare dati. Versione precedente: " + json.dumps(previous, ensure_ascii=False)) if previous else ""}
+{("Sviluppa la versione precedente in 700-850 parole, rimuovi false esperienze dirette e non inventare dati. Versione precedente: " + json.dumps(previous, ensure_ascii=False)) if previous else ""}
 """
     title = str(item.get("title") or "")[:500]
     description = str(item.get("description") or "")[:5000]
