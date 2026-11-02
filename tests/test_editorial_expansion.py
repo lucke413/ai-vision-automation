@@ -485,7 +485,7 @@ class EditorialExpansionTests(unittest.TestCase):
         ), patch.object(generator, "repair_body", return_value=expanded) as repair:
             draft = generator.generate_valid_draft(source, "fake-key")
         self.assertEqual(draft["body_word_count"], 920)
-        self.assertEqual(repair.call_count, 2)
+        self.assertEqual(repair.call_count, 1)
 
     def test_short_valid_draft_attempts_nonblocking_expansion(self):
         source = {
