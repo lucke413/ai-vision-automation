@@ -1122,9 +1122,9 @@ def draft_items(data: dict) -> list[dict]:
 
 
 PUBLIC_SOURCE_NOTE_RE = re.compile(
-    r"^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?"
-    r"(?:fonte(?:\\s+di\\s+riferimento)?|fonti(?:\\s+di\\s+riferimento)?|"
-    r"riferimenti|bibliografia)\\s*:\\s*.+$",
+    r"^\s*(?:[-*]\s*)?(?:#{1,6}\s*)?"
+    r"(?:fonte(?:\s+di\s+riferimento)?|fonti(?:\s+di\s+riferimento)?|"
+    r"riferimenti|bibliografia)\s*:\s*.+$",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -1136,12 +1136,12 @@ def strip_public_source_notes(markdown_text: str) -> str:
     rileva...") restano intatte. URL e nomi delle fonti restano nei metadati
     interni della bozza per fact-checking e tracciabilità.
     """
-    blocks = re.split(r"\\n\\s*\\n", str(markdown_text or "").strip())
+    blocks = re.split(r"\n\s*\n", str(markdown_text or "").strip())
     removed = False
     while blocks and PUBLIC_SOURCE_NOTE_RE.match(blocks[-1]):
         blocks.pop()
         removed = True
-    cleaned = "\\n\\n".join(blocks).strip()
+    cleaned = "\n\n".join(blocks).strip()
     if removed:
         print("    Nota: rimossa bibliografia finale dal testo pubblico.")
     return cleaned
@@ -1159,7 +1159,7 @@ def publish_one(
         raise PublisherError("Titolo mancante.")
     original_body = str(draft.get("body_markdown") or "").strip()
     original_word_count = len(re.findall(
-        r"\\b[\\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\\wÀ-ÖØ-öø-ÿ]+)*\\b",
+        r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\wÀ-ÖØ-öø-ÿ]+)*\b",
         original_body, flags=re.UNICODE,
     ))
     raw_body = strip_public_source_notes(original_body)
