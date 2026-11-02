@@ -128,8 +128,8 @@ jobs:
           expected = {
               "scripts/rss_collector.py": "2.3.4",
               "scripts/ai_filter.py": "3.1.2",
-              "scripts/daily_selector.py": "3.0",
-              "scripts/article_generator.py": "4.3",
+              "scripts/daily_selector.py": "3.1",
+              "scripts/article_generator.py": "4.4",
               "scripts/wp_publisher.py": "2.7",
           }
 
@@ -227,7 +227,7 @@ jobs:
           if not all(ids) or len(ids) != len(set(ids)):
               raise SystemExit("ERRORE: identificativi articolo mancanti o duplicati.")
           reserves = data.get("reserve_items", [])
-          if not isinstance(reserves, list) or len(reserves) > 6:
+          if not isinstance(reserves, list) or len(reserves) > 12:
               raise SystemExit("ERRORE: coda di riserva non valida.")
           reserve_ids = [item.get("article_id") for item in reserves]
           if any(item_id in ids for item_id in reserve_ids) or len(reserve_ids) != len(set(reserve_ids)):
@@ -249,7 +249,7 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/article_drafts.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 12:
+          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 18:
               raise SystemExit("ERRORE: output bozze non valido.")
           ids = [item.get("draft_id") for item in items]
           if not all(ids) or len(ids) != len(set(ids)):
