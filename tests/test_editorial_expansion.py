@@ -110,7 +110,8 @@ class EditorialExpansionTests(unittest.TestCase):
 
     def test_history_filter_excludes_published_article_when_cluster_id_differs(self):
         report = {"dry_run": False, "items": [
-            {"post_id": 123, "article_id": "article-123", "title": "Già pubblicato"}
+            {"post_id": 123, "article_id": "article-123", "cluster_id": "cluster-123",
+             "title": "Già pubblicato"}
         ]}
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:
@@ -122,6 +123,7 @@ class EditorialExpansionTests(unittest.TestCase):
         ):
             used = history.published_ids("owner/repo", "token")
         self.assertIn("article-123", used)
+        self.assertIn("cluster-123", used)
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "candidates.json"
