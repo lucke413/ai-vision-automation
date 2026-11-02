@@ -397,18 +397,18 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertNotIn("Menu da escludere", result)
         self.assertNotIn("no_script", result)
 
-    def test_source_reference_link_is_safe_and_external(self):
+    def test_source_reference_is_never_shown_in_public_articles(self):
         draft = {
             "source_url": "https://news.example.com/ai-story?a=1&b=2",
             "source": "News & Tech",
         }
-        link = publisher.source_reference_link(draft, "https://aivision.altervista.org")
-        self.assertIn('href="https://news.example.com/ai-story?a=1&amp;b=2"', link)
-        self.assertIn("News &amp; Tech", link)
-        self.assertIn('rel="noopener noreferrer"', link)
+        self.assertEqual(
+            publisher.source_reference_link(draft, "https://aivision.altervista.org"),
+            "",
+        )
         self.assertEqual(
             publisher.source_reference_link(
-                {"source_url": "https://aivision.altervista.org/post/" },
+                {"source_url": "https://aivision.altervista.org/post/"},
                 "https://aivision.altervista.org",
             ),
             "",
@@ -475,8 +475,8 @@ class EditorialExpansionTests(unittest.TestCase):
             )
         self.assertEqual(result["status"], "scheduled")
         payload = client.create_post.call_args.args[0]
-        self.assertIn("Source Example", payload["content"])
-        self.assertIn("source.example.com/story", payload["content"])
+        self.assertNotIn("Source Example", payload["content"])
+        self.assertNotIn("source.example.com/story", payload["content"])
         self.assertIn("/category/news/", payload["content"])
 
     def test_existing_wordpress_post_does_not_upload_images(self):
