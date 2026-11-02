@@ -13,7 +13,7 @@ import requests
 
 
 # ============================================================
-# AI VISION - RSS COLLECTOR 2.3.2
+# AI VISION - RSS COLLECTOR 2.3.4
 # ============================================================
 
 VERSION = "2.3.4"
@@ -1360,7 +1360,7 @@ def main():
 
     print()
     print("=" * 46)
-    print("       AI VISION - RSS COLLECTOR 2.3.1")
+    print(f"       AI VISION - RSS COLLECTOR {VERSION}")
     print("=" * 46)
 
     # --------------------------------------------------------
@@ -1590,7 +1590,7 @@ def main():
     os.replace(output_path.with_suffix(".tmp"), output_path)
     print()
     print("=" * 46)
-    print("RSS COLLECTOR 2.3.1 COMPLETATO")
+    print(f"RSS COLLECTOR {VERSION} COMPLETATO")
     print("=" * 46)
 
     print(
