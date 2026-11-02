@@ -60,7 +60,7 @@ class EditorialExpansionTests(unittest.TestCase):
 
     def test_seo_meta_update_writes_only_missing_description_and_preserves_other_fields(self):
         with tempfile.TemporaryDirectory() as directory:
-            seo_recovery.BACKUP_FILE = Path(directory) / "backup.json"
+            backup = Path(directory) / "backup.json"
             row = {
                 "id": 465, "url": "https://aivision.altervista.org/sonos-beam-ultra/",
                 "slug": "sonos-beam-ultra", "title": "Sonos Beam Ultra",
@@ -80,14 +80,16 @@ class EditorialExpansionTests(unittest.TestCase):
             }}
             session = MagicMock()
             session.post.return_value = response
-            with patch.object(seo_recovery, "get", return_value=MagicMock(
-                raise_for_status=MagicMock(), json=MagicMock(return_value=current)
-            )):
+            with patch.object(seo_recovery, "BACKUP_FILE", backup), patch.object(
+                seo_recovery, "get", return_value=MagicMock(
+                    raise_for_status=MagicMock(), json=MagicMock(return_value=current)
+                )
+            ):
                 status = seo_recovery.apply_meta(session, row, [])
             self.assertEqual(status, "updated")
             payload = session.post.call_args.kwargs["json"]
             self.assertEqual(payload, {"aivision_seo": {"seo_description": row["meta_description_proposal"]}})
-            self.assertTrue(seo_recovery.BACKUP_FILE.exists())
+            self.assertTrue(backup.exists())
 
     def test_seo_meta_update_skips_post_modified_after_audit(self):
         row = {
