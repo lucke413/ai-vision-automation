@@ -7,7 +7,7 @@ on:
         description: 'Pubblica automaticamente su WordPress (disattiva per una simulazione)'
         required: false
         type: boolean
-        default: true
+        default: false
   pull_request:
     branches: [main]
     paths:
@@ -21,6 +21,7 @@ on:
       - 'scripts/article_generator.py'
       - 'scripts/daily_selector.py'
       - 'scripts/wp_publisher.py'
+      - 'scripts/history_filter.py'
       - '.github/workflows/ai-vision.yml'
   schedule:
     - cron: '17 11 * * *'
