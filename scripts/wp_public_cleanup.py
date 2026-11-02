@@ -24,6 +24,7 @@ OUTPUT = Path(__file__).resolve().parents[1] / "data" / "public_source_cleanup.j
 BACKUP = Path(__file__).resolve().parents[1] / "data" / "public_source_cleanup_backups.json"
 TIMEOUT = (5, 20)
 UA = "AIVision-Public-Source-Cleanup/1.0"
+# 2026-11-02: eseguire solo sui footer autonomi confermati dal report read-only #17.
 FOOTER_LABEL = re.compile(
     r"^(?:fonte(?:\s+di\s+riferimento)?|fonti(?:\s+di\s+riferimento)?|"
     r"riferimenti|bibliografia)\s*:\s*[^.!?]{2,180}[.!?]?$",
