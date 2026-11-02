@@ -110,8 +110,14 @@ def published_ids(repository: str, token: str) -> set[str]:
         if report.get("dry_run"):
             continue
         for item in report.get("items", []):
-            if isinstance(item, dict) and item.get("post_id") and item.get("article_id"):
-                used.add(str(item["article_id"]))
+            if not isinstance(item, dict) or not item.get("post_id"):
+                continue
+            # Conserva entrambi gli identificativi: il cluster_id può essere
+            # diverso dall'article_id registrato nel report WordPress.
+            for key in ("article_id", "cluster_id"):
+                value = str(item.get(key) or "").strip()
+                if value:
+                    used.add(value)
     return used
 
 
@@ -212,8 +218,14 @@ def main() -> int:
     else:
         used = published_ids(repository, token)
         before = len(data["items"])
-        retained = [item for item in data["items"]
-                    if str(item.get("cluster_id") or item.get("article_id") or "") not in used]
+        retained = [
+            item for item in data["items"]
+            if not any(
+                str(item.get(key) or "").strip() in used
+                for key in ("article_id", "cluster_id")
+                if item.get(key)
+            )
+        ]
         data["items"] = retained
         data["total_final_candidates"] = len(retained)
         data["history_excluded"] = int(data.get("history_excluded", 0)) + before - len(retained)

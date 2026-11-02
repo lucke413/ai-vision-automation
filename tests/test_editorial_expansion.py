@@ -108,6 +108,39 @@ class EditorialExpansionTests(unittest.TestCase):
         )):
             self.assertEqual(seo_recovery.apply_meta(MagicMock(), row, []), "skipped_post_changed")
 
+    def test_history_filter_excludes_published_article_when_cluster_id_differs(self):
+        report = {"dry_run": False, "items": [
+            {"post_id": 123, "article_id": "article-123", "title": "Già pubblicato"}
+        ]}
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("wp_publish_report.json", json.dumps(report))
+        artifact = {"created_at": datetime.now(timezone.utc).isoformat(),
+                    "archive_download_url": "https://api.github.com/archive/published"}
+        with patch.object(history, "list_artifacts", return_value=[artifact]), patch.object(
+            history, "api_get", return_value=buffer.getvalue()
+        ):
+            used = history.published_ids("owner/repo", "token")
+        self.assertIn("article-123", used)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "candidates.json"
+            path.write_text(json.dumps({
+                "status": "ok", "items": [
+                    {"article_id": "article-123", "cluster_id": "cluster-999",
+                     "title": "Duplicato", "url": "https://example.com/story"}
+                ], "total_received": 1, "total_final_candidates": 1
+            }), encoding="utf-8")
+            with patch.object(history, "INPUT_FILE", path), patch.dict(
+                "os.environ", {"GITHUB_TOKEN": "fake-token", "GITHUB_REPOSITORY": "owner/repo"}
+            ), patch.object(history, "historical_reserves", return_value=[]), patch.object(
+                history, "published_ids", return_value=used
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(history.main(), 0)
+            result = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(result["items"], [])
+            self.assertEqual(result["history_excluded"], 1)
+
     def test_history_filter_merges_recent_reserves_when_current_feed_is_empty(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "candidates.json"
