@@ -752,37 +752,14 @@ def guide_resources(draft: dict) -> str:
 
 
 def source_reference_link(draft: dict, base_url: str) -> str:
-    """Aggiunge una fonte esterna verificabile all'articolo, se disponibile."""
-    if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
-        return ""
-    source_url = str(draft.get("source_url") or "").strip()
-    if not source_url:
-        return ""
-    try:
-        parts = urlsplit(source_url)
-        base = urlsplit(base_url)
-    except (TypeError, ValueError):
-        return ""
-    if (
-        parts.scheme not in {"https", "http"}
-        or not parts.hostname
-        or parts.username
-        or parts.password
-        or parts.hostname.casefold() == (base.hostname or "").casefold()
-    ):
-        return ""
-    label = str(draft.get("source") or "").strip()
-    if not label or len(label) > 100:
-        label = (parts.hostname or "").removeprefix("www.")
-    if not label:
-        return ""
-    return (
-        '<p><strong>Fonte di riferimento:</strong> <a href="'
-        + html.escape(source_url, quote=True)
-        + '" rel="noopener noreferrer" target="_blank">'
-        + html.escape(label)
-        + '</a>.</p>'
-    )
+    """Le fonti restano nei metadati interni e non vengono mostrate negli articoli.
+
+    La verifica editoriale continua a usare source_url e source; questa funzione
+    resta come compatibilità per il publisher ma non aggiunge una bibliografia
+    o un link esterno al contenuto pubblico.
+    """
+    return ""
+
 
 
 def category_archive_link(category: dict, base_url: str) -> str:
