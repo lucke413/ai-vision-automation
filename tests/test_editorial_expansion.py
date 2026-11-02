@@ -430,7 +430,7 @@ class EditorialExpansionTests(unittest.TestCase):
         ) as repair:
             draft = generator.generate_valid_draft(source, "fake-key")
         self.assertEqual(draft["body_word_count"], 650)
-        self.assertEqual(repair.call_count, 1)
+        self.assertEqual(repair.call_count, 2)
 
     def test_short_valid_draft_uses_successful_expansion(self):
         source = {
@@ -513,7 +513,8 @@ class EditorialExpansionTests(unittest.TestCase):
         with patch.object(generator, "enrich_source", side_effect=lambda x: x), patch.object(
             generator, "call_gemini",
             side_effect=[raw, {"body_markdown": " ".join(["breve"] * 430)},
-                         {"body_markdown": " ".join(["corto"] * 440)}]
+                         {"body_markdown": " ".join(["corto"] * 440)},
+                         {"body_markdown": " ".join(["ancora"] * 450)}]
         ):
             with self.assertRaises(generator.GeneratorFatalError):
                 generator.generate_valid_draft(source, "fake-key")
