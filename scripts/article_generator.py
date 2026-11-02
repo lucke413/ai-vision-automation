@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.5"
+VERSION = "4.6"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 12
@@ -50,7 +50,7 @@ MIN_BODY_WORDS = 500
 # rischiano ripetizioni o affermazioni non supportate.
 QUALITY_MIN_BODY_WORDS = 550
 # Se l’articolo è valido ma breve, proviamo ad ampliarlo senza bloccare il lotto.
-EXPANSION_TRIGGER_WORDS = 800
+EXPANSION_TRIGGER_WORDS = 950
 MIN_EXPANSION_GAIN_WORDS = 60
 MAX_BODY_WORDS = 1500
 # Un solo tentativo aggiuntivo per contenere il consumo API e recuperare le
@@ -852,7 +852,7 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
                     (
                         f"Espansione editoriale non bloccante, tentativo {expansion_attempt}/2: "
                         f"il corpo valido contiene {count_words(str(expansion_source.get('body_markdown') or ''))} parole. "
-                        f"Porta il testo almeno a {required_words} parole, idealmente 850-950, "
+                        f"Porta il testo almeno a {required_words} parole, idealmente 900-1100, "
                         "soltanto se la fonte offre materiale distinto sufficiente. "
                         "Sviluppa aspetti distinti già presenti nella fonte, non ripetere "
                         "l'introduzione e non aggiungere riempitivi o fatti non supportati."
