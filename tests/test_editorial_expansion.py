@@ -353,6 +353,7 @@ class EditorialExpansionTests(unittest.TestCase):
     def test_longform_target_and_fallback_floor_stay_aligned(self):
         self.assertEqual(generator.TARGET_BODY_WORDS, 950)
         self.assertEqual(generator.QUALITY_MIN_BODY_WORDS, 550)
+        self.assertEqual(generator.EXPANSION_TRIGGER_WORDS, 950)
         self.assertEqual(publisher.MIN_PUBLISH_WORDS, 550)
         self.assertEqual(generator.MAX_RETRIES, 4)
 
@@ -423,6 +424,33 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(draft["title"], original["title"])
         self.assertEqual(call.call_count, 2)
         self.assertIn("SOLO con JSON", call.call_args.args[0])
+
+    def test_850_word_draft_still_attempts_optional_expansion(self):
+        source = {
+            "article_id": "long-form-850",
+            "title": "WhatsApp introduce nuovi strumenti per i pagamenti Android",
+            "description": " ".join(["Informazione documentata sul servizio e sulle sue funzioni."] * 35),
+            "url": "https://example.com/news",
+            "category": "Software & App",
+            "story_type": "NEWS",
+        }
+        original = {
+            "title": "WhatsApp prepara nuovi strumenti per i pagamenti su Android",
+            "excerpt": "Le novità riguardano la sezione dei pagamenti nell'app.",
+            "body_markdown": " ".join(["fatto"] * 850),
+            "seo_title": "WhatsApp: novità sui pagamenti Android",
+            "seo_description": "I dettagli sulla nuova sezione pagamenti di WhatsApp su Android.",
+            "slug": "whatsapp-pagamenti-android",
+            "tags": ["WhatsApp", "Android"],
+            "fact_check_notes": [],
+        }
+        expanded = {**original, "body_markdown": " ".join(["dettaglio"] * 920)}
+        with patch.object(generator, "enrich_source", side_effect=lambda value: value), patch.object(
+            generator, "call_gemini", return_value=original
+        ), patch.object(generator, "repair_body", return_value=expanded) as repair:
+            draft = generator.generate_valid_draft(source, "fake-key")
+        self.assertEqual(draft["body_word_count"], 920)
+        self.assertEqual(repair.call_count, 2)
 
     def test_short_valid_draft_attempts_nonblocking_expansion(self):
         source = {
