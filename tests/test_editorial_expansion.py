@@ -425,6 +425,22 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(call.call_count, 2)
         self.assertIn("SOLO con JSON", call.call_args.args[0])
 
+    def test_optional_expansion_prompt_uses_900_to_1100_word_target(self):
+        source = {
+            "title": "Esempio di approfondimento",
+            "description": "Descrizione con dati verificabili.",
+            "source_text": "Dettagli documentati della fonte.",
+            "category": "Software & App",
+        }
+        draft = {"body_markdown": "Corpo valido da approfondire."}
+        prompt = generator.build_body_repair_prompt(
+            source, draft, "Espansione editoriale non bloccante, tentativo 1/2"
+        )
+        self.assertIn("900-1100 parole reali", prompt)
+        self.assertIn("non ripartire da zero", prompt)
+        self.assertIn("senza ripetere concetti", prompt)
+        self.assertNotIn("800-1050", prompt)
+
     def test_850_word_draft_still_attempts_optional_expansion(self):
         source = {
             "article_id": "long-form-850",
