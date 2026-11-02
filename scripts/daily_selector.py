@@ -21,9 +21,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
-VERSION = "3.0"
+VERSION = "3.1"
 DAILY_LIMIT = 6
-RESERVE_LIMIT = 6
+RESERVE_LIMIT = 12
 MAX_OFFERS = 1
 MAX_NEWS_PER_DAY = 3
 MAX_GUIDES_PER_DAY = 2

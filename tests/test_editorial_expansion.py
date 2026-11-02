@@ -253,6 +253,19 @@ class EditorialExpansionTests(unittest.TestCase):
             self.assertIn(name, generator.VALID_CATEGORIES)
             self.assertIn(name, publisher.MACRO_CATEGORIES)
 
+    def test_selector_keeps_twelve_reserves_for_slot_recovery(self):
+        candidates = [
+            {**item(i, "Gaming"), "final_score": 100-i,
+             "url": f"https://example.com/story-{i}"}
+            for i in range(30)
+        ]
+        chosen, reserves = selector.select_daily(candidates)
+        self.assertEqual(len(chosen), selector.DAILY_LIMIT)
+        self.assertEqual(len(reserves), 12)
+        self.assertEqual(len({x["article_id"] for x in reserves}), 12)
+        self.assertTrue(all(x["article_id"] not in {y["article_id"] for y in chosen}
+                            for x in reserves))
+
     def test_new_topics_cannot_displace_daily_mix(self):
         candidates = [item(i, cat) for i, cat in enumerate(
             ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
@@ -438,7 +451,7 @@ class EditorialExpansionTests(unittest.TestCase):
         ) as repair:
             draft = generator.generate_valid_draft(source, "fake-key")
         self.assertEqual(draft["body_word_count"], 650)
-        self.assertEqual(repair.call_count, 1)
+        self.assertEqual(repair.call_count, 2)
 
     def test_short_valid_draft_uses_successful_expansion(self):
         source = {
@@ -521,7 +534,8 @@ class EditorialExpansionTests(unittest.TestCase):
         with patch.object(generator, "enrich_source", side_effect=lambda x: x), patch.object(
             generator, "call_gemini",
             side_effect=[raw, {"body_markdown": " ".join(["breve"] * 430)},
-                         {"body_markdown": " ".join(["corto"] * 440)}]
+                         {"body_markdown": " ".join(["corto"] * 440)},
+                         {"body_markdown": " ".join(["ancora"] * 450)}]
         ):
             with self.assertRaises(generator.GeneratorFatalError):
                 generator.generate_valid_draft(source, "fake-key")
