@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import rss_collector as collector
@@ -13,12 +14,56 @@ import ai_filter
 import article_generator as generator
 import daily_selector as selector
 import wp_publisher as publisher
+import history_filter as history
 
 def item(n, category, story_type='NEWS'):
     return dict(article_id=str(n), title=f'Articolo {n}', category=category,
                 story_type=story_type, final_score=100-n)
 
 class EditorialExpansionTests(unittest.TestCase):
+    def test_historical_reserves_are_recovered_and_deduplicated(self):
+        now = datetime.now(timezone.utc)
+        previous = {
+            "reserve_items": [
+                {"title": "Notizia recente di sicurezza", "url": "https://example.com/news?utm_source=x",
+                 "article_id": "reserve-1", "published": now.isoformat(), "final_score": 80},
+                {"title": "Duplicato della notizia", "url": "https://example.com/news",
+                 "article_id": "reserve-1", "published": now.isoformat(), "final_score": 70},
+                {"title": "Notizia scaduta", "url": "https://example.com/old",
+                 "article_id": "reserve-old", "published": (now - __import__("datetime").timedelta(hours=60)).isoformat()},
+            ]
+        }
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("daily_articles.json", json.dumps(previous))
+        artifact = {"id": 123, "created_at": now.isoformat(),
+                    "archive_download_url": "https://api.github.com/archive/123"}
+        with patch.object(history, "list_artifacts", return_value=[artifact]), patch.object(
+            history, "api_get", return_value=buffer.getvalue()
+        ):
+            reserves = history.historical_reserves("owner/repo", "token", now=now)
+        self.assertEqual(len(reserves), 1)
+        self.assertEqual(reserves[0]["article_id"], "reserve-1")
+        self.assertEqual(reserves[0]["url"], "https://example.com/news")
+
+    def test_history_filter_merges_recent_reserves_when_current_feed_is_empty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "candidates.json"
+            path.write_text(json.dumps({"status": "empty", "items": [],
+                                        "total_received": 0, "total_final_candidates": 0}),
+                            encoding="utf-8")
+            reserve = {"title": "Notizia recuperata", "url": "https://example.com/recovered",
+                       "article_id": "recovered-1", "cluster_id": "recovered-1"}
+            with patch.object(history, "INPUT_FILE", path), patch.dict(
+                "os.environ", {"GITHUB_TOKEN": "fake-token", "GITHUB_REPOSITORY": "owner/repo"}
+            ), patch.object(history, "historical_reserves", return_value=[reserve]), patch.object(
+                history, "published_ids", return_value=set()
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(history.main(), 0)
+            result = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(result["status"], "ok_with_warnings")
+            self.assertEqual([x["article_id"] for x in result["items"]], ["recovered-1"])
+
     def test_specific_topics_and_existing_topics(self):
         examples = [('Robot aspirapolvere: novità per la casa', 'Casa smart'),
                     ('Hub USB-C: quali porte scegliere', 'Accessori e postazioni'),
