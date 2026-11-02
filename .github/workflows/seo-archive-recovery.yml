@@ -14,6 +14,7 @@ on:
       - '.github/workflows/seo-archive-recovery.yml'
       - 'scripts/seo_archive_recovery.py'
       - 'scripts/wp_publisher.py'
+      - 'scripts/wp_public_cleanup.py'
   schedule:
     - cron: '25 6 * * *'
       timezone: Europe/Rome
@@ -33,6 +34,8 @@ jobs:
       PYTHONUNBUFFERED: '1'
       # Se WP_PUBLISH_MODE è dry-run, anche le riparazioni SEO restano in simulazione.
       SEO_ARCHIVE_ALLOW_WRITES: ${{ vars.WP_PUBLISH_MODE == 'live' && (github.event_name != 'workflow_dispatch' || inputs.apply_safe_fixes) && 'YES' || 'NO' }}
+      # Pulizia dei footer solo dopo audit e revisione del report: marker esplicito nel commit.
+      SEO_PUBLIC_CLEANUP_ALLOW_WRITES: ${{ vars.WP_PUBLISH_MODE == 'live' && contains(github.event.head_commit.message, '[AI-VISION-SEO-CLEANUP]') && 'YES' || 'NO' }}
       WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
       WP_USERNAME: ${{ secrets.WP_USERNAME }}
       WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
@@ -55,6 +58,10 @@ jobs:
       - name: Simulazione quando la pubblicazione è disattivata
         if: ${{ env.SEO_ARCHIVE_ALLOW_WRITES != 'YES' }}
         run: python scripts/seo_archive_recovery.py
+      - name: Test pulizia footer fonti pubbliche
+        run: python -m unittest discover -s tests -p 'test_wp_public_cleanup.py' -v
+      - name: Audit e pulizia footer fonti pubbliche (protetta)
+        run: python scripts/wp_public_cleanup.py
       - name: Conserva report e snapshot prima delle modifiche
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -63,5 +70,7 @@ jobs:
           path: |
             data/seo_archive_recovery.json
             data/seo_archive_backups.json
+            data/public_source_cleanup.json
+            data/public_source_cleanup_backups.json
           if-no-files-found: warn
           retention-days: 90
