@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.7"
+VERSION = "4.8"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 12
@@ -579,6 +579,7 @@ Non attribuire ad AI Vision prove, test o verifiche indipendenti.
 BOZZA PRECEDENTE:
 {json.dumps(previous, ensure_ascii=False)}
 """
+    target_min, target_max = expansion_word_range(item)
     return f"""
 Genera una bozza per questo candidato editoriale.
 
@@ -610,13 +611,11 @@ Riporta versioni software e modelli esattamente come nei dati disponibili.
 Non inventare voti o valutazioni: un punteggio di selezione della pipeline
 non è mai una recensione o una prova del prodotto.
 
-Il campo body_markdown deve essere un articolo sostanzioso di circa
-{TARGET_BODY_WORDS} parole e comunque tra {QUALITY_MIN_BODY_WORDS} e {MAX_BODY_WORDS}
-parole. Sviluppa fatti distinti, contesto realmente presente nei dati e
-conseguenze pratiche supportate. Se il materiale disponibile non consente di
-raggiungere almeno {QUALITY_MIN_BODY_WORDS} parole senza ripetizioni o invenzioni, non
-riempire: produci comunque la versione più completa possibile; il controllo
-automatico la escluderà dalla pubblicazione. Non aggiungere riempitivi e non
+Il campo body_markdown deve essere un articolo sostanzioso: per questa
+fonte l'intervallo realistico è {target_min}-{target_max} parole, con un minimo
+assoluto di {QUALITY_MIN_BODY_WORDS}. Se il materiale lo consente, avvicinati
+alla fascia alta; se non la sostiene, non riempire: produci la versione più
+completa possibile, senza ripetizioni o invenzioni. Non aggiungere riempitivi e non
 inventare dettagli per raggiungere una lunghezza prestabilita. Ogni paragrafo
 deve contenere almeno un'informazione ricavabile dal titolo, dalla descrizione
 o dal testo aggiuntivo della fonte; elimina le frasi introduttive generiche. Usa paragrafi brevi e,
@@ -660,12 +659,28 @@ fact_check_notes la verifica di prezzo, disponibilità e condizioni.
 
 
 
+def expansion_word_range(item: dict) -> tuple[int, int]:
+    """Adatta l'obiettivo di lunghezza alla quantità di materiale verificabile."""
+    source_text = str(item.get("source_text") or "")
+    evidence_words = count_words(source_text) if source_text.strip() else evidence_word_count(item)
+    if evidence_words >= 900:
+        return 900, 1100
+    if evidence_words >= 650:
+        return 800, 1000
+    if evidence_words >= 450:
+        return 700, 900
+    if evidence_words >= 250:
+        return 600, 800
+    return QUALITY_MIN_BODY_WORDS, 700
+
+
 def build_body_repair_prompt(item: dict, raw: dict, reason: str) -> str:
     """Rivede il solo corpo con obiettivi coerenti con il target editoriale."""
     practical = item.get("editorial_kind") in {"GUIDA", "TUTORIAL"}
     optional_expansion = "Espansione editoriale non bloccante" in reason
-    target_min = TARGET_BODY_WORDS - 50
-    target_max = TARGET_BODY_WORDS + 150
+    target_min, target_max = expansion_word_range(item)
+    current_words = count_words(str(raw.get("body_markdown") or ""))
+    remaining_words = max(0, target_min - current_words)
     advice = (
         "Spiega prerequisiti, passaggi didattici, esempio ipotetico e controlli "
         "che il lettore deve fare. Non attribuire esperimenti alla redazione."
@@ -675,22 +690,26 @@ def build_body_repair_prompt(item: dict, raw: dict, reason: str) -> str:
     )
     if optional_expansion:
         length_instruction = (
-            f"ESPANSIONE EDITORIALE: conserva la struttura e i passaggi validi "
-            f"del corpo esistente; non ripartire da zero. Porta il testo verso "
-            f"{target_min}-{target_max} parole reali, usando 3-5 sezioni solo "
-            f"quando separano informazioni distinte. Raggiungi almeno "
-            f"{target_min} parole soltanto se la fonte contiene materiale "
-            f"distinto sufficiente. Sviluppa dettagli, confronti, condizioni, "
-            f"implicazioni e contesto verificabili già presenti nella fonte. "
-            f"Se il materiale non sostiene altro approfondimento, fermati senza "
-            f"ripetere concetti o aggiungere riempitivi."
+            f"ESPANSIONE EDITORIALE NON BLOCCANTE: il corpo attuale contiene "
+            f"{current_words} parole; l'obiettivo realistico per questa fonte è "
+            f"{target_min}-{target_max} parole. Servono circa {remaining_words} "
+            f"parole aggiuntive per raggiungere il limite inferiore. Conserva "
+            f"struttura, fatti e passaggi validi; non ripartire da zero. Confronta "
+            f"il corpo con i dettagli della fonte e integra quelli pertinenti "
+            f"ancora assenti, organizzandoli in sezioni distinte. Per ogni nuova "
+            f"sezione spiega un aspetto concreto: caratteristiche, funzionamento, "
+            f"condizioni, conseguenze pratiche, limiti, cronologia o risposta "
+            f"dell'azienda, ma soltanto quando documentati. Evita di ripetere "
+            f"l'introduzione o riformulare paragrafi già presenti. Raggiungi "
+            f"{target_min} parole se la fonte contiene materiale distinto "
+            f"sufficiente; altrimenti fermati senza riempitivi o invenzioni."
         )
     else:
         length_instruction = (
             f"RECUPERO QUALITÀ: correggi il corpo e portalo almeno a "
-            f"{QUALITY_MIN_BODY_WORDS} parole, idealmente verso "
-            f"{target_min}-{target_max} se la fonte lo consente. Usa 3-5 "
-            f"sezioni realmente utili; non allungare con ripetizioni."
+            f"{QUALITY_MIN_BODY_WORDS} parole; per questa fonte l'intervallo "
+            f"realistico è {target_min}-{target_max}. Integra fatti distinti "
+            f"ancora assenti con sezioni realmente utili; non ripetere."
         )
     return (
         "Sei il redattore di AI Vision. Rispondi SOLO con JSON: "
@@ -738,9 +757,10 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         raise GeneratorFatalError(
             f"Quality gate: testo di {body_words} parole, minimo {QUALITY_MIN_BODY_WORDS}."
         )
-    if body_words < TARGET_BODY_WORDS:
+    target_min, target_max = expansion_word_range(item)
+    if body_words < target_min:
         quality_warnings.append(
-            f"Testo di {body_words} parole, sotto l'obiettivo editoriale di {TARGET_BODY_WORDS}."
+            f"Testo di {body_words} parole, sotto l'obiettivo realistico per la fonte ({target_min}-{target_max})."
         )
 
     source_url = str(item.get("url") or "").strip()
@@ -858,12 +878,16 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
     # L'espansione è un miglioramento facoltativo: se Gemini è in quota,
     # restituisce testo insufficiente o introduce errori, conserviamo la
     # bozza originale già valida. Un tentativo fallito non blocca la giornata.
-    if normalized["body_word_count"] < EXPANSION_TRIGGER_WORDS:
+    expansion_min, expansion_max = expansion_word_range(item)
+    if normalized["body_word_count"] < expansion_max:
         original_words = normalized["body_word_count"]
-        # Keep the most complete valid expansion, even when it does not reach 800 words.
+        # Keep the most complete valid expansion; never force volume beyond the source evidence.
         best_expanded = normalized
         expansion_source = raw
-        required_words = max(EXPANSION_TRIGGER_WORDS, original_words + MIN_EXPANSION_GAIN_WORDS)
+        required_words = min(
+            expansion_max,
+            max(expansion_min, original_words + MIN_EXPANSION_GAIN_WORDS),
+        )
         for expansion_attempt in range(1, 3):
             try:
                 expanded_raw = repair_body(
@@ -873,10 +897,12 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
                     (
                         f"Espansione editoriale non bloccante, tentativo {expansion_attempt}/2: "
                         f"il corpo valido contiene {count_words(str(expansion_source.get('body_markdown') or ''))} parole. "
-                        f"Porta il testo almeno a {required_words} parole, idealmente 900-1100, "
-                        "soltanto se la fonte offre materiale distinto sufficiente. "
-                        "Sviluppa aspetti distinti già presenti nella fonte, non ripetere "
-                        "l'introduzione e non aggiungere riempitivi o fatti non supportati."
+                        f"Porta il testo almeno a {required_words} parole, entro l'intervallo "
+                        f"realistico {expansion_min}-{expansion_max} per questa fonte. "
+                        "Integra i fatti distinti della fonte che mancano ancora nel corpo, "
+                        "spiegando condizioni, funzionamento, limiti e conseguenze pratiche "
+                        "solo se documentati. Non ripetere l'introduzione, non parafrasare "
+                        "sezioni già complete e non aggiungere riempitivi o fatti non supportati."
                     ),
                 )
                 expanded = normalize_draft(expanded_raw, item)
