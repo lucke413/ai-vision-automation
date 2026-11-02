@@ -26,7 +26,7 @@ TIMEOUT = (5, 20)
 UA = "AIVision-Public-Source-Cleanup/1.0"
 FOOTER_LABEL = re.compile(
     r"^(?:fonte(?:\s+di\s+riferimento)?|fonti(?:\s+di\s+riferimento)?|"
-    r"riferimenti|bibliografia)\s*:\s*.+$",
+    r"riferimenti|bibliografia)\s*:\s*[^.!?]{2,180}[.!?]?$",
     re.IGNORECASE,
 )
 
