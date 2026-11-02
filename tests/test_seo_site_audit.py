@@ -110,6 +110,8 @@ class SeoSiteAuditTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertTrue(info["complete"])
         self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(fetch.call_args.kwargs["params"]["orderby"], "id")
+        self.assertEqual(fetch.call_args.kwargs["params"]["order"], "asc")
 
 
 if __name__ == "__main__":

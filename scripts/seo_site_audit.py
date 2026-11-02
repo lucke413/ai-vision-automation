@@ -183,6 +183,9 @@ def fetch_posts() -> tuple[list[dict], dict]:
         try:
             r = get(url, params={
                 "status": "publish", "per_page": 100, "page": page,
+                # Ordinamento immutabile: evita che nuovi post in cima al feed
+                # spostino gli offset mentre l'audit attraversa le pagine.
+                "orderby": "id", "order": "asc",
                 "_fields": "id,title,content,excerpt,link,slug,date,modified,featured_media",
             })
             r.raise_for_status()
