@@ -66,6 +66,33 @@ class SeoSiteAuditTests(unittest.TestCase):
         self.assertIn("Search Console", report["limitations"][0])
         self.assertGreaterEqual(len(report["similar_titles"]), 1)
 
+    def test_wp_pagination_deduplicates_repeated_post_ids(self):
+        class FakeResp:
+            status_code = 200
+            headers = {"X-WP-Total": "1"}
+            def raise_for_status(self): pass
+            def json(self):
+                row = post(831, "Titolo ripetuto", "Testo")
+                return [row, dict(row)]
+        with patch.object(seo, "get", return_value=FakeResp()):
+            rows, info = seo.fetch_posts()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(info["raw_retrieved"], 2)
+        self.assertEqual(info["duplicate_records_skipped"], 1)
+        self.assertTrue(info["complete"])
+
+    def test_exact_duplicate_title_requires_distinct_urls(self):
+        row = post(831, "Titolo identico", "<p>Contenuto</p>")
+        report = seo.build_report(
+            [row, dict(row)],
+            {"header_total": 1, "complete": True},
+            {831: {"status": 200, "meta_description": "Descrizione",
+                   "canonical": row["link"], "html_title": "Titolo", "html_h1": 1,
+                   "json_ld_blocks": 1}},
+            {},
+        )
+        self.assertEqual(report["summary"]["same_titles"], 0)
+
     def test_external_url_is_never_fetched(self):
         with self.assertRaises(ValueError):
             seo.get("https://evil.example/site")

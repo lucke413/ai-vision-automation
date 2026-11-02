@@ -174,6 +174,8 @@ def analyze_post(post: dict) -> dict:
 
 def fetch_posts() -> tuple[list[dict], dict]:
     output = []
+    seen_ids = set()
+    raw_retrieved = 0
     diagnostics = {"endpoint": BASE_URL + "/wp-json/wp/v2/posts", "pages_fetched": 0,
                    "header_total": None, "errors": []}
     for page in range(1, 1 + (MAX_PUBLIC_POSTS + 99) // 100):
@@ -190,14 +192,22 @@ def fetch_posts() -> tuple[list[dict], dict]:
             total = r.headers.get("X-WP-Total")
             if str(total).isdigit():
                 diagnostics["header_total"] = int(total)
-            output.extend(data)
+            raw_retrieved += len(data)
+            for post in data:
+                post_id = post.get("id") if isinstance(post, dict) else None
+                if post_id is None or post_id in seen_ids:
+                    continue
+                seen_ids.add(post_id)
+                output.append(post)
             diagnostics["pages_fetched"] += 1
             if len(output) >= MAX_PUBLIC_POSTS or len(data) < 100:
                 break
         except (ValueError, requests.RequestException) as exc:
             diagnostics["errors"].append(f"pagina {page}: {type(exc).__name__}: {str(exc)[:160]}")
             break
+    diagnostics["raw_retrieved"] = raw_retrieved
     diagnostics["retrieved"] = len(output)
+    diagnostics["duplicate_records_skipped"] = raw_retrieved - len(output)
     diagnostics["complete"] = (
         not diagnostics["errors"]
         and diagnostics["header_total"] is not None
@@ -290,7 +300,9 @@ def build_report(posts: list[dict], diagnostic: dict, live: dict, static: dict) 
     keys = collections.defaultdict(list)
     for item in items:
         keys[item["title_key"]].append(item["url"])
-    duplicates = [urls for urls in keys.values() if len(urls) >= 2]
+    # Lo stesso post può comparire due volte nella paginazione REST:
+    # un URL ripetuto non è un duplicato editoriale.
+    duplicates = [sorted(set(urls)) for urls in keys.values() if len(set(urls)) >= 2]
     live_counter = collections.Counter()
     live_issues = []
     for item in items:
