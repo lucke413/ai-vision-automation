@@ -16,7 +16,7 @@ import requests
 # AI VISION - RSS COLLECTOR 2.3.2
 # ============================================================
 
-VERSION = "2.3.3"
+VERSION = "2.3.4"
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_FILE = BASE_DIR / "data/rss_output.json"
 
@@ -1601,8 +1601,7 @@ def main():
 
 
     if not ai_items:
-        print("ERRORE: nessuna storia disponibile; controllare feed_status nel JSON.")
-        return 1
+        print("AVVISO: nessuna storia RSS valida in questo run; output vuoto salvato e pipeline in modalità graceful-empty.")
     return 0
 
 

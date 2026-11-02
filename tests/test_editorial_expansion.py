@@ -28,6 +28,20 @@ class EditorialExpansionTests(unittest.TestCase):
         for title, expected in examples:
             self.assertEqual(collector.classify_category(title, '', 'tech'), expected)
 
+    def test_empty_rss_input_produces_valid_empty_ai_output_without_gemini(self):
+        with tempfile.TemporaryDirectory() as directory:
+            inp = Path(directory) / "rss.json"
+            out = Path(directory) / "candidates.json"
+            inp.write_text(json.dumps({"status": "empty", "items": []}), encoding="utf-8")
+            with patch.object(ai_filter, "INPUT_FILE", inp), patch.object(
+                ai_filter, "OUTPUT_FILE", out
+            ), patch.object(ai_filter, "get_api_key", side_effect=AssertionError("Gemini non deve essere chiamato")), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(ai_filter.main(), 0)
+            result = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(result["status"], "empty")
+            self.assertEqual(result["items"], [])
+            self.assertEqual(result["total_final_candidates"], 0)
+
     def test_ai_filter_retries_transient_429(self):
         limited = MagicMock()
         limited.status_code = 429

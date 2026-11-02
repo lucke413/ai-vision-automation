@@ -88,14 +88,19 @@ def published_ids(repository: str, token: str) -> set[str]:
 
 
 def main() -> int:
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
-    repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
-    if not token or not repository or "/" not in repository:
-        raise RuntimeError("GITHUB_TOKEN o GITHUB_REPOSITORY mancante.")
     data = json.loads(INPUT_FILE.read_text(encoding="utf-8"))
     items = data.get("items")
     if not isinstance(items, list):
         raise RuntimeError("Candidati AI non validi.")
+    # Con un lotto vuoto non serve interrogare GitHub: il report storico
+    # non può escludere ulteriori candidati e non deve bloccare il run.
+    if not items:
+        print("Nessun candidato AI: controllo storico non necessario.")
+        return 0
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    if not token or not repository or "/" not in repository:
+        raise RuntimeError("GITHUB_TOKEN o GITHUB_REPOSITORY mancante.")
     used = published_ids(repository, token)
     retained = [item for item in items if str(item.get("cluster_id") or item.get("article_id") or "") not in used]
     excluded = len(items) - len(retained)

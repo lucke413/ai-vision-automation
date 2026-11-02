@@ -125,8 +125,8 @@ jobs:
           from pathlib import Path
 
           expected = {
-              "scripts/rss_collector.py": "2.3.3",
-              "scripts/ai_filter.py": "3.1.1",
+              "scripts/rss_collector.py": "2.3.4",
+              "scripts/ai_filter.py": "3.1.2",
               "scripts/daily_selector.py": "3.0",
               "scripts/article_generator.py": "4.3",
               "scripts/wp_publisher.py": "2.7",
@@ -159,14 +159,19 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/rss_output.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if not isinstance(items, list) or not items:
-              raise SystemExit("ERRORE: collector senza storie valide.")
-          for item in items:
-              if not isinstance(item, dict) or not item.get("title") or not item.get("url"):
-                  raise SystemExit("ERRORE: storia incompleta nel collector.")
-              if not isinstance(item.get("editorial_score"), (int, float)):
-                  raise SystemExit("ERRORE: editorial_score mancante o non numerico.")
-          print(f"OK: {len(items)} storie pronte per Gemini")
+          if not isinstance(items, list):
+              raise SystemExit("ERRORE: formato collector non valido.")
+          if not items:
+              if data.get("status") != "empty":
+                  raise SystemExit("ERRORE: collector vuoto senza stato empty.")
+              print("AVVISO: nessuna storia RSS valida; la pipeline prosegue con output vuoto.")
+          else:
+              for item in items:
+                  if not isinstance(item, dict) or not item.get("title") or not item.get("url"):
+                      raise SystemExit("ERRORE: storia incompleta nel collector.")
+                  if not isinstance(item.get("editorial_score"), (int, float)):
+                      raise SystemExit("ERRORE: editorial_score mancante o non numerico.")
+              print(f"OK: {len(items)} storie pronte per Gemini")
           PY
 
       - name: Analizza con Gemini

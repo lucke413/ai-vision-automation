@@ -39,7 +39,7 @@ import requests
 # CONFIGURAZIONE
 # ============================================================
 
-VERSION = "3.1.1"
+VERSION = "3.1.2"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data/rss_output.json"
@@ -796,13 +796,6 @@ def main():
     # API KEY
     # --------------------------------------------------------
 
-    try:
-        api_key = get_api_key()
-    except Exception as exc:
-
-        print(f"ERRORE: {exc}")
-        return 1
-
     # --------------------------------------------------------
     # INPUT
     # --------------------------------------------------------
@@ -850,8 +843,39 @@ def main():
 
         articles = []
 
-    if not isinstance(articles, list) or not articles:
-        print("ERRORE: input senza lista di articoli valida e non vuota.")
+    if not isinstance(articles, list):
+        print("ERRORE: input senza una lista di articoli valida.")
+        return 1
+    if not articles:
+        empty_output = {
+            "filter_version": VERSION,
+            "model": MODEL,
+            "total_received": 0,
+            "total_requested": 0,
+            "total_attempted": 0,
+            "total_errors": 0,
+            "total_unprocessed": 0,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "empty",
+            "error": None,
+            "warnings": ["Il collector non ha trovato storie valide; nessuna notizia viene inventata."],
+            "total_analyzed": 0,
+            "total_passed_ai": 0,
+            "total_final_candidates": 0,
+            "request_delay_seconds": REQUEST_DELAY,
+            "max_retries": MAX_RETRIES,
+            "category_distribution": {},
+            "exclusion_summary": {},
+            "items": [],
+            "all_analyzed": [],
+        }
+        save_json(OUTPUT_FILE, empty_output)
+        print("AVVISO: nessun candidato da analizzare; salvato output vuoto valido.")
+        return 0
+    try:
+        api_key = get_api_key()
+    except Exception as exc:
+        print(f"ERRORE: {exc}")
         return 1
     total_received = len(articles)
     if any(not isinstance(item, dict) or not normalize_text(item.get("title")) for item in articles):
