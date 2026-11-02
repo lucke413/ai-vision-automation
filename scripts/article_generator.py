@@ -879,7 +879,7 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
     # restituisce testo insufficiente o introduce errori, conserviamo la
     # bozza originale già valida. Un tentativo fallito non blocca la giornata.
     expansion_min, expansion_max = expansion_word_range(item)
-    if normalized["body_word_count"] < expansion_max:
+    if normalized["body_word_count"] < expansion_min:
         original_words = normalized["body_word_count"]
         # Keep the most complete valid expansion; never force volume beyond the source evidence.
         best_expanded = normalized
