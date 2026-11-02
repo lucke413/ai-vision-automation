@@ -108,6 +108,27 @@ class EditorialExpansionTests(unittest.TestCase):
         )):
             self.assertEqual(seo_recovery.apply_meta(MagicMock(), row, []), "skipped_post_changed")
 
+    def test_history_filter_continues_when_published_artifact_api_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "candidates.json"
+            path.write_text(json.dumps({
+                "status": "ok", "items": [
+                    {"article_id": "current-1", "cluster_id": "cluster-1",
+                     "title": "Notizia corrente", "url": "https://example.com/current"}
+                ], "total_received": 1, "total_final_candidates": 1, "warnings": []
+            }), encoding="utf-8")
+            with patch.object(history, "INPUT_FILE", path), patch.dict(
+                "os.environ", {"GITHUB_TOKEN": "fake-token", "GITHUB_REPOSITORY": "owner/repo"}
+            ), patch.object(history, "historical_reserves", return_value=[]), patch.object(
+                history, "published_ids", side_effect=RuntimeError("GitHub API unavailable")
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(history.main(), 0)
+            result = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(result["status"], "ok_with_warnings")
+            self.assertEqual(result["history_check_status"], "unavailable")
+            self.assertEqual([x["article_id"] for x in result["items"]], ["current-1"])
+            self.assertTrue(any("Controllo storico" in warning for warning in result["warnings"]))
+
     def test_history_filter_excludes_published_article_when_cluster_id_differs(self):
         report = {"dry_run": False, "items": [
             {"post_id": 123, "article_id": "article-123", "cluster_id": "cluster-123",

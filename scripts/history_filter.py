@@ -185,10 +185,22 @@ def main() -> int:
         raise RuntimeError("Candidati AI non validi.")
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
-    if not token or not repository or "/" not in repository:
+    warnings = data.setdefault("warnings", [])
+    if not isinstance(warnings, list):
+        warnings = data["warnings"] = []
+    history_available = bool(token and repository and "/" in repository)
+    if not history_available:
+        data["history_check_status"] = "unavailable"
+        warnings.append("Controllo storico non disponibile: continuo con i candidati correnti senza deduplicazione remota.")
         if items:
-            raise RuntimeError("GITHUB_TOKEN o GITHUB_REPOSITORY mancante.")
-        print("Nessun candidato AI e nessun token storico: continuo con lotto vuoto.")
+            data["status"] = "ok_with_warnings"
+            print("AVVISO: credenziali/repository storico non disponibili; continuo con i candidati correnti.")
+        else:
+            data["status"] = "empty"
+            print("Nessun candidato AI e nessun accesso allo storico: continuo con lotto vuoto.")
+        temporary = INPUT_FILE.with_suffix(".tmp")
+        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(INPUT_FILE)
         return 0
 
     reserves = historical_reserves(repository, token)
@@ -216,22 +228,34 @@ def main() -> int:
         data["status"] = "empty"
         print("Nessun candidato corrente o di riserva disponibile.")
     else:
-        used = published_ids(repository, token)
-        before = len(data["items"])
-        retained = [
-            item for item in data["items"]
-            if not any(
-                str(item.get(key) or "").strip() in used
-                for key in ("article_id", "cluster_id")
-                if item.get(key)
+        try:
+            used = published_ids(repository, token)
+        except Exception as exc:
+            # Un disservizio temporaneo dell'API artifact non deve fermare
+            # l'intera pubblicazione: conserviamo il lotto corrente e avvisiamo.
+            data["history_check_status"] = "unavailable"
+            warnings.append(
+                f"Controllo storico non disponibile ({type(exc).__name__}); continuo senza deduplicazione remota."
             )
-        ]
-        data["items"] = retained
-        data["total_final_candidates"] = len(retained)
-        data["history_excluded"] = int(data.get("history_excluded", 0)) + before - len(retained)
-        if not retained:
-            data["status"] = "empty"
-        print(f"Report precedenti: {len(used)} ID pubblicati o pianificati; esclusi {before - len(retained)} candidati.")
+            data["status"] = "ok_with_warnings"
+            print(f"AVVISO storico: controllo pubblicati non disponibile ({type(exc).__name__}); continuo con il lotto.")
+        else:
+            data["history_check_status"] = "ok"
+            before = len(data["items"])
+            retained = [
+                item for item in data["items"]
+                if not any(
+                    str(item.get(key) or "").strip() in used
+                    for key in ("article_id", "cluster_id")
+                    if item.get(key)
+                )
+            ]
+            data["items"] = retained
+            data["total_final_candidates"] = len(retained)
+            data["history_excluded"] = int(data.get("history_excluded", 0)) + before - len(retained)
+            if not retained:
+                data["status"] = "empty"
+            print(f"Report precedenti: {len(used)} ID pubblicati o pianificati; esclusi {before - len(retained)} candidati.")
 
     temporary = INPUT_FILE.with_suffix(".tmp")
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
