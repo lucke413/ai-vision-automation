@@ -34,7 +34,10 @@ FOOTER_LABEL = re.compile(
 def last_source_footer(content: str) -> str:
     """Restituisce l'ultimo paragrafo solo se è una bibliografia linkata autonoma."""
     value = str(content or "")
-    blocks = list(re.finditer(r"<p\b[^>]*>.*?</p\s*>", value, re.IGNORECASE | re.DOTALL))
+    blocks = list(re.finditer(
+        r"(?:<!--\s*wp:paragraph(?:\s+[^>]*)?-->\s*)?<p\b[^>]*>.*?</p\s*>(?:\s*<!--\s*/wp:paragraph\s*-->)?",
+        value, re.IGNORECASE | re.DOTALL,
+    ))
     if not blocks:
         return ""
     match = blocks[-1]
