@@ -475,8 +475,8 @@ class EditorialExpansionTests(unittest.TestCase):
             )
         self.assertEqual(result["status"], "scheduled")
         payload = client.create_post.call_args.args[0]
-        self.assertIn("Source Example", payload["content"])
-        self.assertIn("source.example.com/story", payload["content"])
+        self.assertNotIn("Source Example", payload["content"])
+        self.assertNotIn("source.example.com/story", payload["content"])
         self.assertIn("/category/news/", payload["content"])
 
     def test_existing_wordpress_post_does_not_upload_images(self):
