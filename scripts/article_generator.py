@@ -839,6 +839,8 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
     # bozza originale già valida. Un tentativo fallito non blocca la giornata.
     if normalized["body_word_count"] < EXPANSION_TRIGGER_WORDS:
         original_words = normalized["body_word_count"]
+        # Keep the most complete valid expansion, even when it does not reach 800 words.
+        best_expanded = normalized
         expansion_source = raw
         required_words = max(EXPANSION_TRIGGER_WORDS, original_words + MIN_EXPANSION_GAIN_WORDS)
         for expansion_attempt in range(1, 3):
@@ -857,11 +859,13 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
                     ),
                 )
                 expanded = normalize_draft(expanded_raw, item)
+                if expanded["body_word_count"] > best_expanded["body_word_count"]:
+                    best_expanded = expanded
                 if expanded["body_word_count"] >= required_words:
                     return expanded
                 print(
                     f"    Espansione {expansion_attempt}/2 non sufficiente "
-                    f"({expanded['body_word_count']} parole)."
+                    f"({expanded['body_word_count']} parole; migliore: {best_expanded['body_word_count']})."
                 )
                 expansion_source = expanded_raw
             except GeneratorFatalError as exc:
@@ -870,6 +874,12 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
                     expansion_source = expanded_raw
             except Exception as exc:
                 print(f"    Errore espansione {expansion_attempt}/2 ({type(exc).__name__}).")
+        if best_expanded["body_word_count"] > original_words:
+            print(
+                f"    Mantengo la versione ampliata di {best_expanded['body_word_count']} parole "
+                f"(partenza: {original_words}); non sono emersi altri ampliamenti affidabili."
+            )
+            return best_expanded
         print(
             f"    Mantengo la bozza valida di {original_words} parole: "
             "le espansioni aggiuntive non hanno superato il controllo qualità."

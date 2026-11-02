@@ -453,6 +453,36 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(draft["body_word_count"], 650)
         self.assertEqual(repair.call_count, 2)
 
+    def test_short_valid_draft_keeps_best_partial_expansion(self):
+        source = {
+            "article_id": "long-form-best-partial",
+            "title": "WhatsApp introduce nuovi strumenti per i pagamenti Android",
+            "description": " ".join(["Informazione documentata sul servizio e sulle sue funzioni."] * 35),
+            "url": "https://example.com/news",
+            "category": "Software & App",
+            "story_type": "NEWS",
+        }
+        original = {
+            "title": "WhatsApp prepara nuovi strumenti per i pagamenti su Android",
+            "excerpt": "Le novità riguardano la sezione dei pagamenti nell'app.",
+            "body_markdown": " ".join(["fatto"] * 650),
+            "seo_title": "WhatsApp: novità sui pagamenti Android",
+            "seo_description": "I dettagli sulla nuova sezione pagamenti di WhatsApp su Android.",
+            "slug": "whatsapp-pagamenti-android",
+            "tags": ["WhatsApp", "Android"],
+            "fact_check_notes": [],
+        }
+        first = {**original, "body_markdown": " ".join(["dettaglio"] * 710)}
+        second = {**original, "body_markdown": " ".join(["approfondimento"] * 760)}
+        with patch.object(generator, "enrich_source", side_effect=lambda value: value), patch.object(
+            generator, "call_gemini", return_value=original
+        ), patch.object(
+            generator, "repair_body", side_effect=[first, second]
+        ):
+            draft = generator.generate_valid_draft(source, "fake-key")
+        self.assertEqual(draft["body_word_count"], 760)
+        self.assertEqual(draft["title"], original["title"])
+
     def test_short_valid_draft_uses_successful_expansion(self):
         source = {
             "article_id": "long-form-success",
