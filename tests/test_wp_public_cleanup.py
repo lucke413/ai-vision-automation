@@ -17,6 +17,20 @@ class PublicSourceCleanupTests(unittest.TestCase):
         self.assertNotIn("Fonte di riferimento", cleaned)
         self.assertIn("<a href=", removed)
 
+    def test_removes_gutenberg_wrapped_final_source_paragraph(self):
+        body = (
+            "<!-- wp:paragraph -->\n"
+            "<p>Testo editoriale utile.</p>\n"
+            "<!-- /wp:paragraph -->\n"
+            "<!-- wp:paragraph -->\n"
+            '<p>Fonte: <a href="https://example.com">Sito ufficiale</a></p>\n'
+            "<!-- /wp:paragraph -->"
+        )
+        cleaned, removed = cleanup.remove_last_source_footer(body)
+        self.assertIn("Testo editoriale utile", cleaned)
+        self.assertNotIn("Sito ufficiale", cleaned)
+        self.assertIn("Sito ufficiale", removed)
+
     def test_keeps_inline_source_attribution(self):
         body = "<p>Secondo Tom's Hardware, il dispositivo offre una nuova funzione.</p>"
         self.assertEqual(cleanup.remove_last_source_footer(body), (body, ""))
