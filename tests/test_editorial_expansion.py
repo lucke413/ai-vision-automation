@@ -15,6 +15,7 @@ import article_generator as generator
 import daily_selector as selector
 import wp_publisher as publisher
 import history_filter as history
+import seo_archive_recovery as seo_recovery
 
 def item(n, category, story_type='NEWS'):
     return dict(article_id=str(n), title=f'Articolo {n}', category=category,
@@ -45,6 +46,65 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(len(reserves), 1)
         self.assertEqual(reserves[0]["article_id"], "reserve-1")
         self.assertEqual(reserves[0]["url"], "https://example.com/news")
+
+    def test_seo_meta_proposal_uses_only_existing_article_text(self):
+        post = {
+            "title": {"rendered": "Sonos Beam Ultra: caratteristiche e disponibilità"},
+            "excerpt": {"rendered": "<p>La nuova soundbar Sonos integra funzioni audio e controllo smart per la casa.</p>"},
+            "content": {"rendered": "<p>Il prodotto sarà distribuito nei negozi selezionati.</p>"},
+        }
+        description, basis = seo_recovery.description_from_existing(post)
+        self.assertIn("La nuova soundbar Sonos", description)
+        self.assertTrue(85 <= len(description) <= 155)
+        self.assertEqual(basis, "copia_sintetica_da_excerpt_o_corpo")
+
+    def test_seo_meta_update_writes_only_missing_description_and_preserves_other_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            seo_recovery.BACKUP_FILE = Path(directory) / "backup.json"
+            row = {
+                "id": 465, "url": "https://aivision.altervista.org/sonos-beam-ultra/",
+                "slug": "sonos-beam-ultra", "title": "Sonos Beam Ultra",
+                "modified": "2026-10-30T10:00:00",
+                "meta_description_proposal": "La nuova soundbar Sonos integra funzioni audio e controllo smart per la casa.",
+                "category_of_review": "approfondimento_con_fonti",
+            }
+            current = {
+                "status": "publish", "link": row["url"], "slug": row["slug"],
+                "modified": row["modified"], "title": {"rendered": row["title"]},
+                "aivision_seo": {"seo_title": "Titolo esistente", "focus_keyphrase": "Sonos Beam"},
+            }
+            response = MagicMock()
+            response.raise_for_status.return_value = None
+            response.json.return_value = {"aivision_seo": {
+                **current["aivision_seo"], "seo_description": row["meta_description_proposal"]
+            }}
+            session = MagicMock()
+            session.post.return_value = response
+            with patch.object(seo_recovery, "get", return_value=MagicMock(
+                raise_for_status=MagicMock(), json=MagicMock(return_value=current)
+            )):
+                status = seo_recovery.apply_meta(session, row, [])
+            self.assertEqual(status, "updated")
+            payload = session.post.call_args.kwargs["json"]
+            self.assertEqual(payload, {"aivision_seo": {"seo_description": row["meta_description_proposal"]}})
+            self.assertTrue(seo_recovery.BACKUP_FILE.exists())
+
+    def test_seo_meta_update_skips_post_modified_after_audit(self):
+        row = {
+            "id": 465, "url": "https://aivision.altervista.org/sonos-beam-ultra/",
+            "slug": "sonos-beam-ultra", "title": "Sonos Beam Ultra",
+            "modified": "2026-10-30T10:00:00", "meta_description_proposal": "Test descrizione valida",
+            "category_of_review": "approfondimento_con_fonti",
+        }
+        changed = {
+            "status": "publish", "link": row["url"], "slug": row["slug"],
+            "modified": "2026-11-01T10:00:00", "title": {"rendered": row["title"]},
+            "aivision_seo": {},
+        }
+        with patch.object(seo_recovery, "get", return_value=MagicMock(
+            raise_for_status=MagicMock(), json=MagicMock(return_value=changed)
+        )):
+            self.assertEqual(seo_recovery.apply_meta(MagicMock(), row, []), "skipped_post_changed")
 
     def test_history_filter_merges_recent_reserves_when_current_feed_is_empty(self):
         with tempfile.TemporaryDirectory() as directory:
