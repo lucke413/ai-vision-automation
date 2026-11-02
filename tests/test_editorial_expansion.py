@@ -354,6 +354,7 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(generator.TARGET_BODY_WORDS, 950)
         self.assertEqual(generator.QUALITY_MIN_BODY_WORDS, 550)
         self.assertEqual(generator.EXPANSION_TRIGGER_WORDS, 950)
+        self.assertEqual(generator.VERSION, "4.8")
         self.assertEqual(publisher.MIN_PUBLISH_WORDS, 550)
         self.assertEqual(generator.MAX_RETRIES, 4)
 
@@ -425,27 +426,45 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(call.call_count, 2)
         self.assertIn("SOLO con JSON", call.call_args.args[0])
 
-    def test_optional_expansion_prompt_uses_900_to_1100_word_target(self):
+    def test_adaptive_expansion_range_follows_source_evidence(self):
+        self.assertEqual(generator.expansion_word_range({
+            "source_text": " ".join(["fatto documentato"] * 500)
+        }), (900, 1100))
+        self.assertEqual(generator.expansion_word_range({
+            "source_text": " ".join(["fatto documentato"] * 350)
+        }), (800, 1000))
+        self.assertEqual(generator.expansion_word_range({
+            "source_text": " ".join(["fatto documentato"] * 250)
+        }), (700, 900))
+        self.assertEqual(generator.expansion_word_range({
+            "source_text": " ".join(["fatto documentato"] * 150)
+        }), (600, 800))
+        self.assertEqual(generator.expansion_word_range({
+            "title": "Titolo breve", "description": "pochi dati"
+        }), (550, 700))
+
+    def test_optional_expansion_prompt_uses_source_adaptive_word_target(self):
         source = {
             "title": "Esempio di approfondimento",
             "description": "Descrizione con dati verificabili.",
-            "source_text": "Dettagli documentati della fonte.",
+            "source_text": " ".join(["Dettagli documentati e verificabili della fonte."] * 180),
             "category": "Software & App",
         }
         draft = {"body_markdown": "Corpo valido da approfondire."}
         prompt = generator.build_body_repair_prompt(
             source, draft, "Espansione editoriale non bloccante, tentativo 1/2"
         )
-        self.assertIn("900-1100 parole reali", prompt)
+        self.assertIn("900-1100 parole", prompt)
         self.assertIn("non ripartire da zero", prompt)
-        self.assertIn("senza ripetere concetti", prompt)
-        self.assertNotIn("800-1050", prompt)
+        self.assertIn("ancora assenti", prompt)
+        self.assertIn("corpo attuale contiene", prompt)
 
     def test_850_word_draft_still_attempts_optional_expansion(self):
         source = {
             "article_id": "long-form-850",
             "title": "WhatsApp introduce nuovi strumenti per i pagamenti Android",
             "description": " ".join(["Informazione documentata sul servizio e sulle sue funzioni."] * 35),
+            "source_text": " ".join(["Dettagli documentati e verificabili della fonte."] * 180),
             "url": "https://example.com/news",
             "category": "Software & App",
             "story_type": "NEWS",
@@ -473,6 +492,7 @@ class EditorialExpansionTests(unittest.TestCase):
             "article_id": "long-form-check",
             "title": "WhatsApp introduce nuovi strumenti per i pagamenti Android",
             "description": " ".join(["Informazione documentata sul servizio e sulle sue funzioni."] * 35),
+            "source_text": " ".join(["Dettagli documentati e verificabili della fonte."] * 180),
             "url": "https://example.com/news",
             "category": "Software & App",
             "story_type": "NEWS",
@@ -502,6 +522,7 @@ class EditorialExpansionTests(unittest.TestCase):
             "article_id": "long-form-best-partial",
             "title": "WhatsApp introduce nuovi strumenti per i pagamenti Android",
             "description": " ".join(["Informazione documentata sul servizio e sulle sue funzioni."] * 35),
+            "source_text": " ".join(["Dettagli documentati e verificabili della fonte."] * 180),
             "url": "https://example.com/news",
             "category": "Software & App",
             "story_type": "NEWS",
@@ -532,6 +553,7 @@ class EditorialExpansionTests(unittest.TestCase):
             "article_id": "long-form-success",
             "title": "WhatsApp introduce nuovi strumenti per i pagamenti Android",
             "description": " ".join(["Informazione documentata sul servizio e sulle sue funzioni."] * 35),
+            "source_text": " ".join(["Dettagli documentati e verificabili della fonte."] * 180),
             "url": "https://example.com/news",
             "category": "Software & App",
             "story_type": "NEWS",
