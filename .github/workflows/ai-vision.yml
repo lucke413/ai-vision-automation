@@ -130,7 +130,7 @@ jobs:
               "scripts/ai_filter.py": "3.1.2",
               "scripts/daily_selector.py": "3.1",
               "scripts/article_generator.py": "4.5",
-              "scripts/wp_publisher.py": "2.7",
+              "scripts/wp_publisher.py": "2.8",
           }
 
           for filename, wanted in expected.items():
