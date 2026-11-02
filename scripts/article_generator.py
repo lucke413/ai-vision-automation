@@ -534,6 +534,7 @@ Restituisci esclusivamente JSON con i campi:
 """
     title = str(item.get("title") or "")[:500]
     description = str(item.get("description") or "")[:5000]
+    target_min, target_max = expansion_word_range(item)
     repair = ""
     if previous is not None:
         previous_body = str(previous.get("body_markdown") or "") if isinstance(previous, dict) else ""
@@ -579,7 +580,6 @@ Non attribuire ad AI Vision prove, test o verifiche indipendenti.
 BOZZA PRECEDENTE:
 {json.dumps(previous, ensure_ascii=False)}
 """
-    target_min, target_max = expansion_word_range(item)
     return f"""
 Genera una bozza per questo candidato editoriale.
 
@@ -641,7 +641,7 @@ Restituisci esattamente questo schema:
 {{
   "title": "titolo originale in italiano",
   "excerpt": "riassunto di massimo duecento caratteri",
-  "body_markdown": "articolo originale di circa {TARGET_BODY_WORDS} parole, in Markdown",
+  "body_markdown": "articolo originale tra {target_min} e {target_max} parole, in Markdown",
   "focus_keyphrase": "frase chiave specifica di 2-5 parole",
   "seo_title": "titolo SEO di massimo 60 caratteri",
   "seo_description": "descrizione SEO di massimo 155 caratteri",
