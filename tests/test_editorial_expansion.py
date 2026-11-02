@@ -50,7 +50,7 @@ class EditorialExpansionTests(unittest.TestCase):
     def test_seo_meta_proposal_uses_only_existing_article_text(self):
         post = {
             "title": {"rendered": "Sonos Beam Ultra: caratteristiche e disponibilità"},
-            "excerpt": {"rendered": "<p>La nuova soundbar Sonos integra funzioni audio e controllo smart per la casa.</p>"},
+            "excerpt": {"rendered": "<p>La nuova soundbar Sonos integra funzioni audio e controllo smart per la casa, con una distribuzione nei negozi selezionati e nuove opzioni per l'ecosistema domestico.</p>"},
             "content": {"rendered": "<p>Il prodotto sarà distribuito nei negozi selezionati.</p>"},
         }
         description, basis = seo_recovery.description_from_existing(post)
