@@ -27,10 +27,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.3"
+VERSION = "4.4"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
-RESERVE_LIMIT = 6
+RESERVE_LIMIT = 12
 MAX_DAILY_OFFERS = 1
 MAX_ITEMS = DAILY_LIMIT + RESERVE_LIMIT
 MAX_RETRIES = 4
@@ -55,7 +55,7 @@ MIN_EXPANSION_GAIN_WORDS = 60
 MAX_BODY_WORDS = 1500
 # Un solo tentativo aggiuntivo per contenere il consumo API e recuperare le
 # bozze troppo corte senza trasformare il filtro qualità in un blocco totale.
-MAX_REPAIR_ATTEMPTS = 2
+MAX_REPAIR_ATTEMPTS = 3
 TARGETED_EXPANSION_MIN_WORDS = 250
 MAX_EXCERPT_CHARS = 200
 MAX_SEO_TITLE_CHARS = 60
@@ -839,36 +839,41 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
     # bozza originale già valida. Un tentativo fallito non blocca la giornata.
     if normalized["body_word_count"] < EXPANSION_TRIGGER_WORDS:
         original_words = normalized["body_word_count"]
-        try:
-            expanded_raw = repair_body(
-                raw,
-                item,
-                api_key,
-                (
-                    f"Espansione editoriale non bloccante: il corpo valido contiene "
-                    f"{original_words} parole. Porta il testo almeno a {EXPANSION_TRIGGER_WORDS} "
-                    "parole, idealmente 850-950, soltanto se la fonte offre materiale "
-                    "distinto sufficiente. Non aggiungere riempitivi né fatti non supportati."
-                ),
-            )
-            expanded = normalize_draft(expanded_raw, item)
-            required_words = max(EXPANSION_TRIGGER_WORDS, original_words + MIN_EXPANSION_GAIN_WORDS)
-            if expanded["body_word_count"] >= required_words:
-                return expanded
-            print(
-                f"    Espansione non sufficiente ({expanded['body_word_count']} parole); "
-                f"mantengo la bozza valida di {original_words} parole."
-            )
-        except GeneratorFatalError as exc:
-            print(
-                f"    Espansione non riuscita ({exc}); "
-                f"mantengo la bozza valida di {original_words} parole."
-            )
-        except Exception as exc:
-            print(
-                f"    Errore nell'espansione ({type(exc).__name__}); "
-                f"mantengo la bozza valida di {original_words} parole."
-            )
+        expansion_source = raw
+        required_words = max(EXPANSION_TRIGGER_WORDS, original_words + MIN_EXPANSION_GAIN_WORDS)
+        for expansion_attempt in range(1, 3):
+            try:
+                expanded_raw = repair_body(
+                    expansion_source,
+                    item,
+                    api_key,
+                    (
+                        f"Espansione editoriale non bloccante, tentativo {expansion_attempt}/2: "
+                        f"il corpo valido contiene {count_words(str(expansion_source.get('body_markdown') or ''))} parole. "
+                        f"Porta il testo almeno a {required_words} parole, idealmente 850-950, "
+                        "soltanto se la fonte offre materiale distinto sufficiente. "
+                        "Sviluppa aspetti distinti già presenti nella fonte, non ripetere "
+                        "l'introduzione e non aggiungere riempitivi o fatti non supportati."
+                    ),
+                )
+                expanded = normalize_draft(expanded_raw, item)
+                if expanded["body_word_count"] >= required_words:
+                    return expanded
+                print(
+                    f"    Espansione {expansion_attempt}/2 non sufficiente "
+                    f"({expanded['body_word_count']} parole)."
+                )
+                expansion_source = expanded_raw
+            except GeneratorFatalError as exc:
+                print(f"    Espansione {expansion_attempt}/2 non riuscita ({exc}).")
+                if "expanded_raw" in locals() and isinstance(expanded_raw, dict):
+                    expansion_source = expanded_raw
+            except Exception as exc:
+                print(f"    Errore espansione {expansion_attempt}/2 ({type(exc).__name__}).")
+        print(
+            f"    Mantengo la bozza valida di {original_words} parole: "
+            "le espansioni aggiuntive non hanno superato il controllo qualità."
+        )
 
     return normalized
 
