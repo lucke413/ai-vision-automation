@@ -1120,6 +1120,34 @@ def draft_items(data: dict) -> list[dict]:
     return [item for item in values if isinstance(item, dict)]
 
 
+
+PUBLIC_SOURCE_NOTE_RE = re.compile(
+    r"^\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?"
+    r"(?:fonte(?:\\s+di\\s+riferimento)?|fonti(?:\\s+di\\s+riferimento)?|"
+    r"riferimenti|bibliografia)\\s*:\\s*.+$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def strip_public_source_notes(markdown_text: str) -> str:
+    """Rimuove soltanto una bibliografia autonoma in coda al testo pubblico.
+
+    Le attribuzioni integrate nei paragrafi (per esempio "Tom's Hardware
+    rileva...") restano intatte. URL e nomi delle fonti restano nei metadati
+    interni della bozza per fact-checking e tracciabilità.
+    """
+    blocks = re.split(r"\\n\\s*\\n", str(markdown_text or "").strip())
+    removed = False
+    while blocks and PUBLIC_SOURCE_NOTE_RE.match(blocks[-1]):
+        blocks.pop()
+        removed = True
+    cleaned = "\\n\\n".join(blocks).strip()
+    if removed:
+        print("    Nota: rimossa bibliografia finale dal testo pubblico.")
+    return cleaned
+
+
+
 def publish_one(
     draft: dict,
     planned_time: datetime,
@@ -1129,7 +1157,12 @@ def publish_one(
     title = str(draft.get("title") or "").strip()
     if not title:
         raise PublisherError("Titolo mancante.")
-    raw_body = str(draft.get("body_markdown") or "").strip()
+    original_body = str(draft.get("body_markdown") or "").strip()
+    original_word_count = len(re.findall(
+        r"\\b[\\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\\wÀ-ÖØ-öø-ÿ]+)*\\b",
+        original_body, flags=re.UNICODE,
+    ))
+    raw_body = strip_public_source_notes(original_body)
     body = markdown_to_html(raw_body)
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
         if not draft.get("example_prompt") or not draft.get("advanced_prompt") or not guide_resources(draft):
@@ -1141,9 +1174,14 @@ def publish_one(
     if not body:
         raise PublisherError("Corpo articolo vuoto.")
     word_count = len(re.findall(r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\wÀ-ÖØ-öø-ÿ]+)*\b", raw_body, flags=re.UNICODE))
-    if word_count < MIN_PUBLISH_WORDS:
+    if word_count < MIN_PUBLISH_WORDS and original_word_count < MIN_PUBLISH_WORDS:
         raise PublisherError(
             f"Quality gate: articolo di {word_count} parole; minimo {MIN_PUBLISH_WORDS}."
+        )
+    if word_count < MIN_PUBLISH_WORDS <= original_word_count:
+        print(
+            "    AVVISO: rimosso il footer delle fonti; mantenuto il gate "
+            "di pubblicazione per non scartare una bozza già valida."
         )
     for pattern in PUBLIC_FORBIDDEN_PATTERNS:
         if pattern.search(raw_body):
