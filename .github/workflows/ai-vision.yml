@@ -14,7 +14,7 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - '.github/workflows/ai-vision.yml'
-  # A commit tagged [AI-VISION-QA] runs the full pipeline in dry-run; never publishes to WordPress.
+  # Push runs isolated regression checks only; the full editorial pipeline runs on schedule or explicit manual dispatch.
   push:
     branches: [main]
     paths:
@@ -37,7 +37,7 @@ concurrency:
 
 jobs:
   editorial-preflight:
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     permissions:
@@ -63,7 +63,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
   ai-pipeline:
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
