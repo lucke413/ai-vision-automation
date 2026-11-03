@@ -84,7 +84,7 @@ def main():
         page=os.getenv("SOCIAL_FB_PAGE_ID","")
         if not token or not page:
             report["status"]="not_configured"
-            report["warnings"].append("Servono ID e token della Pagina Meta")
+            report["warnings"].append("Configurazione Facebook incompleta: impostare SOCIAL_FB_PAGE_ID (variable) e SOCIAL_FB_PAGE_TOKEN (secret) in GitHub.")
             return report
         version=os.getenv("SOCIAL_GRAPH_VERSION","v25.0")
         if not re.fullmatch(r"v\d+\.\d+",version) or not page.isdigit():raise ValueError("Configurazione Meta non valida")
@@ -129,4 +129,4 @@ if __name__=="__main__":
     result=main()
     REPORT.write_text(json.dumps(result,indent=2),encoding="utf-8")
     print(json.dumps(result,indent=2))
-    if result["status"]=="error":raise SystemExit(1)
+    if result["status"] in ("error","not_configured"):raise SystemExit(1)
