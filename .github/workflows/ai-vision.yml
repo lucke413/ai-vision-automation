@@ -117,7 +117,7 @@ jobs:
           python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/article_generator.py scripts/wp_publisher.py scripts/adsense_audit.py
 
       - name: Verifica equilibrio editoriale
-        run: python -m unittest discover -s tests -p 'test_editorial_expansion.py'
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Verifica versioni progetto
         run: |
