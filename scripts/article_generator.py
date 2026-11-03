@@ -1039,7 +1039,7 @@ def main() -> int:
 
     # Usa le riserve in modo sequenziale e interrompi appena gli slot sono pieni.
     # Un errore di una singola riserva non annulla le bozze già valide.
-    if missing_daily:
+    if missing_daily and not stopped_reason:
         for reserve_index, source_item in enumerate(reserve_items, 1):
             if missing_daily <= 0:
                 break
