@@ -66,6 +66,44 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue(original.startswith(description))
         self.assertIn("corpo", source)
 
+    def test_archive_follows_short_pages_when_total_header_is_missing(self):
+        batches = [
+            [post(1, "Primo articolo", "<p>contenuto</p>"),
+             post(2, "Secondo articolo", "<p>contenuto</p>")],
+            [post(3, "Terzo articolo", "<p>contenuto</p>")],
+            [],
+        ]
+        responses = []
+        for batch in batches:
+            response = MagicMock()
+            response.status_code = 200
+            response.headers = {}
+            response.json.return_value = batch
+            responses.append(response)
+        session = MagicMock()
+        with patch.object(recovery, "get", side_effect=responses) as mocked_get:
+            found, diagnostic = recovery.archive(session)
+        self.assertEqual([item["id"] for item in found], [1, 2, 3])
+        self.assertTrue(diagnostic["complete"])
+        self.assertEqual(diagnostic["pages"], 3)
+        self.assertEqual(diagnostic["terminal_page"], 3)
+        self.assertEqual(mocked_get.call_count, 3)
+
+    def test_archive_rejects_repeated_pages_without_total_header(self):
+        batch = [post(1, "Articolo ripetuto", "<p>contenuto</p>")]
+        responses = []
+        for _ in range(2):
+            response = MagicMock()
+            response.status_code = 200
+            response.headers = {}
+            response.json.return_value = batch
+            responses.append(response)
+        with patch.object(recovery, "get", side_effect=responses):
+            found, diagnostic = recovery.archive(MagicMock())
+        self.assertEqual(len(found), 1)
+        self.assertFalse(diagnostic["complete"])
+        self.assertTrue(diagnostic["errors"])
+
     def test_get_rejects_external_urls_even_with_matching_fragment(self):
         for url in ("https://fake.aivision.altervista.org/", "http://aivision.altervista.org/",
                     "https://attacker.example/aivision.altervista.org"):
