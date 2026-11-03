@@ -305,7 +305,7 @@ class EditorialExpansionTests(unittest.TestCase):
             daily=[x for x in result['items'] if x['publication_slot']=='today']
             self.assertEqual({x['category'] for x in daily}, {'Casa smart','Sicurezza'})
 
-    def test_generator_continues_after_rate_limit_and_promotes_reserve(self):
+    def test_generator_stops_daily_and_reserve_queue_after_rate_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             inp = Path(directory) / "daily.json"
             out = Path(directory) / "drafts.json"
@@ -341,12 +341,10 @@ class EditorialExpansionTests(unittest.TestCase):
             result = json.loads(out.read_text(encoding="utf-8"))
             daily = [draft for draft in result["items"] if draft["publication_slot"] == "today"]
             self.assertEqual(result["daily_requested"], 2)
-            self.assertEqual(result["daily_generated"], 2)
-            self.assertEqual(len(daily), 2)
-            self.assertEqual(
-                {draft["article_id"] for draft in daily},
-                {"1", "2"},
-            )
+            self.assertEqual(result["daily_generated"], 0)
+            self.assertEqual(len(daily), 0)
+            self.assertEqual(result["reserve_attempted"], 0)
+            self.assertEqual(result["total_requested"], 1)
             self.assertEqual(len(result["errors"]), 1)
             self.assertIn("simulated HTTP 429", result["errors"][0]["error"])
 
