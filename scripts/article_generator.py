@@ -1001,8 +1001,8 @@ def main() -> int:
         except GeneratorRateLimitError as exc:
             stopped_reason = str(exc)
             errors.append({"article_id": item.get("article_id"), "error": stopped_reason})
-            print(f"    AVVISO: {stopped_reason}; provo il prossimo articolo.")
-            continue
+            print(f"    AVVISO: {stopped_reason}; interrompo il lotto per non consumare altra quota Gemini. Le bozze già generate vengono conservate.")
+            break
         except GeneratorFatalError as exc:
             message = str(exc)
             errors.append({"article_id": item.get("article_id"), "error": message})
