@@ -1054,7 +1054,8 @@ def main() -> int:
             except GeneratorRateLimitError as exc:
                 stopped_reason = str(exc)
                 errors.append({"article_id": reserve_item.get("article_id"), "error": stopped_reason})
-                print(f"    AVVISO: riserva saltata: {stopped_reason}")
+                print(f"    AVVISO: {stopped_reason}; interrompo anche la coda riserve per non consumare altra quota Gemini.")
+                break
             except GeneratorFatalError as exc:
                 errors.append({"article_id": reserve_item.get("article_id"), "error": str(exc)})
                 print(f"    AVVISO: riserva saltata: {exc}")
