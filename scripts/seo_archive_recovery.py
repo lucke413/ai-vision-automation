@@ -80,34 +80,72 @@ def get(session: requests.Session, url: str, **kwargs) -> requests.Response:
 
 def archive(session: requests.Session) -> tuple[list[dict], dict]:
     posts: list[dict] = []
-    info = {"total_header": None, "pages": 0, "complete": False, "errors": []}
+    info = {
+        "total_header": None, "pages": 0, "complete": False,
+        "errors": [], "terminal_page": None,
+    }
     api = urljoin(BASE_URL + "/", "wp-json/wp/v2/posts")
-    for page in range(1, 1 + MAX_ARCHIVE // 100):
+    seen_ids: set[int] = set()
+    # Alcuni hosting/cache Altervista rimuovono X-WP-Total e possono
+    # applicare un limite per_page inferiore a quello richiesto. In assenza
+    # dell'header continuiamo quindi pagina per pagina fino a una pagina vuota,
+    # senza scambiare una prima pagina corta per un archivio completo.
+    for page in range(1, MAX_ARCHIVE + 2):
         try:
             response = get(session, api, params={
                 "status": "publish", "per_page": 100, "page": page,
                 "_fields": "id,title,content,excerpt,link,slug,date,modified,featured_media",
             })
+            if response.status_code == 400:
+                try:
+                    error_code = (response.json() or {}).get("code")
+                except (ValueError, TypeError, AttributeError):
+                    error_code = None
+                if error_code == "rest_post_invalid_page_number" and posts:
+                    info["terminal_page"] = page
+                    break
             response.raise_for_status()
             values = response.json()
             if not isinstance(values, list):
                 raise ValueError("La risposta REST non contiene gli articoli")
             total = response.headers.get("X-WP-Total")
-            if total and total.isdigit():
+            if total and str(total).isdigit():
                 info["total_header"] = int(total)
-            posts.extend(values)
             info["pages"] += 1
-            if len(values) < 100 or len(posts) >= MAX_ARCHIVE:
+            if not values:
+                info["terminal_page"] = page
+                break
+            page_ids = []
+            for item in values:
+                if not isinstance(item, dict) or not isinstance(item.get("id"), int):
+                    raise ValueError("Articolo REST privo di ID valido")
+                page_ids.append(item["id"])
+            duplicates = seen_ids.intersection(page_ids)
+            if duplicates:
+                raise ValueError(
+                    "Paginazione REST ripetuta; ID duplicati: "
+                    + ", ".join(str(value) for value in sorted(duplicates)[:5])
+                )
+            seen_ids.update(page_ids)
+            posts.extend(values)
+            if info["total_header"] is not None and len(posts) >= info["total_header"]:
+                break
+            if len(posts) >= MAX_ARCHIVE:
+                if info["total_header"] is None or len(posts) < info["total_header"]:
+                    info["errors"].append(
+                        f"Archivio oltre il limite di sicurezza ({MAX_ARCHIVE} articoli)."
+                    )
                 break
         except (requests.RequestException, ValueError, TypeError) as exc:
             info["errors"].append(f"Pagina {page}: {type(exc).__name__}: {str(exc)[:150]}")
             break
     info["retrieved"] = len(posts)
-    info["complete"] = (
-        not info["errors"]
-        and info["total_header"] is not None
+    header_complete = (
+        info["total_header"] is not None
         and len(posts) == info["total_header"]
     )
+    pagination_complete = info["terminal_page"] is not None
+    info["complete"] = not info["errors"] and (header_complete or pagination_complete)
     return posts, info
 
 
