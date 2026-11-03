@@ -1,6 +1,12 @@
 name: AIVision Traffic Booster - Facebook
 on:
   workflow_dispatch:
+    inputs:
+      publish_live:
+        description: 'Pubblica i nuovi articoli su Facebook (disattiva per una simulazione)'
+        required: false
+        type: boolean
+        default: true
   schedule:
     - cron: '12,42 * * * *'
 permissions:
@@ -15,7 +21,7 @@ jobs:
     env:
       WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
       GITHUB_TOKEN: ${{ github.token }}
-      SOCIAL_PUBLISH_MODE: ${{ vars.SOCIAL_PUBLISH_MODE || 'dry-run' }}
+      SOCIAL_PUBLISH_MODE: ${{ (github.event_name == 'workflow_dispatch' && !inputs.publish_live) && 'dry-run' || 'live' }}
       SOCIAL_FB_PAGE_ID: ${{ vars.SOCIAL_FB_PAGE_ID }}
       SOCIAL_FB_PAGE_TOKEN: ${{ secrets.SOCIAL_FB_PAGE_TOKEN }}
     steps:
