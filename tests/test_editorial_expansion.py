@@ -344,7 +344,7 @@ class EditorialExpansionTests(unittest.TestCase):
             self.assertEqual(result["daily_generated"], 0)
             self.assertEqual(len(daily), 0)
             self.assertEqual(result["reserve_attempted"], 0)
-            self.assertEqual(result["total_requested"], 1)
+            self.assertEqual(result["total_requested"], 2)
             self.assertEqual(len(result["errors"]), 1)
             self.assertIn("simulated HTTP 429", result["errors"][0]["error"])
 
