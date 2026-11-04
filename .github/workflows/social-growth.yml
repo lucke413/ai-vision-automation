@@ -16,6 +16,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   facebook:
+    # Skip scheduled attempts until a Page is configured; manual runs retain diagnostics.
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.SOCIAL_FB_PAGE_ID != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
