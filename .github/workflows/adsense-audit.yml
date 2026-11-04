@@ -34,7 +34,7 @@ jobs:
       - name: Audit public site without publishing
         env:
           ADSENSE_SITE_URL: https://aivision.altervista.org
-          ADSENSE_PUBLISHER_ID: ${{ vars.ADSENSE_PUBLISHER_ID }}
+          ADSENSE_PUBLISHER_ID: ${{ vars.ADSENSE_PUBLISHER_ID || 'pub-7248850124367665' }}
         run: python scripts/adsense_audit.py
       - name: Save diagnostic report (not Google approval)
         if: ${{ always() && hashFiles('data/adsense_audit.json') != '' }}
