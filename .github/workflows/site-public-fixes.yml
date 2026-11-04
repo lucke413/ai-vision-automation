@@ -1,0 +1,52 @@
+name: AI Vision targeted public fixes
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/site-public-fixes.yml'
+permissions:
+  contents: read
+concurrency:
+  group: aivision-targeted-public-fixes
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Prepare exact changes and backup
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/site_public_fixes.py prepare
+      - name: Persist backup BEFORE any WordPress write
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-public-fixes-backup-${{ github.run_id }}
+          path: data/site_public_fixes.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Apply only unchanged reviewed snippets
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/site_public_fixes.py apply
+      - name: Save verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-public-fixes-result-${{ github.run_id }}
+          path: data/site_public_fixes_result.json
+          if-no-files-found: warn
+          retention-days: 90
