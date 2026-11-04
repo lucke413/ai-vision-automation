@@ -12,6 +12,8 @@ import os
 import re
 from datetime import datetime, timezone
 from html import unescape
+from html.parser import HTMLParser
+from urllib.parse import parse_qs
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
@@ -27,6 +29,50 @@ UA_DISPLAY = "Google-Display-Ads-Bot"
 WORD_RE = re.compile(r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’\-][\wÀ-ÖØ-öø-ÿ]+)*\b", re.UNICODE)
 TAG_RE = re.compile(r"<[^>]+>")
 PUB_RE = re.compile(r"(?:ca-)?pub-\d{10,}", re.I)
+
+
+def normalize_publisher(value: str) -> str:
+    value = value.strip().lower().removeprefix("ca-")
+    return value if re.fullmatch(r"pub-\d{16}", value) else ""
+
+
+class AdSenseTags(HTMLParser):
+    """Read account identifiers only from actual AdSense integration tags."""
+
+    def __init__(self):
+        super().__init__()
+        self.publisher_ids = set()
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        values = []
+        if tag == "meta" and attrs.get("name", "").lower() == "google-adsense-account":
+            values.append(attrs.get("content", ""))
+        if tag == "script":
+            src = urlsplit(attrs.get("src", ""))
+            if src.hostname == "pagead2.googlesyndication.com" and src.path == "/pagead/js/adsbygoogle.js":
+                values.extend(parse_qs(src.query).get("client", []))
+                values.append(attrs.get("data-ad-client", ""))
+        for value in values:
+            publisher = normalize_publisher(value)
+            if publisher:
+                self.publisher_ids.add(publisher)
+
+
+def account_check(home_signals: dict, ads_txt: dict, expected: str) -> dict:
+    publisher = normalize_publisher(expected)
+    if not expected.strip():
+        return {"status": "not_configured", "expected": None}
+    if not publisher:
+        return {"status": "invalid_configuration", "expected": None}
+    html_match = publisher in home_signals.get("account_publisher_ids", [])
+    ads_match = publisher in ads_txt.get("direct_publisher_ids", [])
+    return {
+        "status": "public_match" if html_match or ads_match else "not_found",
+        "expected": publisher,
+        "html_match": html_match,
+        "ads_txt_direct_match": ads_match,
+    }
 
 
 def get(path: str, user_agent: str = UA_BROWSER) -> dict:
@@ -85,6 +131,8 @@ def html_signals(page: dict) -> dict:
         )
     )
     pub_ids = sorted(set(PUB_RE.findall(html)))
+    tags = AdSenseTags()
+    tags.feed(html)
     return {
         "meta_noindex": meta_noindex,
         "x_robots_noindex": "noindex" in (page.get("x_robots_tag") or "").lower(),
@@ -96,6 +144,7 @@ def html_signals(page: dict) -> dict:
         "chi_sono_link": "/chi-sono" in lower,
         "privacy_link": "privacy" in lower,
         "publisher_ids": pub_ids,
+        "account_publisher_ids": sorted(tags.publisher_ids),
         "visible_word_estimate": words(html),
     }
 
@@ -193,6 +242,16 @@ def summarize(report: dict) -> list[str]:
         issues.append("CRITICO: homepage contiene un segnale noindex.")
     if not (hs.get("adsense_script") or hs.get("adsense_meta") or report["ads_txt"].get("google_lines")):
         issues.append("CRITICO: non rilevato alcun metodo pubblico di collegamento AdSense.")
+    account = report.get("account_verification", {})
+    if account.get("status") == "not_configured":
+        issues.append("DA VERIFICARE: configura ADSENSE_PUBLISHER_ID; la presenza di codici Google/AlterVista non prova il collegamento al tuo account.")
+    elif account.get("status") == "invalid_configuration":
+        issues.append("CRITICO: ADSENSE_PUBLISHER_ID non valido; usa pub- seguito da 16 cifre.")
+    elif account.get("status") == "not_found":
+        issues.append("CRITICO: publisher atteso assente dai tag AdSense e dalle righe DIRECT di ads.txt.")
+    for name, access in report.get("crawler_access", {}).items():
+        if access.get("status") != 200:
+            issues.append(f"CRITICO: richiesta con user-agent {name} non restituisce HTTP 200; verificare accesso crawler.")
     robots = report["robots"].get("signals", {}).get("groups", {})
     for agent in ("mediapartners-google", "google-display-ads-bot"):
         if robots.get(agent, {}).get("root_blocked"):
@@ -274,6 +333,22 @@ def main() -> int:
         "google_lines": ads_lines[:30],
         "publisher_ids": sorted(set(PUB_RE.findall("\n".join(ads_lines)))),
     }
+
+    report["ads_txt"]["direct_publisher_ids"] = sorted({
+        normalize_publisher(parts[1])
+        for line in ads_lines
+        for parts in [[part.strip() for part in line.split("#", 1)[0].split(",")]]
+        if len(parts) >= 3 and parts[2].upper() == "DIRECT" and normalize_publisher(parts[1])
+    })
+    report["account_verification"] = account_check(
+        report["pages"]["home"]["signals"], report["ads_txt"],
+        os.environ.get("ADSENSE_PUBLISHER_ID", ""),
+    )
+    report["limitations"] = [
+        "Corrispondenza pubblica del codice, non conferma di proprietà o approvazione Google.",
+        "Lo user-agent simulato non dimostra l'accesso dagli IP dei crawler Google.",
+        "Numero e lunghezza degli articoli non sono soglie di approvazione AdSense.",
+    ]
 
     sitemap_candidates = []
     for path in ("/sitemap_index.xml", "/wp-sitemap.xml"):

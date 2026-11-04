@@ -1,0 +1,45 @@
+name: AI Vision AdSense Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '45 9 * * *'
+      timezone: Europe/Rome
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/adsense_audit.py'
+      - '.github/workflows/adsense-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-vision-adsense-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Test audit without network
+        run: python -m unittest discover -s tests -p 'test_adsense_audit.py' -v
+      - name: Audit public site without publishing
+        env:
+          ADSENSE_SITE_URL: https://aivision.altervista.org
+          ADSENSE_PUBLISHER_ID: ${{ vars.ADSENSE_PUBLISHER_ID }}
+        run: python scripts/adsense_audit.py
+      - name: Save diagnostic report (not Google approval)
+        if: ${{ always() && hashFiles('data/adsense_audit.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-vision-adsense-audit
+          path: data/adsense_audit.json
+          retention-days: 14
