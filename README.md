@@ -13,7 +13,7 @@ Il tema WordPress, le impostazioni AlterVista, il consenso e il collegamento del
 
 ## AdSense: proprietà e approvazione sono controlli diversi
 
-In Settings → Secrets and variables → Actions → Variables aggiungere `ADSENSE_PUBLISHER_ID`, copiando l'ID dal proprio account AdSense (`pub-` seguito da 16 cifre; accettato anche `ca-pub-`). Non usare automaticamente un codice trovato nel sito: AlterVista può esporre identificativi della piattaforma e di altri venditori.
+Il workflow usa per impostazione predefinita l'ID `pub-7248850124367665`, confermato dal proprietario il 4 novembre 2026 e rilevato in ads.txt. Per sostituirlo, in Settings → Secrets and variables → Actions → Variables aggiungere `ADSENSE_PUBLISHER_ID`, copiando l'ID dal proprio account AdSense (`pub-` seguito da 16 cifre; accettato anche `ca-pub-`). Non usare automaticamente un codice trovato nel sito: AlterVista può esporre identificativi della piattaforma e di altri venditori.
 
 Eseguire **AI Vision AdSense Audit** e leggere l'artefatto `ai-vision-adsense-audit`:
 
