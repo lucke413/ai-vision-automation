@@ -109,6 +109,7 @@ def main():
                 "url": p.get("link"), "modified": p.get("modified"),
                 "words": words(body), "internal_links": len(re.findall(r'href="(?:https?://aivision\\.altervista\\.org)?/', body, re.I)),
                 "categories": p.get("categories", []),
+                "aivision_seo": p.get("aivision_seo", {}),
                 "excerpt": plain((p.get("excerpt") or {}).get("rendered") or "")[:350],
                 "body_text": plain(body)[:6500],
             })
