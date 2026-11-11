@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Audit SEO di tutte le pagine articolo WordPress pubbliche, sola lettura.
 
+Include controlli di regressione dopo gli interventi sui collegamenti interni.
+
 Nessun token o credenziale WordPress; nessuna modifica o pubblicazione.
 Le API pubbliche coprono ogni articolo; l'HTML live verifica meta, canonical
 e robots per ogni URL raggiungibile. Un audit NON equivale a Search Console.
