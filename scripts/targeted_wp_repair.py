@@ -161,9 +161,10 @@ def main():
         }
         result["yoast_post_seo_data"] = []
         for post_id in (465, 478):
-            response = s.post(
+            response = s.get(
                 BASE + "/wp-json/wp-abilities/v1/abilities/yoast-seo/get-post-seo-data/run",
-                json={"input": {"post_id": post_id}}, timeout=(8, 25), allow_redirects=False
+                params={"input": json.dumps({"post_id": post_id})},
+                timeout=(8, 25), allow_redirects=False
             )
             entry = {"post_id": post_id, "http_status": response.status_code}
             try:
