@@ -68,7 +68,10 @@ def main():
         print(f"Piano pronto: {len(changes)} meta description mancanti, tutte ricavate dagli incipit reali.")
         return
     plan=json.loads(PLAN.read_text(encoding="utf-8"))
-    if plan.get("site")!=BASE or not plan.get("changes"): raise RuntimeError("Piano non valido.")
+    if plan.get("site")!=BASE: raise RuntimeError("Piano non valido.")
+    if not plan.get("changes"):
+        print("Nessuna meta description da aggiornare: tutti i post selezionati hanno già una descrizione.")
+        return
     results=[]
     for row in plan["changes"]:
         live=read(row["id"])
