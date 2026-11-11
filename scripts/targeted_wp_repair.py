@@ -185,8 +185,7 @@ def main():
             "status": home.status_code,
             "seo_plugins": [name for name in ("yoast", "rank-math", "aioseo", "all-in-one-seo", "aivision_seo")
                             if name in home.text.lower()],
-            "generator": [x[:200] for x in __import__("re").findall(
-                r'<meta[^>]+name=["\\']generator["\\'][^>]+>', home.text, re.I)[:5]],
+            "generator_tag_present": 'name="generator"' in home.text.lower(),
             "seo_title": __import__("re").findall(r'<title[^>]*>(.*?)</title>', home.text, re.I | re.S)[:1],
         }
     except Exception as e:
