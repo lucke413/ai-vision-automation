@@ -48,7 +48,12 @@ ARTICLE_SLUGS = [
     "leapmotor-b03x-prova-prezzi-consumi",
     "dji-osmo-pocket-3-offerta-amazon",
     "leapmotor-b03x",
-
+    "gta-6-copie-fisiche-esaurite",
+    "call-of-duty-modern-warfare-4-sconto-nintendo-switch-2",
+    "mycopunk-analisi-co-op-shooter",
+    "gemini-su-apple-carplay-google-maps",
+    "xbox-nano-controller-pad-tascabile-microsoft",
+    "dreame-airstyle-pro-2-recensione-prezzo",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
