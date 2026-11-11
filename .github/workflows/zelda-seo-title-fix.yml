@@ -1,0 +1,57 @@
+name: AI Vision Zelda SEO title correction
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/zelda_seo_title_fix.py'
+      - '.github/workflows/zelda-seo-title-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-zelda-seo-title
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - name: Prepare exact SEO title correction
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/zelda_seo_title_fix.py prepare
+      - name: Save SEO backup before write
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-zelda-seo-backup-${{ github.run_id }}
+          path: |
+            data/zelda_seo_title_plan.json
+            data/zelda_seo_title_backup.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Apply and verify only SEO title
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/zelda_seo_title_fix.py apply
+      - name: Upload result
+        if: ${{ always() && hashFiles('data/zelda_seo_title_result.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-zelda-seo-result-${{ github.run_id }}
+          path: data/zelda_seo_title_result.json
+          retention-days: 90
