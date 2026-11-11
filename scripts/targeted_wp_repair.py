@@ -107,8 +107,7 @@ def main():
                 "id": p.get("id"), "slug": slug, "status": p.get("status"),
                 "title": plain((p.get("title") or {}).get("rendered") or ""),
                 "url": p.get("link"), "modified": p.get("modified"),
-                "words": words(body), "internal_links": len(re.findall(
-                    r'href=[\\"\\'](?:https?://aivision\\.altervista\\.org)?/', body, re.I)),
+                "words": words(body), "internal_links": len(re.findall(r'href="(?:https?://aivision\\.altervista\\.org)?/', body, re.I)),
                 "categories": p.get("categories", []),
                 "excerpt": plain((p.get("excerpt") or {}).get("rendered") or "")[:350],
             })
