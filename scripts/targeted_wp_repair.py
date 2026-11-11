@@ -42,6 +42,12 @@ ARTICLE_SLUGS = [
     "giochi-in-uscita-ottobre-offerte",
     "pixel-10a-aumento-prezzo",
     "smart-tv-in-offerta-65-75-pollici",
+    "sconto-dyson-coupon-100-euro",
+    "crucial-p310-1tb-offerta-amazon",
+    "e-bike-in-carbonio-engwe-n1-pro-air-doppio-sconto",
+    "leapmotor-b03x-prova-prezzi-consumi",
+    "dji-osmo-pocket-3-offerta-amazon",
+    "leapmotor-b03x",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
