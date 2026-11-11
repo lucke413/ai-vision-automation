@@ -115,6 +115,16 @@ def main():
         except Exception as e:
             result["errors"].append({"slug": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
 
+    # Ricerca di articoli affini per dispositivi audio/cuffie.
+    try:
+        rows = get("posts", {"search": "cuffie", "status": "publish", "per_page": 20,
+            "orderby": "date", "order": "desc", "_fields": "id,date,slug,title,link,categories"})
+        result["audio_link_candidates"] = [{"id": p.get("id"), "date": p.get("date"),
+            "title": plain((p.get("title") or {}).get("rendered") or ""),
+            "url": p.get("link")} for p in rows]
+    except Exception as e:
+        result["errors"].append({"audio_search": f"{type(e).__name__}: {str(e)[:160]}"})
+
     # Candidate interni realmente pubblicati nelle stesse categorie.
     for category_id in (79, 322):
         try:
