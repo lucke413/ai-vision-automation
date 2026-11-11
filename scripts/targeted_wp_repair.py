@@ -26,6 +26,10 @@ ARTICLE_SLUGS = [
     "oppo-find-x10-e-pro-max-sconto-store-ufficiale",
     "sonos-beam-ultra-e-ace-ultra-arrivano-nei-negozi",
     "iphone-18-pro-recensione-novita",
+    "the-witcher-3-wild-hunt-remastered-disponibile-oggi",
+    "disponibile-ios-27-0-1-correzioni-novita",
+    "xbox-disc-to-digital-disponibile-per-tutti-gli-utenti",
+    "safari-funzione-avvisami-monitorare-prezzi",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
