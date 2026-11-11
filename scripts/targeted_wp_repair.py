@@ -146,6 +146,34 @@ def main():
         except Exception as e:
             result["errors"].append({"slug": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
 
+    # Legge tramite Yoast Abilities i campi SEO effettivamente gestiti da Yoast.
+    # Sola lettura: distingue il bridge AIVision dai metadati Yoast pubblicati.
+    try:
+        registry = s.get(BASE + "/wp-json/wp-abilities/v1/abilities",
+                         params={"category": "yoast-seo"}, timeout=(8, 20))
+        registry.raise_for_status()
+        registry_data = registry.json()
+        ability_items = registry_data if isinstance(registry_data, list) else registry_data.get("abilities", [])
+        result["yoast_ability_schemas"] = {
+            item.get("name"): item.get("input_schema")
+            for item in ability_items if isinstance(item, dict)
+            and item.get("name") in ("yoast-seo/get-post-seo-data", "yoast-seo/update-post-seo-data")
+        }
+        result["yoast_post_seo_data"] = []
+        for post_id in (465, 478):
+            response = s.post(
+                BASE + "/wp-json/wp-abilities/v1/abilities/yoast-seo/get-post-seo-data/run",
+                json={"input": {"post_id": post_id}}, timeout=(8, 25), allow_redirects=False
+            )
+            entry = {"post_id": post_id, "http_status": response.status_code}
+            try:
+                entry["response"] = response.json()
+            except ValueError:
+                entry["response_text"] = response.text[:500]
+            result["yoast_post_seo_data"].append(entry)
+    except Exception as e:
+        result["errors"].append({"yoast_post_seo_data": f"{type(e).__name__}: {str(e)[:180]}"})
+
     # Ricerca di articoli affini per dispositivi audio/cuffie.
     try:
         rows = get("posts", {"search": "cuffie", "status": "publish", "per_page": 20,
