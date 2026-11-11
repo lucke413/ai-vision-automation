@@ -394,7 +394,13 @@ def build_report(posts: list[dict], diagnostic: dict, live: dict, static: dict, 
             "content_words_650_plus": sum(x["words"] >= 650 for x in items),
             "same_titles": len(duplicates), "similar_titles": len(find_similar(items)),
             "html_checked": len(live), "html_ok": sum(v.get("status") == 200 for v in live.values()),
-            "html_findings": dict(live_counter), "content_findings": dict(counter),
+            "html_findings": dict(live_counter),
+            "missing_description_urls": [
+                item["url"] for item in items
+                if live.get(item["id"], {}).get("status") == 200
+                and not live.get(item["id"], {}).get("meta_description")
+            ],
+            "content_findings": dict(counter),
         },
         "exact_duplicate_titles": duplicates,
         "similar_titles": find_similar(items),
