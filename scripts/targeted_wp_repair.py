@@ -128,20 +128,6 @@ def main():
     except Exception as e:
         result["errors"].append({"audio_search": f"{type(e).__name__}: {str(e)[:160]}"})
 
-    # Mappa ogni tag sottile agli articoli che lo utilizzano, per decidere la pulizia.
-    for term in result.get("tags", []):
-        if not term.get("id"):
-            continue
-        try:
-            rows = get("posts", {"tags": term["id"], "status": "publish", "per_page": 20,
-                "_fields": "id,date,slug,title,link,categories"})
-            term["posts"] = [{"id": p.get("id"), "slug": p.get("slug"),
-                "title": plain((p.get("title") or {}).get("rendered") or ""),
-                "url": p.get("link")} for p in rows]
-        except Exception as e:
-            result["errors"].append({"tag_posts": term.get("slug"),
-                "error": f"{type(e).__name__}: {str(e)[:150]}"})
-
     # Candidate interni realmente pubblicati nelle stesse categorie.
     for category_id in (79, 322):
         try:
@@ -185,6 +171,39 @@ def main():
                 result["categories"].append({"slug": slug, "exists": False})
         except Exception as e:
             result["errors"].append({"category": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
+
+    # Mappa i post associati ai tag dopo aver caricato i termini.
+    # Mappa ogni tag sottile agli articoli che lo utilizzano, per decidere la pulizia.
+    for term in result.get("tags", []):
+        if not term.get("id"):
+            continue
+        try:
+            rows = get("posts", {"tags": term["id"], "status": "publish", "per_page": 20,
+                "_fields": "id,date,slug,title,link,categories"})
+            term["posts"] = [{"id": p.get("id"), "slug": p.get("slug"),
+                "title": plain((p.get("title") or {}).get("rendered") or ""),
+                "url": p.get("link")} for p in rows]
+        except Exception as e:
+            result["errors"].append({"tag_posts": term.get("slug"),
+                "error": f"{type(e).__name__}: {str(e)[:150]}"})
+
+    # Verifica in sola lettura se l'application password consente l'accesso alla
+    # schermata amministrativa Yoast per un singolo tag (nessuna richiesta di scrittura).
+    try:
+        admin = s.get(BASE + "/wp-admin/term.php",
+            params={"taxonomy": "post_tag", "tag_ID": 217, "post_type": "post"},
+            timeout=(8, 20), allow_redirects=True)
+        page = admin.text.lower()
+        result["wp_admin_term_access"] = {
+            "status": admin.status_code,
+            "final_path": urljoin(BASE, admin.url).split(BASE, 1)[-1][:180],
+            "is_login_page": "wp-login.php" in admin.url or "user_login" in page,
+            "yoast_noindex_field_present": "wpseo_noindex" in page,
+            "wp_nonce_present": "_wpnonce" in page,
+            "admin_bar_present": "wpadminbar" in page
+        }
+    except Exception as e:
+        result["errors"].append({"wp_admin_term_access": f"{type(e).__name__}: {str(e)[:150]}"})
 
     # Espone le route Yoast registrate: serve a scegliere un metodo supportato
     # per noindex dei singoli tag, senza toccare impostazioni globali.
