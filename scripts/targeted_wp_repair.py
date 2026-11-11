@@ -97,7 +97,7 @@ def main():
     for slug in ARTICLE_SLUGS:
         try:
             rows = get("posts", {"slug": slug, "context": "edit",
-                                 "_fields": "id,slug,status,title,link,modified,content,excerpt,categories"})
+                                 "_fields": "id,slug,status,title,link,modified,content,excerpt,categories,aivision_seo"})
             if len(rows) != 1:
                 result["articles"].append({"slug": slug, "status": "not_unique", "matches": len(rows)})
                 continue
