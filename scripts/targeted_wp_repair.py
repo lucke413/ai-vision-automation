@@ -24,6 +24,8 @@ ARTICLE_SLUGS = [
     "gta-6-sondaggio-record-previsioni-vendita",
     ZELDA_SLUG,
     "oppo-find-x10-e-pro-max-sconto-store-ufficiale",
+    "sonos-beam-ultra-e-ace-ultra-arrivano-nei-negozi",
+    "iphone-18-pro-recensione-novita",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
@@ -125,6 +127,20 @@ def main():
             "url": p.get("link")} for p in rows]
     except Exception as e:
         result["errors"].append({"audio_search": f"{type(e).__name__}: {str(e)[:160]}"})
+
+    # Mappa ogni tag sottile agli articoli che lo utilizzano, per decidere la pulizia.
+    for term in result.get("tags", []):
+        if not term.get("id"):
+            continue
+        try:
+            rows = get("posts", {"tags": term["id"], "status": "publish", "per_page": 20,
+                "_fields": "id,date,slug,title,link,categories"})
+            term["posts"] = [{"id": p.get("id"), "slug": p.get("slug"),
+                "title": plain((p.get("title") or {}).get("rendered") or ""),
+                "url": p.get("link")} for p in rows]
+        except Exception as e:
+            result["errors"].append({"tag_posts": term.get("slug"),
+                "error": f"{type(e).__name__}: {str(e)[:150]}"})
 
     # Candidate interni realmente pubblicati nelle stesse categorie.
     for category_id in (79, 322):
