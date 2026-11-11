@@ -170,6 +170,20 @@ def main():
         except Exception as e:
             result["errors"].append({"category": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
 
+    # Espone le route Yoast registrate: serve a scegliere un metodo supportato
+    # per noindex dei singoli tag, senza toccare impostazioni globali.
+    try:
+        root = s.get(BASE + "/wp-json/", timeout=(8, 20))
+        root.raise_for_status()
+        routes = root.json().get("routes", {})
+        result["yoast_rest_routes"] = {
+            path: {"methods": sorted(list((data.get("endpoints") or [{}])[0].get("methods", []))),
+                   "args": sorted(list((data.get("endpoints") or [{}])[0].get("args", {}).keys()))}
+            for path, data in routes.items() if "yoast" in path.lower()
+        }
+    except Exception as e:
+        result["errors"].append({"yoast_rest_routes": f"{type(e).__name__}: {str(e)[:150]}"})
+
     # Identifica il motore SEO e le sue API prima di qualsiasi noindex tassonomico.
     try:
         root = get_root = s.get(BASE + "/wp-json/", timeout=(8, 20))
