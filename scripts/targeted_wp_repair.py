@@ -170,6 +170,28 @@ def main():
         except Exception as e:
             result["errors"].append({"category": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
 
+    # Identifica il motore SEO e le sue API prima di qualsiasi noindex tassonomico.
+    try:
+        root = get_root = s.get(BASE + "/wp-json/", timeout=(8, 20))
+        root.raise_for_status()
+        data = root.json()
+        result["seo_rest_namespaces"] = [n for n in data.get("namespaces", [])
+            if any(k in n.lower() for k in ("yoast", "rank", "aioseo", "seo"))]
+    except Exception as e:
+        result["errors"].append({"seo_rest_namespaces": f"{type(e).__name__}: {str(e)[:150]}"})
+    try:
+        home = s.get(BASE + "/tag/bluetti/", timeout=(8, 20))
+        result["tag_html_markers"] = {
+            "status": home.status_code,
+            "seo_plugins": [name for name in ("yoast", "rank-math", "aioseo", "all-in-one-seo", "aivision_seo")
+                            if name in home.text.lower()],
+            "generator": [x[:200] for x in __import__("re").findall(
+                r'<meta[^>]+name=["\\']generator["\\'][^>]+>', home.text, re.I)[:5]],
+            "seo_title": __import__("re").findall(r'<title[^>]*>(.*?)</title>', home.text, re.I | re.S)[:1],
+        }
+    except Exception as e:
+        result["errors"].append({"tag_html_markers": f"{type(e).__name__}: {str(e)[:150]}"})
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"title_fix": result["title_fix"],
