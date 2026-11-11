@@ -48,6 +48,8 @@ ARTICLE_SLUGS = [
     "leapmotor-b03x-prova-prezzi-consumi",
     "dji-osmo-pocket-3-offerta-amazon",
     "leapmotor-b03x",
+    "sonos-beam-ultra-e-ace-ultra-arrivano-nei-negozi",
+    "iphone-18-pro-recensione-novita",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
