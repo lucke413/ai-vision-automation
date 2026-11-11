@@ -173,7 +173,7 @@ def main():
         for post_id in (465, 478):
             response = s.get(
                 BASE + "/wp-json/wp-abilities/v1/abilities/yoast-seo/get-post-seo-data/run",
-                params={"input": json.dumps({"post_id": post_id})},
+                params={"input[post_id]": str(post_id)},
                 timeout=(8, 25), allow_redirects=False
             )
             entry = {"post_id": post_id, "http_status": response.status_code}
