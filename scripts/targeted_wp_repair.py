@@ -34,6 +34,10 @@ ARTICLE_SLUGS = [
     "football-manager-27-data-di-uscita-e-versioni",
     "blender-su-android-tablet-2027",
     "tv-lg-nanocell-ai-75-offerta-amazon",
+    "vulnerabilita-fortimail-attacchi-zero-day",
+    "lg-ultragear-evo-gx9-recensione",
+    "lego-playstation-1-prezzo-pezzi-accesso-anticipato",
+    "recensione-iphone-18-pro-max",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
