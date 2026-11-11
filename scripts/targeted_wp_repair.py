@@ -54,6 +54,16 @@ ARTICLE_SLUGS = [
     "gemini-su-apple-carplay-google-maps",
     "xbox-nano-controller-pad-tascabile-microsoft",
     "dreame-airstyle-pro-2-recensione-prezzo",
+    "anker-maggo-power-bank-2-pro",
+    "anker-maggo-power-bank-2-pro-recensione-caratteristiche",
+    "festa-delle-offerte-prime-sconti-tecnologia",
+    "festa-offerte-prime-ultime-ore-sconti-tech",
+    "gta-vi-xbox-cloud-gaming-senza-pc",
+    "gta-6-xbox-cloud-gaming-xbox-one",
+    "netflix-aumenta-prezzi-italia-nuovo-listino",
+    "aumenti-prezzi-netflix-italia-nuove-tariffe",
+    "apple-home-collection-smart-home-lg-schneider",
+    "apple-home-collection-accessori-smart-home",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
