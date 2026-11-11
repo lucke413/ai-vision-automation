@@ -180,6 +180,26 @@ def main():
     except Exception as e:
         result["errors"].append({"seo_rest_namespaces": f"{type(e).__name__}: {str(e)[:150]}"})
     try:
+        abilities = s.get(BASE + "/wp-json/wp-abilities/v1/abilities",
+                          params={"category": "yoast-seo"}, timeout=(8, 20))
+        if abilities.status_code == 200:
+            payload = abilities.json()
+            result["yoast_abilities"] = [x.get("name") for x in payload.get("abilities", payload if isinstance(payload, list) else [])
+                                         if isinstance(x, dict)]
+        else:
+            result["yoast_abilities_status"] = abilities.status_code
+    except Exception as e:
+        result["errors"].append({"yoast_abilities": f"{type(e).__name__}: {str(e)[:150]}"})
+    try:
+        settings = s.get(BASE + "/wp-json/wp/v2/settings", params={"context":"edit"}, timeout=(8,20))
+        if settings.status_code == 200 and isinstance(settings.json(), dict):
+            result["yoast_setting_keys"] = [k for k in settings.json() if "yoast" in k.lower() or "wpseo" in k.lower()]
+        else:
+            result["yoast_settings_status"] = settings.status_code
+    except Exception as e:
+        result["errors"].append({"yoast_settings": f"{type(e).__name__}: {str(e)[:150]}"})
+
+    try:
         home = s.get(BASE + "/tag/bluetti/", timeout=(8, 20))
         result["tag_html_markers"] = {
             "status": home.status_code,
