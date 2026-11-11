@@ -185,6 +185,30 @@ def main():
     except Exception as e:
         result["errors"].append({"yoast_post_seo_data": f"{type(e).__name__}: {str(e)[:180]}"})
 
+    # Confronta l'HTML pubblico con l'output Yoast REST per le due pagine
+    # segnalate senza meta description: individua anche eventuali tag duplicati.
+    try:
+        result["live_meta_diagnostics"] = []
+        for page_url in (
+            BASE + "/sonos-beam-ultra-e-ace-ultra-arrivano-nei-negozi/",
+            BASE + "/iphone-18-pro-recensione-novita/",
+        ):
+            page = s.get(page_url, timeout=(8, 25), allow_redirects=True)
+            tags = re.findall(r"<meta\\b[^>]*>", page.text, re.I)
+            descriptions = [tag for tag in tags if re.search(r"\\bname\\s*=\\s*['\\\"]description['\\\"]", tag, re.I)]
+            og_descriptions = [tag for tag in tags if re.search(r"\\bproperty\\s*=\\s*['\\\"]og:description['\\\"]", tag, re.I)]
+            head = s.get(BASE + "/wp-json/yoast/v1/get_head",
+                         params={"url": page_url}, timeout=(8, 25))
+            head_data = head.json() if head.status_code == 200 else {"http_status": head.status_code}
+            result["live_meta_diagnostics"].append({
+                "url": page_url, "page_status": page.status_code,
+                "description_meta_tags": descriptions, "og_description_meta_tags": og_descriptions,
+                "yoast_head_status": head.status_code,
+                "yoast_head": head_data if isinstance(head_data, dict) else str(head_data)[:1200],
+            })
+    except Exception as e:
+        result["errors"].append({"live_meta_diagnostics": f"{type(e).__name__}: {str(e)[:180]}"})
+
     # Ricerca di articoli affini per dispositivi audio/cuffie.
     try:
         rows = get("posts", {"search": "cuffie", "status": "publish", "per_page": 20,
