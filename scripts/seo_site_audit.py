@@ -31,7 +31,7 @@ OUTPUT = Path(__file__).resolve().parent.parent / "data" / "seo_full_audit.json"
 USER_AGENT = "AIVision-SEO-Auditor/1.0 (read-only)"
 TIMEOUT = (5, 14)
 MAX_PUBLIC_POSTS = 1000
-MAX_HTML_POSTS = 350
+MAX_HTML_POSTS = 500
 MAX_WORKERS = 3
 
 # URL segnalate in Search Console: audit mirato, sempre in sola lettura.
