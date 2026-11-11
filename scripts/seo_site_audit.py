@@ -212,7 +212,7 @@ def fetch_posts() -> tuple[list[dict], dict]:
                 "status": "publish", "per_page": 100, "page": page,
                 # Ordinamento immutabile: evita che nuovi post in cima al feed
                 # spostino gli offset mentre l'audit attraversa le pagine.
-                "orderby": "modified", "order": "desc",
+                "orderby": "id", "order": "asc",
                 # Parametro ignorato da WordPress ma utile a evitare risposte REST in cache.
                 "aivision_audit_run": datetime.datetime.now(datetime.timezone.utc).timestamp(),
                 "_fields": "id,title,content,excerpt,link,slug,date,modified,featured_media",
