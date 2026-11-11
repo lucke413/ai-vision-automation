@@ -20,6 +20,7 @@ on:
       - 'scripts/final_short_article_repair.py'
       - 'scripts/missing_meta_description_repair.py'
       - 'scripts/missing_h2_repair.py'
+      - 'scripts/similar_title_repair.py'
       - '.github/workflows/ai-vision.yml'
       - '.github/workflows/full-seo-audit.yml'
   schedule:
