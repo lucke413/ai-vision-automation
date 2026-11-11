@@ -196,7 +196,7 @@ def main():
             page = s.get(page_url, timeout=(8, 25), allow_redirects=True)
             tags = re.findall(r"<meta\b[^>]*>", page.text, re.I)
             descriptions = [tag for tag in tags if 'name="description"' in tag.lower() or "name='description'" in tag.lower()]
-            descriptions = [tag for tag in tags if 'name="description"' in tag.lower() or "name='description'" in tag.lower()]
+            og_descriptions = [tag for tag in tags if 'property="og:description"' in tag.lower() or "property='og:description'" in tag.lower()]
             head = s.get(BASE + "/wp-json/yoast/v1/get_head",
                          params={"url": page_url}, timeout=(8, 25))
             head_data = head.json() if head.status_code == 200 else {"http_status": head.status_code}
