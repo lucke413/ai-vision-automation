@@ -1,0 +1,57 @@
+name: AI Vision expand four more articles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/date_sensitive_article_repair.py'
+      - '.github/workflows/date-sensitive-article-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-date-sensitive-article-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - name: Prepare dated article corrections and expansions
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/date_sensitive_article_repair.py prepare
+      - name: Save complete original backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-date-sensitive-backup-${{ github.run_id }}
+          path: |
+            data/date_sensitive_articles_plan.json
+            data/date_sensitive_articles_backup.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Apply and verify updates
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/date_sensitive_article_repair.py apply
+      - name: Upload verification result
+        if: ${{ always() && hashFiles('data/date_sensitive_articles_result.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-date-sensitive-result-${{ github.run_id }}
+          path: data/date_sensitive_articles_result.json
+          retention-days: 90
