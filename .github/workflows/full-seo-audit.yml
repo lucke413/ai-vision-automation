@@ -13,6 +13,7 @@ on:
       - 'scripts/targeted_wp_repair.py'
       - 'scripts/zelda_seo_title_fix.py'
       - 'scripts/short_article_seo_repair.py'
+      - 'scripts/next_short_article_repair.py'
       - '.github/workflows/ai-vision.yml'
       - '.github/workflows/full-seo-audit.yml'
   schedule:
