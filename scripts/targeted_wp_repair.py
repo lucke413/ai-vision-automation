@@ -110,13 +110,14 @@ def main():
                 "words": words(body), "internal_links": len(re.findall(r'href="(?:https?://aivision\\.altervista\\.org)?/', body, re.I)),
                 "categories": p.get("categories", []),
                 "excerpt": plain((p.get("excerpt") or {}).get("rendered") or "")[:350],
+                "body_text": plain(body)[:6500],
             })
         except Exception as e:
             result["errors"].append({"slug": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
 
     for slug in MISSING_SLUGS:
         try:
-            rows = get("posts", {"slug": slug, "context": "edit", "_fields": "id,slug,status,title,link"})
+            rows = get("posts", {"slug": slug, "context": "edit", "status": "any", "_fields": "id,slug,status,title,link"})
             result["missing_slug_lookup"].append({"slug": slug, "published_matches": len(rows),
                 "matches": [{"id": p.get("id"), "status": p.get("status"),
                              "title": plain((p.get("title") or {}).get("rendered") or "")} for p in rows]})
@@ -125,14 +126,22 @@ def main():
 
     for slug in TAG_SLUGS:
         try:
-            rows = get("tags", {"slug": slug, "_fields": "id,slug,name,count,link"})
-            result["tags"].append(rows[0] if rows else {"slug": slug, "exists": False})
+            rows = get("tags", {"slug": slug, "context": "edit", "_fields": "id,slug,name,count,link,meta"})
+            if rows:
+                term = rows[0]
+                result["tags"].append({"id": term.get("id"), "slug": term.get("slug"), "name": term.get("name"), "count": term.get("count"), "meta": term.get("meta", {})})
+            else:
+                result["tags"].append({"slug": slug, "exists": False})
         except Exception as e:
             result["errors"].append({"tag": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
     for slug in CATEGORY_SLUGS:
         try:
-            rows = get("categories", {"slug": slug, "_fields": "id,slug,name,count,link"})
-            result["categories"].append(rows[0] if rows else {"slug": slug, "exists": False})
+            rows = get("categories", {"slug": slug, "context": "edit", "_fields": "id,slug,name,count,link,meta"})
+            if rows:
+                term = rows[0]
+                result["categories"].append({"id": term.get("id"), "slug": term.get("slug"), "name": term.get("name"), "count": term.get("count"), "meta": term.get("meta", {})})
+            else:
+                result["categories"].append({"slug": slug, "exists": False})
         except Exception as e:
             result["errors"].append({"category": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
 
