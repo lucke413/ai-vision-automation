@@ -38,6 +38,10 @@ ARTICLE_SLUGS = [
     "lg-ultragear-evo-gx9-recensione",
     "lego-playstation-1-prezzo-pezzi-accesso-anticipato",
     "recensione-iphone-18-pro-max",
+    "samsung-galaxy-watch8-offerta-amazon",
+    "giochi-in-uscita-ottobre-offerte",
+    "pixel-10a-aumento-prezzo",
+    "smart-tv-in-offerta-65-75-pollici",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
