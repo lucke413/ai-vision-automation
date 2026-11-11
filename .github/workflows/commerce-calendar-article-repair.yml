@@ -1,0 +1,57 @@
+name: AI Vision update commerce and calendar articles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/commerce_calendar_article_repair.py'
+      - '.github/workflows/commerce-calendar-article-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-commerce-calendar-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - name: Prepare corrected article content and SEO
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/commerce_calendar_article_repair.py prepare
+      - name: Save original content and metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-commerce-calendar-backup-${{ github.run_id }}
+          path: |
+            data/commerce_calendar_articles_plan.json
+            data/commerce_calendar_articles_backup.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Apply and verify corrections
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/commerce_calendar_article_repair.py apply
+      - name: Upload verification result
+        if: ${{ always() && hashFiles('data/commerce_calendar_articles_result.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-commerce-calendar-result-${{ github.run_id }}
+          path: data/commerce_calendar_articles_result.json
+          retention-days: 90
