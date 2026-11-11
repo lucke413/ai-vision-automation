@@ -194,9 +194,9 @@ def main():
             BASE + "/iphone-18-pro-recensione-novita/",
         ):
             page = s.get(page_url, timeout=(8, 25), allow_redirects=True)
-            tags = re.findall(r"<meta\\b[^>]*>", page.text, re.I)
-            descriptions = [tag for tag in tags if re.search(r"\\bname\\s*=\\s*['\\\"]description['\\\"]", tag, re.I)]
-            og_descriptions = [tag for tag in tags if re.search(r"\\bproperty\\s*=\\s*['\\\"]og:description['\\\"]", tag, re.I)]
+            tags = re.findall(r"<meta\b[^>]*>", page.text, re.I)
+            descriptions = [tag for tag in tags if re.search(r"\bname\s*=\s*['\\"]description['\\"]", tag, re.I)]
+            og_descriptions = [tag for tag in tags if re.search(r"\bproperty\s*=\s*['\\"]og:description['\\"]", tag, re.I)]
             head = s.get(BASE + "/wp-json/yoast/v1/get_head",
                          params={"url": page_url}, timeout=(8, 25))
             head_data = head.json() if head.status_code == 200 else {"http_status": head.status_code}
