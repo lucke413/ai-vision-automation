@@ -184,8 +184,8 @@ def main():
                           params={"category": "yoast-seo"}, timeout=(8, 20))
         if abilities.status_code == 200:
             payload = abilities.json()
-            result["yoast_abilities"] = [x.get("name") for x in payload.get("abilities", payload if isinstance(payload, list) else [])
-                                         if isinstance(x, dict)]
+            items = payload if isinstance(payload, list) else payload.get("abilities", [])
+            result["yoast_abilities"] = [x.get("name") for x in items if isinstance(x, dict)]
         else:
             result["yoast_abilities_status"] = abilities.status_code
     except Exception as e:
