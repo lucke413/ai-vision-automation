@@ -176,11 +176,16 @@ def main():
         root = s.get(BASE + "/wp-json/", timeout=(8, 20))
         root.raise_for_status()
         routes = root.json().get("routes", {})
-        result["yoast_rest_routes"] = {
-            path: {"methods": sorted(list((data.get("endpoints") or [{}])[0].get("methods", []))),
-                   "args": sorted(list((data.get("endpoints") or [{}])[0].get("args", {}).keys()))}
-            for path, data in routes.items() if "yoast" in path.lower()
-        }
+        result["yoast_routes_collection_type"] = type(routes).__name__
+        if isinstance(routes, dict):
+            result["yoast_rest_routes"] = {
+                path: {"methods": sorted(list((data.get("endpoints") or [{}])[0].get("methods", []))),
+                       "args": sorted(list((data.get("endpoints") or [{}])[0].get("args", {}).keys()))}
+                for path, data in routes.items() if "yoast" in path.lower()
+            }
+        else:
+            result["yoast_rest_routes"] = []
+            result["yoast_routes_preview"] = routes[:30] if isinstance(routes, list) else str(routes)[:500]
     except Exception as e:
         result["errors"].append({"yoast_rest_routes": f"{type(e).__name__}: {str(e)[:150]}"})
 
