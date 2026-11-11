@@ -115,6 +115,20 @@ def main():
         except Exception as e:
             result["errors"].append({"slug": slug, "error": f"{type(e).__name__}: {str(e)[:160]}"})
 
+    # Candidate interni realmente pubblicati nelle stesse categorie.
+    for category_id in (79, 322):
+        try:
+            rows = get("posts", {"categories": category_id, "status": "publish",
+                "per_page": 30, "orderby": "date", "order": "desc",
+                "_fields": "id,date,slug,title,link,categories"})
+            result.setdefault("internal_link_candidates", {})[str(category_id)] = [
+                {"id": p.get("id"), "date": p.get("date"), "slug": p.get("slug"),
+                 "title": plain((p.get("title") or {}).get("rendered") or ""),
+                 "url": p.get("link")} for p in rows]
+        except Exception as e:
+            result["errors"].append({"category_posts": category_id,
+                "error": f"{type(e).__name__}: {str(e)[:160]}"})
+
     for slug in MISSING_SLUGS:
         try:
             rows = get("posts", {"slug": slug, "context": "edit", "status": "any", "_fields": "id,slug,status,title,link"})
