@@ -30,6 +30,10 @@ ARTICLE_SLUGS = [
     "disponibile-ios-27-0-1-correzioni-novita",
     "xbox-disc-to-digital-disponibile-per-tutti-gli-utenti",
     "safari-funzione-avvisami-monitorare-prezzi",
+    "eni-tagli-gas-luce-ottobre",
+    "football-manager-27-data-di-uscita-e-versioni",
+    "blender-su-android-tablet-2027",
+    "tv-lg-nanocell-ai-75-offerta-amazon",
 ]
 MISSING_SLUGS = [
     "robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente",
