@@ -1,0 +1,58 @@
+name: AI Vision internal link repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/internal_link_repair.py'
+      - '.github/workflows/internal-link-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-internal-link-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install requests
+        run: python -m pip install requests
+      - name: Prepare exact link changes and full backup
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/internal_link_repair.py prepare
+      - name: Persist full backup BEFORE WordPress writes
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-internal-links-backup-${{ github.run_id }}
+          path: |
+            data/internal_link_repair_plan.json
+            data/internal_link_repair_backup.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Apply and verify exact internal links
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/internal_link_repair.py apply
+      - name: Upload verification report
+        if: ${{ always() && hashFiles('data/internal_link_repair_result.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-internal-links-result-${{ github.run_id }}
+          path: data/internal_link_repair_result.json
+          retention-days: 90
