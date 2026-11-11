@@ -1,0 +1,57 @@
+name: AI Vision expand four short articles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/next_short_article_repair.py'
+      - '.github/workflows/next-short-article-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-next-short-article-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - name: Prepare article expansions and SEO metadata
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/next_short_article_repair.py prepare
+      - name: Save original contents and SEO metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-next-short-article-backup-${{ github.run_id }}
+          path: |
+            data/next_short_articles_plan.json
+            data/next_short_articles_backup.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Apply and verify all four updates
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/next_short_article_repair.py apply
+      - name: Upload verification result
+        if: ${{ always() && hashFiles('data/next_short_articles_result.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-next-short-article-result-${{ github.run_id }}
+          path: data/next_short_articles_result.json
+          retention-days: 90
