@@ -32,6 +32,29 @@ MAX_PUBLIC_POSTS = 1000
 MAX_HTML_POSTS = 350
 MAX_WORKERS = 3
 
+# URL segnalate in Search Console: audit mirato, sempre in sola lettura.
+TARGETED_URLS = [
+    "/robot-umanoidi-in-casa-entro-il-2027-fantascienza-o-realta-imminente/",
+    "/upscaling-8k-ridai-vita-alle-tue-vecchie-foto-sfocate-in-un-click/",
+    "/category/ai-life-hacks/",
+    "/category/fotografia-ia/",
+    "/addio-slop-perche-il-2026-sara-lanno-dellia-di-qualita-finalmente/",
+    "/cena-stellata-con-un-click-come-lia-sta-rivoluzionando-la-tua-spesa/",
+    "/2026/11/",
+    "/2026/09/",
+    "/2026/10/",
+    "/tag/bluetti/",
+    "/soundpeats-cove-pro-offerta-aliexpress/",
+    "/tag/kernel/feed/",
+    "/tag/tv/",
+    "/tag/bluetooth/",
+    "/tag/kernel/",
+    "/tag/element-pro/",
+    "/gta-6-sondaggio-record-previsioni-vendita/",
+    "/zelda-ocarina-of-time-remake-code-negozi-fisico/",
+    "/oppo-find-x10-e-pro-max-sconto-store-ufficiale/",
+]
+
 
 def get(url: str, **kwargs):
     parsed = urlsplit(url)
@@ -223,12 +246,15 @@ def fetch_live_meta(url: str) -> dict:
     time.sleep(0.2)
     try:
         r = get(url)
+        redirects = [{"status": h.status_code, "url": h.url, "location": h.headers.get("Location", "")}
+                     for h in r.history]
         if r.status_code != 200:
-            return {"status": r.status_code, "error": f"HTTP {r.status_code}"}
+            return {"status": r.status_code, "final_url": r.url, "redirects": redirects,
+                    "error": f"HTTP {r.status_code}"}
         parser = PageMeta()
         parser.feed(r.text[:3_000_000])
         return {
-            "status": 200,
+            "status": 200, "final_url": r.url, "redirects": redirects,
             "canonical": parser.canonical, "meta_description": parser.meta.get("description", ""),
             "meta_robots": parser.meta.get("robots", ""),
             "x_robots": r.headers.get("X-Robots-Tag", ""),
@@ -248,6 +274,13 @@ def scan_live_posts(records: list[dict]) -> dict:
         result = {post_id: fut.result() for fut, post_id in
                   ((f, futures[f]) for f in concurrent.futures.as_completed(futures))}
     return result
+
+
+def scan_targeted_urls() -> dict:
+    urls = {path: urljoin(BASE_URL + "/", path.lstrip("/")) for path in TARGETED_URLS}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(fetch_live_meta, url): path for path, url in urls.items()}
+        return {futures[f]: f.result() for f in concurrent.futures.as_completed(futures)}
 
 
 def find_similar(records: list[dict]) -> list[dict]:
@@ -297,7 +330,7 @@ def site_files() -> dict:
     return result
 
 
-def build_report(posts: list[dict], diagnostic: dict, live: dict, static: dict) -> dict:
+def build_report(posts: list[dict], diagnostic: dict, live: dict, static: dict, targeted: dict | None = None) -> dict:
     items = [analyze_post(p) for p in posts]
     counter = collections.Counter(w for p in items for w in p["warnings"])
     keys = collections.defaultdict(list)
@@ -346,7 +379,7 @@ def build_report(posts: list[dict], diagnostic: dict, live: dict, static: dict) 
             "Non verifica l'attendibilita fattuale degli articoli o le prestazioni Lighthouse.",
             "Similarita titoli = segnale editoriale, non penalizzazione Google automatica."
         ],
-        "api": diagnostic, "files": static,
+        "api": diagnostic, "files": static, "targeted_url_checks": targeted or {},
         "summary": {
             "total_posts": len(items), "total_api_reported": diagnostic["header_total"],
             "content_words_under_300": sum(x["words"] < 300 for x in items),
@@ -374,7 +407,8 @@ def main() -> int:
     analyzed = [analyze_post(p) for p in posts]
     live = scan_live_posts(analyzed)
     static = site_files()
-    report = build_report(posts, diagnosis, live, static)
+    targeted = scan_targeted_urls()
+    report = build_report(posts, diagnosis, live, static, targeted)
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print("SEO AUDIT - SOLA LETTURA")
@@ -396,6 +430,9 @@ def main() -> int:
         print("POSSIBILE SOVRAPPOSIZIONE:", x["first_title"], "|", x["second_title"])
     for x in report["page_issues"][:12]:
         print("ATTENZIONE:", x)
+    print("URL Search Console controllate:", len(report["targeted_url_checks"]))
+    for path, check in report["targeted_url_checks"].items():
+        print("URL MIRATA:", path, "HTTP", check.get("status"), "robots", check.get("meta_robots"), "canonical", check.get("canonical"), "redirect", check.get("final_url"))
     print("Report:", OUTPUT)
     return 0
 
