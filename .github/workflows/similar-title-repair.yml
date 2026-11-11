@@ -1,0 +1,57 @@
+name: AI Vision disambiguate similar SEO titles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/similar_title_repair.py'
+      - '.github/workflows/similar-title-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-similar-title-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - name: Prepare distinct titles and backup
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/similar_title_repair.py prepare
+      - name: Save original titles and SEO
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-similar-titles-backup-${{ github.run_id }}
+          path: |
+            data/similar_titles_plan.json
+            data/similar_titles_backup.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Apply and verify titles
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/similar_title_repair.py apply
+      - name: Upload result
+        if: ${{ always() && hashFiles('data/similar_titles_result.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-similar-titles-result-${{ github.run_id }}
+          path: data/similar_titles_result.json
+          retention-days: 90
