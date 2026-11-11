@@ -80,14 +80,16 @@ def main():
             for label,url in spec["links"]:
                 final=check_destination(url)
                 validated.append((label,final))
-            if any(url in raw for _,url in validated):
-                raise RuntimeError(f"Post {pid}: almeno un link è già presente; revisione manuale.")
+            missing_links = [(label,url) for label,url in validated if url not in raw]
+            if not missing_links:
+                print(f"Post {pid}: link interni già presenti; nessuna modifica necessaria.")
+                continue
             paragraph = "<p>" + spec["intro"] + ": " + " e ".join(
-                f'<a href="{url}">{label}</a>' for label,url in validated
+                f'<a href="{url}">{label}</a>' for label,url in missing_links
             ) + ".</p>"
             after=raw.rstrip()+"\n\n"+paragraph
             rows.append({"id":pid,"slug":spec["slug"],"modified":p.get("modified"),
-                         "before":raw,"after":after,"links":[{"label":l,"url":u} for l,u in validated]})
+                         "before":raw,"after":after,"links":[{"label":l,"url":u} for l,u in missing_links]})
         payload={"site":BASE,"created_at":dt.datetime.now(dt.timezone.utc).isoformat(),"changes":rows}
         PLAN.parent.mkdir(parents=True,exist_ok=True)
         PLAN.write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding="utf-8")
@@ -97,7 +99,7 @@ def main():
         print("Piano pronto. Quattro post, otto destinazioni verificate HTTP 200. Nessuna modifica ancora eseguita.")
         return
     plan=json.loads(PLAN.read_text(encoding="utf-8"))
-    if plan.get("site")!=BASE or len(plan.get("changes",[]))!=4:
+    if plan.get("site")!=BASE or not (1 <= len(plan.get("changes",[])) <= 4):
         raise RuntimeError("Piano mancante o non valido.")
     results=[]
     for row in plan["changes"]:
