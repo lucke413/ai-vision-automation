@@ -179,8 +179,7 @@ def main():
         result["yoast_routes_collection_type"] = type(routes).__name__
         if isinstance(routes, dict):
             result["yoast_rest_routes"] = {
-                path: {"methods": sorted(list((data.get("endpoints") or [{}])[0].get("methods", []))),
-                       "args": sorted(list((data.get("endpoints") or [{}])[0].get("args", {}).keys()))}
+                path: (data.get("endpoints") or [])[:2]
                 for path, data in routes.items() if "yoast" in path.lower()
             }
         else:
