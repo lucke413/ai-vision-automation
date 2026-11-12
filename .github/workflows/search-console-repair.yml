@@ -1,0 +1,42 @@
+name: Search Console targeted improvements
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/search-console-repair.yml']
+permissions:
+  contents: read
+concurrency:
+  group: search-console-targeted-repair
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+      WP_USERNAME: ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - run: python scripts/search_console_repair.py prepare
+      - name: Persist backup before writes
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-console-backup-${{ github.run_id }}
+          path: data/search_console_plan.json
+          if-no-files-found: error
+          retention-days: 90
+      - run: python scripts/search_console_repair.py apply
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: search-console-result-${{ github.run_id }}
+          path: data/search_console_result.json
+          retention-days: 90
