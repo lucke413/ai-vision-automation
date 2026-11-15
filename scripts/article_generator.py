@@ -924,6 +924,9 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
                     ),
                 )
                 expanded = normalize_draft(expanded_raw, item)
+                if not expanded.get("originality_check", {}).get("publishable", False):
+                    print("    Espansione scartata: non supera il controllo di originalità.")
+                    continue
                 if expanded["body_word_count"] > best_expanded["body_word_count"]:
                     best_expanded = expanded
                 if expanded["body_word_count"] >= required_words:
