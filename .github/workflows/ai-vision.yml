@@ -256,6 +256,10 @@ jobs:
           for item in items:
               if not item.get("body_markdown", "").strip() or not item.get("title"):
                   raise SystemExit("ERRORE: bozza senza contenuto.")
+              if item.get("generator_version"):
+                  check = item.get("originality_check")
+                  if not isinstance(check, dict) or check.get("status") not in {"pass", "not_applicable"} or check.get("publishable") is not True:
+                      raise SystemExit(f"ERRORE: bozza senza controllo originalità superato: {item.get('title', 'articolo')}")
               if item.get("publication_slot") not in {"today", "reserve"}:
                   raise SystemExit("ERRORE: slot di pubblicazione mancante.")
               if item.get("publication_slot") == "today":
@@ -269,7 +273,8 @@ jobs:
                       print(f"AVVISO qualità: {item.get('title', 'articolo')} -> {item.get('quality_warnings')}")
           daily = sum(1 for item in items if item.get("publication_slot") == "today")
           reserve = sum(1 for item in items if item.get("publication_slot") == "reserve")
-          print(f"OK: {len(items)} bozze generate; oggi: {daily}; riserve: {reserve}.")
+          rejected = data.get("rejected_items", [])
+          print(f"OK: {len(items)} bozze approvate dal gate; oggi: {daily}; riserve: {reserve}; respinte per revisione: {len(rejected) if isinstance(rejected, list) else 0}.")
           for warning in data.get("warnings", []):
               print(f"AVVISO: {warning}")
           PY
