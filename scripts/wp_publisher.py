@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.8"
+VERSION = "2.9"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -1157,6 +1157,19 @@ def publish_one(
     title = str(draft.get("title") or "").strip()
     if not title:
         raise PublisherError("Titolo mancante.")
+    # Le bozze del nuovo generatore devono portare un controllo di originalità
+    # superato. Le bozze legacy/manuali senza generator_version restano gestibili
+    # dai flussi di manutenzione già esistenti.
+    if draft.get("generator_version"):
+        check = draft.get("originality_check")
+        if not isinstance(check, dict):
+            raise PublisherError("Originality gate: controllo mancante; pubblicazione bloccata.")
+        if check.get("status") not in {"pass", "not_applicable"} or check.get("publishable") is not True:
+            details = "; ".join(check.get("reasons") or [])
+            raise PublisherError(
+                "Originality gate: controllo non superato; pubblicazione bloccata."
+                + (" " + details if details else "")
+            )
     original_body = str(draft.get("body_markdown") or "").strip()
     original_word_count = len(re.findall(
         r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\wÀ-ÖØ-öø-ÿ]+)*\b",
@@ -1293,9 +1306,13 @@ def publish_one(
     }
     created = client.create_post(payload)
     seo_status = client.save_seo(created.get("id"), draft)
+    originality_check = draft.get("originality_check") if isinstance(draft.get("originality_check"), dict) else {}
     return {
         "seo_status": seo_status,
         "article_id": draft.get("article_id"),
+        "source_url": draft.get("source_url"),
+        "originality_status": originality_check.get("status", "legacy_unchecked"),
+        "originality_check": originality_check or None,
         "title": title,
         "status": "planned" if client.dry_run else "scheduled",
         "wp_status": created.get("status", "future" if not client.dry_run else "dry_run"),

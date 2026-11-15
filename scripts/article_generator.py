@@ -21,13 +21,14 @@ from html.parser import HTMLParser
 import requests
 
 from daily_selector import expansion_room, editorial_room, MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY, MAX_PRACTICAL_PER_DAY, MAX_NEWS_PER_DAY
+from editorial_originality import assess_originality
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.8"
+VERSION = "4.9"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 12
@@ -151,6 +152,11 @@ REGOLE EDITORIALI:
   e limiti documentati, non limitandoti a sostituire parole della fonte;
 - non imitare la struttura della fonte: organizza il testo secondo le domande
   utili al lettore e usa sottotitoli che descrivano davvero i contenuti;
+- se la fonte contiene formule come "in collaborazione con", "sponsorizzato"
+  o "brand content", conserva una disclosure commerciale chiara nel testo;
+  non trasformare un contenuto promozionale in una presunta analisi indipendente;
+- non limitarti a seguire lo stesso ordine di sezioni e argomenti della fonte:
+  costruisci un taglio autonomo e aggiungi un contributo concreto e documentato;
 - per le guide includi un esempio riproducibile, prerequisiti e limiti,
   senza dichiarare di avere eseguito verifiche non svolte.
 
@@ -795,10 +801,17 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         # Le guide sono orientate alla pratica, non offerte o recensioni.
         story_type = "GUIDA"
         category = "AI"
+    originality_check = assess_originality(
+        body,
+        str(item.get("source_text") or ""),
+        source_status=item.get("source_text_status"),
+        editorial_kind=item.get("editorial_kind"),
+    )
     source_id = str(item.get("article_id") or "")
     draft_id = hashlib.sha256(source_id.encode("utf-8")).hexdigest()[:20]
     return {
         "draft_id": draft_id,
+        "generator_version": VERSION,
         "article_id": source_id,
         "status": "draft",
         "publication_slot": item.get("publication_slot", "today"),
@@ -827,6 +840,7 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         "body_markdown": body,
         "body_word_count": body_words,
         "source_text_status": item.get("source_text_status", "rss_fallback"),
+        "originality_check": originality_check,
         "source_text_word_count": item.get("source_text_word_count", 0),
         "quality_warnings": quality_warnings,
         "focus_keyphrase": truncate_at_word_boundary(raw.get("focus_keyphrase") or "", 80),
@@ -874,6 +888,10 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
 
     if normalized is None:
         raise GeneratorFatalError(f"Bozza non conforme: {reason or 'errore di validazione'}")
+    # Una bozza con fonte non verificabile, somiglianza sospetta o disclosure
+    # commerciale mancante non va ampliata né riscritta per aggirare il gate.
+    if not normalized.get("originality_check", {}).get("publishable", False):
+        return normalized
 
     # L'espansione è un miglioramento facoltativo: se Gemini è in quota,
     # restituisce testo insufficiente o introduce errori, conserviamo la
@@ -906,6 +924,9 @@ def generate_valid_draft(item: dict, api_key: str) -> dict:
                     ),
                 )
                 expanded = normalize_draft(expanded_raw, item)
+                if not expanded.get("originality_check", {}).get("publishable", False):
+                    print("    Espansione scartata: non supera il controllo di originalità.")
+                    continue
                 if expanded["body_word_count"] > best_expanded["body_word_count"]:
                     best_expanded = expanded
                 if expanded["body_word_count"] >= required_words:
@@ -947,6 +968,13 @@ def _editorial_tokens(value: str) -> set[str]:
 
 def editorial_distinctiveness(draft: dict, accepted: list[dict]) -> str | None:
     """Conservative anti-duplicate gate; never infer facts or fabricate value."""
+    if draft.get("generator_version"):
+        check = draft.get("originality_check")
+        if not isinstance(check, dict):
+            return "controllo originalità mancante"
+        if check.get("status") not in {"pass", "not_applicable"}:
+            details = "; ".join(check.get("reasons") or [])
+            return "originalità non superata" + (": " + details if details else "")
     title = str(draft.get("title") or "")
     body = str(draft.get("body_markdown") or "")
     paragraphs = [
@@ -1019,10 +1047,12 @@ def main() -> int:
     # Rimuovi prima eventuali bozze duplicate; le riserve vengono controllate
     # rispetto alle bozze giornaliere già accettate.
     accepted = []
+    rejected_drafts = []
     for draft in drafts:
         reason = editorial_distinctiveness(draft, accepted)
         if reason:
             errors.append({"article_id": draft.get("article_id"), "error": "Quality gate: " + reason})
+            rejected_drafts.append({**draft, "publication_blocked": True, "rejection_reason": reason})
             print("    AVVISO: bozza esclusa: " + reason)
         else:
             accepted.append(draft)
@@ -1082,6 +1112,7 @@ def main() -> int:
                         "article_id": candidate.get("article_id"),
                         "error": "Quality gate: " + message,
                     })
+                    rejected_drafts.append({**candidate, "publication_blocked": True, "rejection_reason": message})
                     print(f"    AVVISO: riserva non promossa: {message}")
                 else:
                     candidate["publication_slot"] = "today"
@@ -1128,7 +1159,8 @@ def main() -> int:
         "error": None,
         "warnings": warnings,
         "total_requested": len(items) + reserve_attempted,
-        "total_generated": len(drafts),
+        "total_generated": len(drafts) + len(rejected_drafts),
+        "total_rejected": len(rejected_drafts),
         "daily_requested": len(daily_items),
         "daily_generated": len(daily_drafts),
         "reserve_requested": len(reserve_items),
@@ -1142,6 +1174,7 @@ def main() -> int:
             1 for draft in drafts if draft.get("quality_warnings")
         ),
         "items": drafts,
+        "rejected_items": rejected_drafts,
         "daily_items": daily_drafts,
         "reserve_items": reserve_drafts,
     }

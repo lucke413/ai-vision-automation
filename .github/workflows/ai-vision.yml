@@ -102,6 +102,7 @@ jobs:
               "scripts/daily_selector.py",
               "scripts/history_filter.py",
               "scripts/article_generator.py",
+              "scripts/editorial_originality.py",
               "scripts/wp_publisher.py",
               "requirements.txt",
           ):
@@ -113,7 +114,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m pip check
-          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/article_generator.py scripts/wp_publisher.py scripts/adsense_audit.py
+          python -m py_compile scripts/rss_collector.py scripts/ai_filter.py scripts/daily_selector.py scripts/history_filter.py scripts/article_generator.py scripts/editorial_originality.py scripts/wp_publisher.py scripts/adsense_audit.py
 
       - name: Verifica equilibrio editoriale
         run: python -m unittest discover -s tests -p 'test_*.py' -v
@@ -128,8 +129,8 @@ jobs:
               "scripts/rss_collector.py": "2.3.4",
               "scripts/ai_filter.py": "3.1.2",
               "scripts/daily_selector.py": "3.1",
-              "scripts/article_generator.py": "4.8",
-              "scripts/wp_publisher.py": "2.8",
+              "scripts/article_generator.py": "4.9",
+              "scripts/wp_publisher.py": "2.9",
           }
 
           for filename, wanted in expected.items():
@@ -256,6 +257,10 @@ jobs:
           for item in items:
               if not item.get("body_markdown", "").strip() or not item.get("title"):
                   raise SystemExit("ERRORE: bozza senza contenuto.")
+              if item.get("generator_version"):
+                  check = item.get("originality_check")
+                  if not isinstance(check, dict) or check.get("status") not in {"pass", "not_applicable"} or check.get("publishable") is not True:
+                      raise SystemExit(f"ERRORE: bozza senza controllo originalità superato: {item.get('title', 'articolo')}")
               if item.get("publication_slot") not in {"today", "reserve"}:
                   raise SystemExit("ERRORE: slot di pubblicazione mancante.")
               if item.get("publication_slot") == "today":
@@ -269,7 +274,8 @@ jobs:
                       print(f"AVVISO qualità: {item.get('title', 'articolo')} -> {item.get('quality_warnings')}")
           daily = sum(1 for item in items if item.get("publication_slot") == "today")
           reserve = sum(1 for item in items if item.get("publication_slot") == "reserve")
-          print(f"OK: {len(items)} bozze generate; oggi: {daily}; riserve: {reserve}.")
+          rejected = data.get("rejected_items", [])
+          print(f"OK: {len(items)} bozze approvate dal gate; oggi: {daily}; riserve: {reserve}; respinte per revisione: {len(rejected) if isinstance(rejected, list) else 0}.")
           for warning in data.get("warnings", []):
               print(f"AVVISO: {warning}")
           PY
@@ -344,7 +350,7 @@ jobs:
           name: ai-vision-article-drafts
           path: data/article_drafts.json
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
 
       - name: Salva report WordPress anche in caso di errore
         if: ${{ always() && hashFiles('data/wp_publish_report.json') != '' }}
@@ -353,4 +359,4 @@ jobs:
           name: ai-vision-wp-publish-report
           path: data/wp_publish_report.json
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
