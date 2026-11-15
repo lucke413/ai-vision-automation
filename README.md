@@ -31,6 +31,20 @@ Riferimenti ufficiali:
 - https://support.google.com/adsense/answer/12176698?hl=it
 - https://support.google.com/adsense/answer/12171612?hl=it
 
+## Originalità editoriale e blocco di pubblicazione
+
+Il generatore 4.9 esegue un controllo locale prima di inserire una bozza nel lotto pubblicabile:
+
+- confronta l'articolo con il testo integrale estratto dalla fonte usando sequenze esatte di sette parole, sovrapposizione dei paragrafi e similarità dell'ordine lessicale;
+- blocca o mette in revisione manuale le bozze con sovrapposizione sospetta;
+- richiede una revisione se il testo integrale della fonte non è stato recuperato: il solo titolo o un breve estratto RSS non bastano per dichiarare verificata l'originalità;
+- rileva marcatori di contenuto sponsorizzato nella fonte e richiede che la disclosure commerciale sia conservata nell'articolo;
+- conserva le bozze respinte nell'array `rejected_items` dell'artefatto, senza inviarle a WordPress.
+
+Il publisher 2.9 verifica nuovamente il risultato prima di creare il post. Le bozze prodotte dal nuovo generatore devono avere `originality_check.status` uguale a `pass` o `not_applicable` e `publishable=true`.
+
+Il controllo è deterministico e non usa servizi antiplagio esterni. È un filtro di somiglianza testuale, non una certificazione legale né una prova di originalità semantica: parafrasi profonde, fatti copiati senza frasi identiche e qualità/accuratezza delle analisi richiedono ancora una revisione editoriale umana. I metadati di provenienza (URL fonte e risultato del controllo) sono conservati nel report WordPress; gli artefatti delle bozze e del report sono trattenuti 90 giorni per facilitare gli audit successivi.
+
 ## Verifiche locali
 
 ```sh
