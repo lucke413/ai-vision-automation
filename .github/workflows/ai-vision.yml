@@ -102,6 +102,7 @@ jobs:
               "scripts/daily_selector.py",
               "scripts/history_filter.py",
               "scripts/article_generator.py",
+              "scripts/editorial_originality.py",
               "scripts/wp_publisher.py",
               "requirements.txt",
           ):
