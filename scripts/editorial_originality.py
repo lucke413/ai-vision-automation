@@ -89,7 +89,8 @@ def _max_paragraph_overlap(article: str, source_ngrams: set[tuple[str, ...]]) ->
 
 
 def _commercial_marker(source_text: str) -> str:
-    text = plain_text(source_text)
+    raw_text = html.unescape(str(source_text or ""))
+    text = raw_text + " " + plain_text(raw_text)
     for pattern in COMMERCIAL_SOURCE_PATTERNS:
         match = pattern.search(text)
         if match:
@@ -98,7 +99,8 @@ def _commercial_marker(source_text: str) -> str:
 
 
 def _has_disclosure(article_text: str) -> bool:
-    text = plain_text(article_text)
+    raw_text = html.unescape(str(article_text or ""))
+    text = raw_text + " " + plain_text(raw_text)
     return any(pattern.search(text) for pattern in DISCLOSURE_PATTERNS)
 
 
