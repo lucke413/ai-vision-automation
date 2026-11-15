@@ -76,6 +76,16 @@ class EditorialOriginalityTests(unittest.TestCase):
         self.assertTrue(result["commercial_disclosure_present"])
         self.assertEqual(result["status"], "pass")
 
+    def test_hash_ad_marker_is_detected_before_markdown_cleanup(self):
+        source = "#ad " + unique_words("fonte", 150)
+        article = unique_words("redazione", 150)
+        result = originality.assess_originality(
+            article, source, source_status="page_extracted"
+        )
+        self.assertTrue(result["commercial_source_detected"])
+        self.assertEqual(result["commercial_source_marker"], "#ad")
+        self.assertEqual(result["status"], "review_required")
+
     def test_practical_guides_use_their_own_editorial_brief(self):
         result = originality.assess_originality(
             unique_words("guida", 120),
