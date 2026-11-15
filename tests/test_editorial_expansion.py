@@ -352,7 +352,7 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(generator.TARGET_BODY_WORDS, 950)
         self.assertEqual(generator.QUALITY_MIN_BODY_WORDS, 550)
         self.assertEqual(generator.EXPANSION_TRIGGER_WORDS, 950)
-        self.assertEqual(generator.VERSION, "4.8")
+        self.assertEqual(generator.VERSION, "4.9")
         self.assertEqual(publisher.MIN_PUBLISH_WORDS, 550)
         self.assertEqual(generator.MAX_RETRIES, 4)
 
