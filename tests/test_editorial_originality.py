@@ -16,6 +16,57 @@ def unique_words(prefix: str, count: int) -> str:
 
 
 class EditorialOriginalityTests(unittest.TestCase):
+    def test_source_reader_extracts_article_and_ignores_navigation(self):
+        body = " ".join(f"contenuto{index}" for index in range(140))
+        markup = (
+            "<html><body><nav>menu laterale ignorato</nav>"
+            "<article><h1>Titolo articolo</h1><p>" + body + "</p>"
+            "<aside>pubblicità e altri articoli ignorati</aside></article>"
+            "</body></html>"
+        ).encode("utf-8")
+
+        class FakeResponse:
+            headers = {"Content-Type": "text/html"}
+            encoding = "utf-8"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            def iter_content(self, chunk_size):
+                yield markup
+
+        with unittest.mock.patch(
+            "article_generator.requests.get", return_value=FakeResponse()
+        ) as mocked_get:
+            result = generator.enrich_source({
+                "url": "https://www.smartworld.it/articolo",
+                "description": "Breve descrizione RSS",
+            })
+
+        self.assertEqual(result["source_text_status"], "page_extracted")
+        self.assertGreaterEqual(result["source_text_word_count"], 100)
+        self.assertIn("contenuto139", result["source_text"])
+        self.assertNotIn("menu laterale", result["source_text"])
+        self.assertNotIn("pubblicità", result["source_text"])
+        mocked_get.assert_called_once()
+
+    def test_source_reader_does_not_fetch_unapproved_domains(self):
+        with unittest.mock.patch("article_generator.requests.get") as mocked_get:
+            result = generator.enrich_source({
+                "url": "https://example.org/article",
+                "description": "Descrizione RSS sufficiente " + unique_words("dato", 150),
+            })
+
+        self.assertEqual(result["source_text_status"], "rss_fallback")
+        self.assertEqual(result["source_text"], "")
+        mocked_get.assert_not_called()
+
     def test_exact_source_copy_is_blocked(self):
         source = unique_words("parola", 180)
         result = originality.assess_originality(
