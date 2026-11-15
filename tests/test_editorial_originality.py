@@ -26,6 +26,7 @@ class EditorialOriginalityTests(unittest.TestCase):
         ).encode("utf-8")
 
         class FakeResponse:
+            status_code = 200
             headers = {"Content-Type": "text/html"}
             encoding = "utf-8"
 
