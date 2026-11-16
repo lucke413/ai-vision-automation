@@ -97,6 +97,21 @@ class EditorialContentAuditTests(unittest.TestCase):
         ), date(2026, 11, 16))
         self.assertNotIn("likely_expired_promo", {x["code"] for x in result["flags"]})
 
+    def test_dated_price_notice_prevents_stale_offer_warning(self):
+        body = (
+            '<div class="av-price-status-note"><p>Nota su prezzi e disponibilità: '
+            'i prezzi, gli sconti e le condizioni commerciali riportati in questa pagina '
+            'si riferiscono a quanto segnalato il 30 settembre 2026. '
+            'Promozioni e disponibilità possono essere cambiate.</p></div>'
+            "<p>Il prodotto era in offerta al prezzo di 399 euro. " + "dettaglio " * 80 + "</p>"
+        )
+        result = audit.analyze_post(post(
+            "Smartphone in offerta a 399 euro",
+            body,
+            date_value="2026-09-30T10:00:00",
+        ), date(2026, 11, 16))
+        self.assertNotIn("stale_offer_review", {x["code"] for x in result["flags"]})
+
     def test_internal_link_anchor_does_not_make_article_look_like_a_stale_offer(self):
         body = (
             "<p>La macchina da caffè offre una pressione costante e un serbatoio rimovibile. "
