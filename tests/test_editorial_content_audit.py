@@ -97,6 +97,35 @@ class EditorialContentAuditTests(unittest.TestCase):
         ), date(2026, 11, 16))
         self.assertNotIn("likely_expired_promo", {x["code"] for x in result["flags"]})
 
+    def test_internal_link_anchor_does_not_make_article_look_like_a_stale_offer(self):
+        body = (
+            "<p>La macchina da caffè offre una pressione costante e un serbatoio rimovibile. "
+            + "dettaglio " * 80
+            + '<a href="https://aivision.altervista.org/offerta/">Leggi anche: ASUS Vivobook 15 in offerta a 499 euro su Amazon</a>'
+            + "</p>"
+        )
+        result = audit.analyze_post(post(
+            "DeLonghi Dedica: espresso e cappuccino in 15 cm a 139,99 euro",
+            body,
+            date_value="2026-10-01T10:00:00",
+        ), date(2026, 11, 16))
+        self.assertNotIn("stale_offer_review", {x["code"] for x in result["flags"]})
+
+    def test_generic_offerta_al_pubblico_is_not_a_product_deal(self):
+        result = audit.analyze_post(post(
+            "Call of Duty conquista Steam con valutazioni record",
+            "<p>La tenuta delle valutazioni dipenderà dall'esperienza complessiva offerta al pubblico. " + "dettaglio " * 80 + "</p>",
+            date_value="2026-10-01T10:00:00",
+        ), date(2026, 11, 16))
+        self.assertNotIn("stale_offer_review", {x["code"] for x in result["flags"]})
+
+    def test_first_person_usage_claim_is_detected(self):
+        result = audit.analyze_post(post(
+            "Power bank magnetico con ricarica rapida",
+            "<p>Abbiamo utilizzato il dispositivo per diversi giorni. " + "dettaglio " * 80 + "</p>",
+        ), date(2026, 11, 16))
+        self.assertIn("first_hand_claim_attribution", {x["code"] for x in result["flags"]})
+
     def test_internal_and_external_links_are_counted(self):
         body = (
             '<p>Un testo abbastanza lungo per verificare i collegamenti. ' + "contenuto " * 70 +
