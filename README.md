@@ -75,3 +75,6 @@ python scripts/editorial_content_audit.py
 ```
 
 L'audit è read-only. Le modifiche agli articoli esistenti devono essere preparate con backup, controlli di concorrenza e verifica dopo la scrittura; non si applicano riscritture in massa sulla sola base del conteggio parole.
+
+
+Il JSON dell'audit conserva anche il testo pubblico integrale di ciascun articolo e gli estratti puntuali che hanno attivato i segnali, così la revisione può essere eseguita articolo per articolo senza indovinare il motivo dell'avviso.
