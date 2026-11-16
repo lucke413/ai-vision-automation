@@ -178,6 +178,43 @@ UPDATES = {
 <p>La scheda Xiaomi Italia indica per la versione destinata al nostro mercato una protezione IP66/IP68. Il riferimento IP69K presente nella prima stesura non è riportato nella scheda italiana e viene quindi corretto: le certificazioni possono variare per Paese e variante, perciò è importante fare riferimento alla pagina del modello venduto in Italia. Xiaomi dichiara inoltre una batteria al silicio-carbonio da 9.210 mAh, ricarica HyperCharge fino a 100 W, display AMOLED da 6,83 pollici con risoluzione 1.5K e refresh rate fino a 120 Hz, processore Snapdragon 6 Gen 5, fotocamera principale da 50 MP con OIS e ultra-grandangolare da 8 MP.</p>
 <p>La pagina di acquisto Xiaomi Italia mostra, alla verifica del 16 novembre 2026, un prezzo di partenza di 549,90 euro, con prezzo consigliato indicato a 699,90 euro. Il prezzo può cambiare in base alla memoria, al colore, alle promozioni e alla disponibilità; non va confuso con i prezzi di lancio riportati nella prima parte dell'articolo. Xiaomi specifica inoltre che l'alimentatore non è incluso nella confezione e che per raggiungere la potenza massima serve un caricatore compatibile.</p>
 <p class="av-source-reference">Fonti ufficiali: <a href="https://www.mi.com/it/product/redmi-note-17-pro-max-5g/" rel="noopener noreferrer">Xiaomi Italia – pagina prodotto</a>; <a href="https://www.mi.com/it/product/redmi-note-17-pro-max-5g/specs/" rel="noopener noreferrer">Xiaomi Italia – specifiche tecniche</a>; <a href="https://www.mi.com/it/product/redmi-note-17-pro-max-5g/buy/" rel="noopener noreferrer">Xiaomi Italia – prezzo e disponibilità</a>.</p>"""
+
+744: {
+ "slug": "account-playstation-a-rischio-hacker-come-proteggersi",
+ "title": "Account PlayStation: passkey, phishing e consigli per proteggersi",
+ "seo": {"seo_title": "Account PlayStation: passkey e sicurezza",
+         "seo_description": "Come proteggere l'account PlayStation e recuperarlo in caso di accesso sospetto: passkey, verifica in due passaggi e controllo delle sessioni.",
+         "focus_keyphrase": "sicurezza account PlayStation"},
+ "mode": "append",
+ "html": """<h2>Se sospetti un accesso non autorizzato</h2>
+<p>Se ricevi un avviso di accesso o modifica che non riconosci, non aprire i collegamenti contenuti nel messaggio. Accedi digitando direttamente l'indirizzo PlayStation o usando l'app ufficiale, controlla i metodi di accesso disponibili e cambia la password se ritieni che sia stata esposta. Proteggi anche la casella e-mail associata, perché chi controlla quell'indirizzo potrebbe tentare di reimpostare la password dell'account. Se non riesci più ad accedere, avvia il recupero tramite il supporto ufficiale e non affidare le credenziali a servizi di recupero non verificati.</p>
+<p>Una buona abitudine è controllare periodicamente le impostazioni di sicurezza, conservare i codici di backup fuori dal dispositivo e usare una password diversa da quella degli altri servizi. Le funzioni e i nomi delle voci possono cambiare con gli aggiornamenti della piattaforma: fai sempre riferimento alla guida ufficiale più recente.</p>
+<p class="av-source-reference">Fonte: <a href="https://www.playstation.com/it-it/support/account/security-best-practice/" rel="noopener noreferrer">PlayStation – buone pratiche di sicurezza e protezione dell'account</a>.</p>"""
+},
+810: {
+ "slug": "vulnerabilita-jira-confluence-atlassian",
+ "title": "CVE-2026-21589: patch e mitigazioni per Jira e Confluence Data Center",
+ "seo": {"seo_title": "CVE-2026-21589: patch per Jira e Confluence",
+         "seo_description": "Checklist per amministratori Jira e Confluence Data Center: verifica versione, applica patch, limita l'accesso e controlla i log.",
+         "focus_keyphrase": "patch CVE-2026-21589 Jira Confluence"},
+ "mode": "append",
+ "html": """<h2>Controllo finale dopo l'aggiornamento</h2>
+<p>Al termine dell'intervento registra le versioni effettive di ogni nodo, conserva il log dell'aggiornamento e verifica che il servizio sia tornato operativo. Controlla che le regole temporanee del proxy o del WAF non blocchino funzioni legittime e che non siano rimaste istanze di test o ambienti secondari esposti con versioni vulnerabili. Se i log mostrano richieste anomale, conserva le evidenze prima di ruotare o cancellare i registri e coinvolgi il responsabile della sicurezza.</p>
+<p>La presenza della patch non equivale a una verifica di compromissione: l'analisi degli accessi precedenti all'aggiornamento resta un passaggio separato. Per la matrice completa dei prodotti e delle versioni corrette fa fede l'advisory del produttore, che può essere aggiornato nel tempo.</p>
+<p class="av-source-reference">Riferimento: <a href="https://confluence.atlassian.com/security/cve-2026-21589-arbitrary-file-access-vulnerability-impacts-multiple-products-1870495748.html" rel="noopener noreferrer">Atlassian – advisory e istruzioni aggiornate per CVE-2026-21589</a>.</p>"""
+},
+900: {
+ "slug": "edward-dubrovsky-arrestato-shinyhunters",
+ "title": "Edward Dubrovsky arrestato: le accuse e il caso ShinyHunters",
+ "seo": {"seo_title": "Edward Dubrovsky: arresto e accuse ShinyHunters",
+         "seo_description": "Le ricostruzioni di Reuters e KrebsOnSecurity sull'arresto in Pennsylvania e sulle accuse nel contesto dell'indagine ShinyHunters.",
+         "focus_keyphrase": "Edward Dubrovsky ShinyHunters"},
+ "mode": "append",
+ "html": """<h2>Quali elementi non sono ancora pubblici</h2>
+<p>Le fonti consultate descrivono l'arresto e le accuse iniziali, ma non forniscono un quadro completo di tutte le prove raccolte dagli investigatori né del ruolo attribuito all'indagato in ogni singola operazione. Alcuni atti risultavano secretati o parzialmente oscurati. Per questo motivo non è corretto dedurre la responsabilità per specifiche violazioni soltanto dalla relazione investigativa con il gruppo, né presentare come accertate le ricostruzioni diffuse online. Gli sviluppi processuali vanno verificati su documenti giudiziari successivi e comunicazioni delle autorità.</p>
+<p class="av-source-reference">Fonti: <a href="https://www.reuters.com/legal/government/canadian-ransomware-negotiator-arrested-amid-fbi-hacker-crackdown-2026-10-11/" rel="noopener noreferrer">Reuters – resoconto dell'11 ottobre 2026</a>; <a href="https://krebsonsecurity.com/2026/10/fbi-arrests-founder-of-ransomware-negotiation-firm/" rel="noopener noreferrer">KrebsOnSecurity – documenti giudiziari e ricostruzione dell'arresto</a>.</p>"""
+},
+
 }
 }
 
