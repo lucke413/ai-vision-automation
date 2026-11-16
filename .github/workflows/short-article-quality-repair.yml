@@ -1,0 +1,48 @@
+name: AI Vision short article quality repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/short_article_quality_repair.py'
+      - '.github/workflows/short-article-quality-repair.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - run: python -m py_compile scripts/short_article_quality_repair.py
+      - name: Prepare
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/short_article_quality_repair.py prepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aivision-short-article-backup-${{ github.run_id }}
+          path: |
+            data/short_article_quality_plan.json
+            data/short_article_quality_backup.json
+          retention-days: 90
+      - name: Apply
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/short_article_quality_repair.py apply
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('data/short_article_quality_result.json') != '' }}
+        with:
+          name: aivision-short-article-result-${{ github.run_id }}
+          path: data/short_article_quality_result.json
+          retention-days: 90
