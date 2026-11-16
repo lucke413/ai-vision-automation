@@ -122,6 +122,18 @@ ANKER_BODY = f"""<p><strong>Anker MagGo Power Bank 2 Pro</strong> (modello A110R
 {REPAIR_MARKER}"""
 
 
+RELATED_LINKS = {
+    807: {
+        "url": "https://aivision.altervista.org/migliori-cuffie-bluetooth-senza-fili/",
+        "title": "Migliori cuffie Bluetooth senza fili: i modelli top e le scelte per ogni esigenza",
+    },
+    1753: {
+        "url": "https://aivision.altervista.org/anker-maggo-power-bank-2-pro/",
+        "title": "Anker MagGo Power Bank 2 Pro: raffreddamento attivo e specifiche Qi2.2",
+    },
+}
+
+
 REVIEW_REPAIRS = {
     478: {
         "title": "iPhone 18 Pro: caratteristiche, chip A20 Pro e novità fotografiche",
@@ -243,6 +255,13 @@ def build_plan(posts: list[dict], today: dt.date | None = None) -> list[dict]:
         if has_stale_offer and NOTICE_MARKER not in new_content:
             new_content = price_notice(str(post.get("date") or "")) + "\n" + new_content
 
+        related = RELATED_LINKS.get(post_id)
+        if related and related["url"] not in new_content:
+            new_content = (
+                new_content.rstrip()
+                + f'<p class="av-related-link">Approfondisci: <a href="{related["url"]}">{related["title"]}</a></p>'
+            )
+
         if new_title != old_title or new_content != old_content or cover_category:
             plan.append({
                 "id": post_id,
@@ -259,6 +278,7 @@ def build_plan(posts: list[dict], today: dt.date | None = None) -> list[dict]:
                 "reasons": [
                     *(["stale_offer_notice"] if has_stale_offer and NOTICE_MARKER not in old_content else []),
                     *(["review_title_or_source_repair"] if repair and REPAIR_MARKER not in old_content else []),
+                    *(["contextual_internal_link"] if related and related["url"] not in old_content else []),
                 ],
             })
     return plan
