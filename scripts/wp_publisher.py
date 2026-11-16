@@ -7,8 +7,8 @@ Il modulo è volutamente separato dalla pipeline RSS/Gemini. In assenza di
 Gestisce:
 - categorie macro di AI Vision;
 - creazione/riuso dei tag;
-- immagine dalla fonte o da OpenGraph;
-- copertina grafica locale di riserva quando non c'è un'immagine scaricabile;
+- immagini esterne solo con licenza/permesso esplicito;
+- copertina grafica locale quando i diritti dell'immagine non sono documentati;
 - sei orari giornalieri distribuiti in Europe/Rome;
 - report JSON anche in caso di errori su singoli articoli.
 """
