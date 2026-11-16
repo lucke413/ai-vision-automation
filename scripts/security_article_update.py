@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Aggiorna articoli di sicurezza con verifiche ufficiali, backup e controllo post-scrittura."""
+"""Aggiorna articoli di sicurezza con verifiche ufficiali, backup e controllo post-scrittura.
+Trigger operativo 16 novembre 2026."""
 from __future__ import annotations
 import argparse, datetime as dt, json, os
 from pathlib import Path
