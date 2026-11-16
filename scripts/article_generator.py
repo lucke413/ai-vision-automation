@@ -28,7 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.9"
+VERSION = "5.0"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 12
@@ -823,6 +823,9 @@ def normalize_draft(raw: dict, item: dict) -> dict:
             str(item.get("image") or item.get("image_url") or "").strip() or None
         ),
         "image_license": item.get("image_license", "unknown"),
+        "image_rights_status": item.get("image_rights_status", "unknown"),
+        "image_attribution": item.get("image_attribution", ""),
+        "source_published_at": item.get("published") or item.get("published_at") or item.get("date") or None,
         "category": category,
         "story_type": story_type,
         "editorial_kind": item.get("editorial_kind"),
