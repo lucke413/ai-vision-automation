@@ -1,0 +1,48 @@
+name: AI Vision security article updates
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/security_article_update.py'
+      - '.github/workflows/security-article-update.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - run: python -m py_compile scripts/security_article_update.py
+      - name: Prepare
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/security_article_update.py prepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aivision-security-backup-${{ github.run_id }}
+          path: |
+            data/security_article_update_plan.json
+            data/security_article_update_backup.json
+          retention-days: 90
+      - name: Apply
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/security_article_update.py apply
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('data/security_article_update_result.json') != '' }}
+        with:
+          name: aivision-security-result-${{ github.run_id }}
+          path: data/security_article_update_result.json
+          retention-days: 90
