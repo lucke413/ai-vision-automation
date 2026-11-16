@@ -70,8 +70,7 @@ REVIEW_TITLE_RE = re.compile(r"\b(?:recensione|in prova|test completo|prova su s
 # che menzionano genericamente patch, sicurezza o phishing come tema evergreen.
 SECURITY_RE = re.compile(
     r"\b(?:CVE-\d{4}-\d{4,7}|zero[- ]day|ransomware|data breach|"
-    r"violazione dei dati|fuga di dati|attacco informatico|attacchi informatici|"
-    r"cyberattacco|ShinyHunters|estorsione informatica|fine del supporto|"
+    r"violazione dei dati|fuga di dati|ShinyHunters|fine del supporto|"
     r"fine degli aggiornamenti|end of support)\b", re.I
 )
 MONTHS = {
