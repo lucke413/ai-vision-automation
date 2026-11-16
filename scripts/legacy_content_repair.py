@@ -40,12 +40,11 @@ APPLE_URL = "https://www.apple.com/it/iphone/compare/?modelList=iphone-18-pro%2C
 SONY_URL = "https://www.sony.it/electronics/support/wireless-headphones-bluetooth-headphones/wh-ch730n/specifications"
 SONY_REVIEW_URL = "https://www.tomshw.it/smartphone/recensione-sony-wh-ch730n-qualita-audio-comfort-e-tanta-autonomia"
 PHILIPS_REVIEW_URL = "https://www.dday.it/redazione/58977/recensione-tv-philips-oled911-un-nuovo-campione-di-brillantezza"
-ANKER_URL = "https://www.anker.com/products/a110r-qi2-maggo-2-pro-magnetic-power-bank"
+ANKER_URL = "https://www.ankeritaly.com/products/a110r-qi2-maggo-2-pro-magnetic-power-bank"
 ANKER_REVIEW_URL = "https://www.hwupgrade.it/news/telefonia/recensione-anker-maggo-power-bank-2-pro-il-power-bank-magnetico-che-non-teme-il-calore_161829.html"
 WELL_DWELLER_URL = "https://store.steampowered.com/app/3699590"
 WELL_DWELLER_REVIEW_URL = "https://www.siliconera.com/review-well-dweller-is-as-charming-as-islets-and-crypt-custodian/"
-LEAPMOTOR_TEST_URL = "https://www.luigimelita.com/auto-elettriche/leapmotor-b03x-prova-su-strada-consumi/"
-QUATTRORUOTE_URL = "https://www.quattroruote.it/news/eventi/2026/10/01/quattroruote_ottobre_2026.gallery.html"
+QUATTRORUOTE_URL = "https://www.quattroruote.it/news/eventi/2026/10/01/quattroruote_ottobre_2026.html"
 
 
 def italian_date(value: str) -> str:
@@ -73,11 +72,11 @@ WELL_DWELLER_BODY = f"""<p><strong>Well Dweller</strong> è un metroidvania fiab
 <p>La struttura è quella tipica del genere: una mappa da esplorare progressivamente, percorsi che si aprono dopo aver acquisito nuove capacità e aree secondarie che premiano chi torna sui propri passi. Il fiammifero non è soltanto un elemento narrativo: serve a illuminare gli ambienti e diventa uno strumento di combattimento. Durante l’avventura si sbloccano altre abilità utili per superare ostacoli, raggiungere piattaforme e affrontare i boss.</p>
 <p>L'ambientazione punta su un contrasto preciso: personaggi dall'aspetto tenero si muovono in un regno decadente, governato da una regina crudele. La storia procede attraverso incontri, dialoghi e segreti da scoprire, senza trasformare l'esplorazione in una semplice successione di combattimenti. La varietà delle aree e la ricerca di oggetti nascosti sono parte importante del ritmo.</p>
 <h2>Accessibilità e lingua</h2>
-<p>La scheda Steam elenca alcune opzioni utili anche a chi non ha grande esperienza con i platform d'azione: difficoltà regolabile, possibilità di salvare in qualsiasi momento, impostazioni per il comfort della telecamera, controlli del volume personalizzabili e un'opzione per giocare senza quick time event. È indicata anche la compatibilità verificata con Steam Deck.</p>
-<p>C'è però un limite da considerare prima dell'acquisto: al momento della verifica, l'interfaccia, l'audio e i sottotitoli in italiano non risultano disponibili nella scheda ufficiale. Per chi non legge l'inglese può essere un ostacolo più importante del livello di difficoltà.</p>
+<p>La recensione di Siliconera descrive un sistema di combattimento leggibile anche per chi non cerca una sfida punitiva: la fiamma portata da Glimmer funziona come indicatore visivo dello stato di salute, mentre gli attacchi dei nemici vengono anticipati da segnali riconoscibili. Il platforming del percorso principale è considerato accessibile; la ricerca dei segreti e alcune sezioni opzionali possono invece richiedere più precisione.</p>
+<p>Un elemento meno immediato è la guarigione. Secondo la prova di Siliconera, non basta attivare un comando: bisogna fermare un indicatore nel punto corretto. La meccanica aggiunge tensione agli scontri, ma può diventare frustrante nelle fasi avanzate, soprattutto contro i boss.</p>
 <h2>A chi può interessare</h2>
-<p>Well Dweller è da tenere d'occhio per chi apprezza i metroidvania disegnati a mano, le ambientazioni dark fantasy e una progressione costruita attorno a esplorazione e abilità. Una recensione indipendente di Siliconera ha esaminato la versione Switch 2 e ha messo in evidenza il tono fiabesco e l'accessibilità della campagna; questa scheda, invece, riassume caratteristiche e informazioni ufficiali e non è una prova diretta di AI Vision.</p>
-<p>Prima di scegliere la piattaforma conviene controllare la disponibilità della demo, la lingua supportata e i requisiti aggiornati direttamente sulla pagina del gioco.</p>
+<p>Well Dweller può interessare a chi apprezza i metroidvania disegnati a mano, le ambientazioni dark fantasy e le avventure con una componente narrativa marcata. Siliconera riferisce di aver completato la versione Switch 2 in circa nove ore: è il tempo di quella specifica partita, non una durata garantita per tutti. La stessa testata segnala versioni per Switch, Switch 2, PS5, Xbox One, Xbox Series X e PC; disponibilità e lingue possono variare a seconda dello store e della regione.</p>
+<p>Questa scheda riassume la descrizione ufficiale del gioco e le osservazioni della recensione collegata; AI Vision non ha effettuato una prova diretta. Prima dell'acquisto conviene controllare sulla piattaforma scelta le lingue disponibili, eventuali demo e i requisiti aggiornati.</p>
 <p class="av-source-reference">Fonti: <a href="{WELL_DWELLER_URL}" rel="noopener noreferrer">scheda ufficiale Well Dweller su Steam</a>; <a href="{WELL_DWELLER_REVIEW_URL}" rel="noopener noreferrer">recensione di Siliconera</a>.</p>
 {REPAIR_MARKER}"""
 
@@ -111,7 +110,7 @@ PHILIPS_BODY = f"""<p>Il <strong>Philips OLED+911</strong> punta su tre elementi
 
 ANKER_BODY = f"""<p><strong>Anker MagGo Power Bank 2 Pro</strong> (modello A110R) è una batteria magnetica da 10.000 mAh che combina ricarica wireless Qi2.2 fino a 25 W, una porta USB-C da 45 W e un sistema di raffreddamento attivo. La ventola integrata è la caratteristica che la distingue dai power bank magnetici più semplici, ma la compatibilità dello smartphone è il primo elemento da controllare prima dell'acquisto.</p>
 <h2>25 W wireless: compatibilità da verificare</h2>
-<p>Anker indica una potenza wireless massima di 25 W con Qi2.2. La documentazione del produttore specifica però che la modalità da 25 W è destinata agli iPhone compatibili delle serie recenti; la maggior parte degli smartphone Android Qi2 resta sulla ricarica wireless fino a 15 W. Una cover magnetica può risolvere il fissaggio al telefono, ma non trasforma uno smartphone non compatibile in un dispositivo Qi2.2 da 25 W.</p>
+<p>Anker indica una potenza wireless massima di 25 W con Qi2.2. La pagina di compatibilità Anker elenca gli iPhone delle serie 13–18, con l’eccezione di iPhone 16e. Per altri telefoni non bisogna dare per scontata la potenza massima: occorre verificare lo standard wireless effettivamente supportato. Una cover magnetica può risolvere il fissaggio al telefono, ma non rende automaticamente compatibile la ricarica Qi2.2 a 25 W.</p>
 <p>La batteria può essere usata anche tramite cavo: la porta USB-C supporta fino a 45 W in ingresso e in uscita. Questo rende il dispositivo più versatile quando serve ricaricare un telefono, un tablet o la stessa power bank in tempi contenuti.</p>
 <h2>Perché c'è una ventola</h2>
 <p>La ricarica wireless ad alta potenza genera calore. Anker ha inserito una ventola e il sistema SnapCool per gestire la temperatura durante le sessioni più impegnative. Sono disponibili una modalità orientata al raffreddamento e una modalità silenziosa, oltre alla possibilità di disattivare la ricarica wireless. La ventola aggiunge componenti e spessore, ma consente di affrontare il problema termico senza affidarsi soltanto alla riduzione automatica della potenza.</p>
@@ -146,8 +145,7 @@ REVIEW_REPAIRS = {
         "title": "Leapmotor B03X: autonomia WLTP, consumi e prezzi del SUV elettrico",
         "append_html": (
             '<p class="av-source-reference">Per i dati di prova su strada e i consumi reali, consulta '
-            f'<a href="{LEAPMOTOR_TEST_URL}" rel="noopener noreferrer">il test drive di Luigi Melita</a> '
-            f'e <a href="{QUATTRORUOTE_URL}" rel="noopener noreferrer">la rilevazione di Quattroruote</a>. '
+            f'<a href="{QUATTRORUOTE_URL}" rel="noopener noreferrer">il test drive di Quattroruote</a>. '
             'I consumi su strada dipendono da percorso, temperatura, velocità e climatizzazione; AI Vision non ha effettuato un test drive indipendente.</p>'
             + REPAIR_MARKER
         ),
