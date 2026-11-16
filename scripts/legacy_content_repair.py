@@ -40,7 +40,7 @@ APPLE_URL = "https://www.apple.com/it/iphone/compare/?modelList=iphone-18-pro%2C
 SONY_URL = "https://www.sony.it/electronics/support/wireless-headphones-bluetooth-headphones/wh-ch730n/specifications"
 SONY_REVIEW_URL = "https://www.tomshw.it/smartphone/recensione-sony-wh-ch730n-qualita-audio-comfort-e-tanta-autonomia"
 PHILIPS_REVIEW_URL = "https://www.dday.it/redazione/58977/recensione-tv-philips-oled911-un-nuovo-campione-di-brillantezza"
-ANKER_URL = "https://www.ankeritaly.com/products/a110r-qi2-maggo-2-pro-magnetic-power-bank"
+ANKER_URL = "https://www.anker.com/uk/products/a110r-qi2-maggo-2-pro-magnetic-power-bank"
 ANKER_REVIEW_URL = "https://www.hwupgrade.it/news/telefonia/recensione-anker-maggo-power-bank-2-pro-il-power-bank-magnetico-che-non-teme-il-calore_161829.html"
 WELL_DWELLER_URL = "https://store.steampowered.com/app/3699590"
 WELL_DWELLER_REVIEW_URL = "https://www.siliconera.com/review-well-dweller-is-as-charming-as-islets-and-crypt-custodian/"
@@ -67,7 +67,7 @@ def price_notice(published: str) -> str:
     )
 
 
-WELL_DWELLER_BODY = f"""<p><strong>Well Dweller</strong> è un metroidvania fiabesco dalle tinte oscure sviluppato da Kyle Thompson, autore di <em>Islets</em> e <em>Crypt Custodian</em>. Il giocatore guida Glimmer, un piccolo uccello che usa un fiammifero per esplorare un regno ostile, affrontare creature e cercare di salvare la propria famiglia. Il gioco è uscito il 22 settembre 2026 e la scheda ufficiale lo presenta per PC e console.</p>
+WELL_DWELLER_BODY = f"""<p><strong>Well Dweller</strong> è un metroidvania fiabesco dalle tinte oscure sviluppato da Kyle Thompson, autore di <em>Islets</em> e <em>Crypt Custodian</em>. Il giocatore guida Glimmer, un piccolo uccello che usa un fiammifero per esplorare un regno ostile, affrontare creature e cercare di salvare la propria famiglia. La scheda Steam riporta l’uscita PC del 22 settembre 2026; la recensione di Siliconera elenca anche versioni per console.</p>
 <h2>Esplorazione, abilità e combattimenti</h2>
 <p>La struttura è quella tipica del genere: una mappa da esplorare progressivamente, percorsi che si aprono dopo aver acquisito nuove capacità e aree secondarie che premiano chi torna sui propri passi. Il fiammifero non è soltanto un elemento narrativo: serve a illuminare gli ambienti e diventa uno strumento di combattimento. Durante l’avventura si sbloccano altre abilità utili per superare ostacoli, raggiungere piattaforme e affrontare i boss.</p>
 <p>L'ambientazione punta su un contrasto preciso: personaggi dall'aspetto tenero si muovono in un regno decadente, governato da una regina crudele. La storia procede attraverso incontri, dialoghi e segreti da scoprire, senza trasformare l'esplorazione in una semplice successione di combattimenti. La varietà delle aree e la ricerca di oggetti nascosti sono parte importante del ritmo.</p>
