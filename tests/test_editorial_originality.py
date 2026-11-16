@@ -126,7 +126,7 @@ class EditorialOriginalityTests(unittest.TestCase):
             article_parts.append(" ".join(reversed(words)))
         result = originality.assess_originality(
             "\n\n".join(reversed(article_parts)),
-            "\\n".join(source_parts),
+            "\n".join(source_parts),
             source_status="page_extracted",
         )
         self.assertLess(result["structural_order_ratio"], 0.50)
