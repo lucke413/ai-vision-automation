@@ -78,3 +78,10 @@ L'audit è read-only. Le modifiche agli articoli esistenti devono essere prepara
 
 
 Il JSON dell'audit conserva anche il testo pubblico integrale di ciascun articolo e gli estratti puntuali che hanno attivato i segnali, così la revisione può essere eseguita articolo per articolo senza indovinare il motivo dell'avviso.
+
+
+## Riparazione conservativa degli articoli legacy
+
+Dopo un audit editoriale completo riuscito sul ramo `main`, il workflow `legacy-content-repair.yml` esegue una riparazione WordPress con backup integrale e verifica post-scrittura. Le offerte commerciali datate ricevono una nota con la data di pubblicazione che avverte che prezzi e disponibilità possono essere cambiati. Alcuni vecchi titoli che promettevano recensioni/prove dirette vengono corretti; le schede che riprendevano troppo da vicino la struttura di testate terze vengono riscritte con un taglio informativo autonomo, fonti esplicite e copertine grafiche originali generate localmente.
+
+Il programma `scripts/legacy_content_repair.py` è in sola lettura per impostazione predefinita; il workflow lo esegue con `--apply` soltanto dopo che l'audit sul ramo principale è terminato con successo. Non elimina articoli, non cambia gli slug e conserva titolo, contenuto e media precedenti nel backup JSON caricato come artefatto GitHub Actions per 90 giorni. Le riparazioni sono idempotenti: le successive scansioni non duplicano le note e non riscrivono nuovamente gli articoli già corretti.
