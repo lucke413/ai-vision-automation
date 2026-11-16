@@ -21,6 +21,7 @@ class EditorialOriginalityTests(unittest.TestCase):
         markup = (
             "<html><body><nav>menu laterale ignorato</nav>"
             "<article><h1>Titolo articolo</h1><p>" + body + "</p>"
+            "<div class=\"sidebar related-articles\">notizia laterale non pertinente</div>"
             "<aside>pubblicità e altri articoli ignorati</aside></article>"
             "</body></html>"
         ).encode("utf-8")
@@ -55,6 +56,7 @@ class EditorialOriginalityTests(unittest.TestCase):
         self.assertIn("contenuto139", result["source_text"])
         self.assertNotIn("menu laterale", result["source_text"])
         self.assertNotIn("pubblicità", result["source_text"])
+        self.assertNotIn("notizia laterale", result["source_text"])
         mocked_get.assert_called_once()
 
     def test_source_reader_does_not_fetch_unapproved_domains(self):
