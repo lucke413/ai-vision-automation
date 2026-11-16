@@ -51,6 +51,44 @@ class EditorialContentAuditTests(unittest.TestCase):
         ), current)
         self.assertNotIn("stale_offer_review", {x["code"] for x in price_tracking["flags"]})
 
+    def test_generic_discount_benefit_and_time_saving_are_not_stale_offers(self):
+        current = date(2026, 11, 16)
+        benefit = audit.analyze_post(post(
+            "JustWatch TV aggiunge nuovi contenuti gratuiti",
+            "<p>Gli abbonati Plus ottengono uno sconto del dieci percento su alcuni noleggi. " + "dettaglio " * 80 + "</p>",
+        ), current)
+        self.assertNotIn("stale_offer_review", {x["code"] for x in benefit["flags"]})
+
+        product_news = audit.analyze_post(post(
+            "Pebble aggiorna il kit di sviluppo con nuovi plugin",
+            "<p>La novità genera un notevole risparmio di tempo e risorse di codice. " + "dettaglio " * 80 + "</p>",
+        ), current)
+        self.assertNotIn("stale_offer_review", {x["code"] for x in product_news["flags"]})
+
+    def test_review_title_is_reviewed_but_not_assumed_to_be_first_hand_testing(self):
+        result = audit.analyze_post(post(
+            "Well Dweller: la recensione del metroidvania accessibile di Kyle Thompson",
+            "<p>Il gioco è sviluppato da Kyle Thompson e propone una struttura classica. " + "dettaglio " * 80 + "</p>",
+        ), date(2026, 11, 16))
+        flags = {x["code"]: x for x in result["flags"]}
+        self.assertIn("review_title_attribution_review", flags)
+        self.assertNotIn("first_hand_claim_attribution", flags)
+        self.assertEqual(flags["review_title_attribution_review"]["severity"], "medium")
+
+    def test_explicit_first_hand_claim_is_high_priority(self):
+        result = audit.analyze_post(post(
+            "Analisi di un nuovo smartphone",
+            "<p>Abbiamo provato il dispositivo per una settimana. " + "dettaglio " * 80 + "</p>",
+        ), date(2026, 11, 16))
+        self.assertIn("first_hand_claim_attribution", {x["code"] for x in result["flags"]})
+
+    def test_instructional_phrase_da_verificare_is_not_an_internal_note(self):
+        result = audit.analyze_post(post(
+            "Guida alla classificazione dei feedback",
+            "<p>Trasforma i feedback anonimi in temi ricorrenti e priorità da verificare. " + "dettaglio " * 80 + "</p>",
+        ), date(2026, 11, 16))
+        self.assertNotIn("editorial_note_in_public_text", {x["code"] for x in result["flags"]})
+
     def test_recent_news_about_last_hours_is_not_an_expired_offer(self):
         result = audit.analyze_post(post(
             "Account PlayStation a rischio hacker: come proteggersi",
