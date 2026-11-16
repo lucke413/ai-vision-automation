@@ -85,3 +85,6 @@ Il JSON dell'audit conserva anche il testo pubblico integrale di ciascun articol
 Dopo un audit editoriale completo riuscito sul ramo `main`, il workflow `legacy-content-repair.yml` esegue una riparazione WordPress con backup integrale e verifica post-scrittura. Le offerte commerciali datate ricevono una nota con la data di pubblicazione che avverte che prezzi e disponibilità possono essere cambiati. Alcuni vecchi titoli che promettevano recensioni/prove dirette vengono corretti; le schede che riprendevano troppo da vicino la struttura di testate terze vengono riscritte con un taglio informativo autonomo, fonti esplicite e copertine grafiche originali generate localmente.
 
 Il programma `scripts/legacy_content_repair.py` è in sola lettura per impostazione predefinita; il workflow lo esegue con `--apply` soltanto dopo che l'audit sul ramo principale è terminato con successo. Non elimina articoli, non cambia gli slug e conserva titolo, contenuto e media precedenti nel backup JSON caricato come artefatto GitHub Actions per 90 giorni. Le riparazioni sono idempotenti: le successive scansioni non duplicano le note e non riscrivono nuovamente gli articoli già corretti.
+
+
+Il repair workflow applica soltanto i record selezionati dalle regole dell'audit e usa marker idempotenti: una seconda esecuzione non duplica le note e non riscrive le schede già sistemate.
