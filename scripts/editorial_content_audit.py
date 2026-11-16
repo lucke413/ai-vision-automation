@@ -107,6 +107,15 @@ class BodyParser(HTMLParser):
             self.h3 += 1
 
 
+def evidence_for(pattern: re.Pattern, text: str, radius: int = 100) -> str:
+    match = pattern.search(text or "")
+    if not match:
+        return (text or "")[:240]
+    start = max(0, match.start() - radius)
+    end = min(len(text), match.end() + radius)
+    return text[start:end]
+
+
 def add_flag(flags: list[dict], code: str, severity: str, message: str, evidence: str = ""):
     flags.append({
         "code": code,
@@ -168,24 +177,27 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
     if has_offer and age_days is not None and age_days > 21 and not has_historical_context:
         add_flag(flags, "stale_offer_review", "high",
                  "Contenuto commerciale pubblicato da oltre 21 giorni senza chiara indicazione storica.",
-                 body_text[:240])
+                 evidence_for(OFFER_RE, title_and_body))
     if has_offer and INSTANT_PROMO_RE.search(title_and_body) and age_days is not None and age_days > 2 and not has_historical_context:
         add_flag(flags, "likely_expired_promo", "high",
                  "Formula promozionale immediata in un articolo non recente: verificare o aggiornare.",
-                 body_text[:240])
+                 evidence_for(INSTANT_PROMO_RE, title_and_body))
     if FIRST_HAND_RE.search(body_text) or (REVIEW_TITLE_RE.search(title) and not re.search(r"\b(?:secondo|test di|prova di|recensione di)\b", body_text, re.I)):
         add_flag(flags, "first_hand_claim_attribution", "high",
-                 "Verificare che prove, recensioni e impressioni siano attribuite a chi le ha realmente svolte.")
+                 "Verificare che prove, recensioni e impressioni siano attribuite a chi le ha realmente svolte.",
+                 evidence_for(FIRST_HAND_RE, body_text) if FIRST_HAND_RE.search(body_text) else title)
     if INTERNAL_NOTE_RE.search(body_text):
         add_flag(flags, "editorial_note_in_public_text", "high",
                  "Possibile nota redazionale o istruzione interna nel testo pubblico.",
-                 body_text[:240])
+                 evidence_for(INTERNAL_NOTE_RE, body_text))
     if AFFILIATE_RE.search(body_text):
         add_flag(flags, "affiliate_disclosure_check", "high",
-                 "Il testo parla di link affiliati o commissioni: verificare che i link e la disclosure esistano davvero.")
+                 "Il testo parla di link affiliati o commissioni: verificare che i link e la disclosure esistano davvero.",
+                 evidence_for(AFFILIATE_RE, body_text))
     if SECURITY_RE.search(title_and_body) and age_days is not None and age_days > 30:
         add_flag(flags, "security_update_review", "medium",
-                 "Notizia di sicurezza oltre 30 giorni: controllare advisory, patch e stato attuale.")
+                 "Notizia di sicurezza oltre 30 giorni: controllare advisory, patch e stato attuale.",
+                 evidence_for(SECURITY_RE, title_and_body))
 
     severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
     priority = max((severity_rank.get(x["severity"], 0) for x in flags), default=0)
@@ -317,7 +329,7 @@ def main() -> int:
             "high_priority_posts": sum(item["priority"] >= 3 for item in records),
         },
         "similar_body_pairs": duplicates,
-        "posts": [{k: v for k, v in item.items() if k != "body_text"} for item in records],
+        "posts": records,
     }
     OUTPUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_JSON.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
