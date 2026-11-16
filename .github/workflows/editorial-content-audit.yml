@@ -8,10 +8,18 @@ on:
       - 'scripts/editorial_content_audit.py'
       - 'tests/test_editorial_content_audit.py'
       - '.github/workflows/editorial-content-audit.yml'
+      - 'scripts/legacy_content_repair.py'
+      - 'tests/test_legacy_content_repair.py'
+      - '.github/workflows/legacy-content-repair.yml'
+      - '.github/workflows/ai-vision.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/editorial_content_audit.py'
+      - 'scripts/legacy_content_repair.py'
+      - 'tests/test_legacy_content_repair.py'
+      - '.github/workflows/legacy-content-repair.yml'
+      - '.github/workflows/ai-vision.yml'
       - '.github/workflows/editorial-content-audit.yml'
   schedule:
     - cron: '20 7 * * 1'
