@@ -1,0 +1,48 @@
+name: AI Vision conservative internal link repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/auto_internal_link_repair.py'
+      - '.github/workflows/auto-internal-link-repair.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - run: python -m py_compile scripts/auto_internal_link_repair.py
+      - name: Prepare relevant internal links
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/auto_internal_link_repair.py prepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aivision-internal-link-backup-${{ github.run_id }}
+          path: |
+            data/auto_internal_links_plan.json
+            data/auto_internal_links_backup.json
+          retention-days: 90
+      - name: Apply and verify internal links
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/auto_internal_link_repair.py apply
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('data/auto_internal_links_result.json') != '' }}
+        with:
+          name: aivision-internal-link-result-${{ github.run_id }}
+          path: data/auto_internal_links_result.json
+          retention-days: 90
