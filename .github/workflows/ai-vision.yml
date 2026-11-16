@@ -14,6 +14,7 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - '.github/workflows/ai-vision.yml'
+      - '.github/workflows/legacy-content-repair.yml'
   # Push runs isolated regression checks only; the full editorial pipeline runs on schedule or explicit manual dispatch.
   push:
     branches: [main]
@@ -22,6 +23,7 @@ on:
       - 'tests/**'
       - 'requirements.txt'
       - '.github/workflows/ai-vision.yml'
+      - '.github/workflows/legacy-content-repair.yml'
   schedule:
     - cron: '17 11 * * *'
       timezone: Europe/Rome
