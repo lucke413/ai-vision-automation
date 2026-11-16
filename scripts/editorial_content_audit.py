@@ -32,9 +32,10 @@ MIN_DUPLICATE_JACCARD = 0.36
 WORD_RE = re.compile(r"[a-z0-9à-öø-ÿ]+", re.I)
 OFFER_RE = re.compile(
     r"\b(?:in offerta|offerta\s+(?:su|a|al|amazon|prime)|"
-    r"scont[oi]\s+(?:del|di|fino|a)|coupon|codice promozionale|"
-    r"prezzo minimo|prezzo speciale|al minimo storico|black friday|prime day|"
-    r"offerte prime|ribasso del|risparmio di|promozione amazon|promozione prime)\b", re.I
+    r"scont[oi]\s+(?:del|di|fino|a)\s+\d{1,3}(?:[.,]\d+)?\s*(?:%|€|euro|percento|per cento)|"
+    r"coupon|codice promozionale|prezzo minimo|prezzo speciale|al minimo storico|"
+    r"black friday|prime day|offerte prime|ribasso del \d{1,3}\s*(?:%|euro)|"
+    r"promozione amazon|promozione prime)\b", re.I
 )
 INSTANT_PROMO_RE = re.compile(
     r"\b(?:solo oggi|scade oggi|ultime ore (?:di|per|dell')|acquista subito|"
@@ -45,7 +46,8 @@ HISTORICAL_CONTEXT_RE = re.compile(
     r"si è conclus[ao]|si è chius[ao]|offerta scaduta|promozione terminata|"
     r"non è più attiva|non è una quotazione attuale|prezzo storico|"
     r"all'epoca|in quella data|in quell'occasione|prezzo segnalato il|"
-    r"l'offerta risale|fino al \d{1,2}\b)\b", re.I
+    r"l'offerta risale|ultimo giorno utile|ultima giornata|evento volge al termine|"
+    r"fino alle 23:59|fino al \d{1,2}\b)\b", re.I
 )
 FIRST_HAND_RE = re.compile(
     r"\b(?:abbiamo (?:provato|testato|misurato|verificato)|"
@@ -53,8 +55,8 @@ FIRST_HAND_RE = re.compile(
     r"ci è sembrat[oa]|abbiamo riscontrato|abbiamo rilevato)\b", re.I
 )
 INTERNAL_NOTE_RE = re.compile(
-    r"\b(?:prima della pubblicazione|da verificare|fact[ -]?check|"
-    r"bozza interna|istruzioni redazionali|fonte fornita|dati della fonte)\b", re.I
+    r"\b(?:prima della pubblicazione|bozza interna|istruzioni redazionali|"
+    r"fonte fornita|dati della fonte|fact[ -]?check interno)\b", re.I
 )
 AFFILIATE_RE = re.compile(
     r"\b(?:link|collegament[oi])\s+(?:di\s+)?affiliat[oi]\b|"
@@ -182,10 +184,14 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
         add_flag(flags, "likely_expired_promo", "high",
                  "Formula promozionale immediata in un articolo non recente: verificare o aggiornare.",
                  evidence_for(INSTANT_PROMO_RE, title_and_body))
-    if FIRST_HAND_RE.search(body_text) or (REVIEW_TITLE_RE.search(title) and not re.search(r"\b(?:secondo|test di|prova di|recensione di)\b", body_text, re.I)):
+    if FIRST_HAND_RE.search(body_text):
         add_flag(flags, "first_hand_claim_attribution", "high",
-                 "Verificare che prove, recensioni e impressioni siano attribuite a chi le ha realmente svolte.",
-                 evidence_for(FIRST_HAND_RE, body_text) if FIRST_HAND_RE.search(body_text) else title)
+                 "Il corpo contiene una dichiarazione di prova diretta: verificare che sia documentata e attribuita.",
+                 evidence_for(FIRST_HAND_RE, body_text))
+    elif REVIEW_TITLE_RE.search(title):
+        add_flag(flags, "review_title_attribution_review", "medium",
+                 "Il titolo presenta il contenuto come recensione/prova: verificare che non suggerisca test diretti non documentati.",
+                 title)
     if INTERNAL_NOTE_RE.search(body_text):
         add_flag(flags, "editorial_note_in_public_text", "high",
                  "Possibile nota redazionale o istruzione interna nel testo pubblico.",
