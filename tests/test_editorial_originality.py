@@ -97,6 +97,69 @@ class EditorialOriginalityTests(unittest.TestCase):
         self.assertEqual(result["status"], "pass")
         self.assertTrue(result["publishable"])
 
+    def test_paraphrased_paragraphs_in_source_order_are_flagged(self):
+        source_parts = []
+        article_parts = []
+        for section in range(3):
+            source_words = [f"tema{section}dato{index}" for index in range(30)]
+            article_words = source_words[:23] + [f"rielaborato{section}{index}" for index in range(7)]
+            source_parts.append(" ".join(source_words))
+            # Riordina le parole per non dipendere soltanto dalle sequenze esatte.
+            article_parts.append(" ".join(reversed(article_words)))
+        result = originality.assess_originality(
+            "\\n\\n".join(article_parts),
+            "\\n".join(source_parts),
+            source_status="page_extracted",
+        )
+        self.assertGreaterEqual(result["structural_similarity"], 0.80)
+        self.assertIn(result["status"], {"review_required", "blocked"})
+        self.assertFalse(result["publishable"])
+
+    def test_reordered_paragraphs_reduce_structural_order_score(self):
+        source_parts = []
+        article_parts = []
+        for section in range(3):
+            words = [f"tema{section}dato{index}" for index in range(30)]
+            source_parts.append(" ".join(words))
+            article_parts.append(" ".join(reversed(words)))
+        result = originality.assess_originality(
+            "\\n\\n".join(reversed(article_parts)),
+            "\\n".join(source_parts),
+            source_status="page_extracted",
+        )
+        self.assertLess(result["structural_order_ratio"], 0.50)
+
+    def test_source_reference_link_is_https_external_and_attributed(self):
+        link = publisher.source_reference_link({
+            "source_url": "https://example.com/news/story",
+            "source": "Example News",
+        }, "https://aivision.altervista.org")
+        self.assertIn('href="https://example.com/news/story"', link)
+        self.assertIn("Example News", link)
+        self.assertEqual(publisher.source_reference_link({"source_url": "http://example.com/a"}, "https://aivision.altervista.org"), "")
+        self.assertEqual(publisher.source_reference_link({"source_url": "https://aivision.altervista.org/other"}, "https://aivision.altervista.org"), "")
+
+    def test_external_image_requires_explicit_rights_and_license(self):
+        draft = {"source_image_url": "https://images.example.com/photo.jpg", "image_license": "unknown"}
+        self.assertFalse(publisher.image_rights_approved(draft))
+        draft.update({"image_rights_status": "permission_granted", "image_license": "Written permission"})
+        self.assertTrue(publisher.image_rights_approved(draft))
+        draft.update({"image_rights_status": "cc_by", "image_license": "CC BY 4.0", "image_attribution": "Photographer / source"})
+        self.assertTrue(publisher.image_rights_approved(draft))
+        draft["image_attribution"] = ""
+        self.assertFalse(publisher.image_rights_approved(draft))
+
+    def test_publisher_blocks_affiliate_claim_without_affiliate_links(self):
+        body = unique_words("contenuto", 600) + "\\n\\nI link affiliati potrebbero generare una commissione."
+        draft = {
+            "generator_version": "5.0",
+            "title": "Titolo articolo con contenuto editoriale",
+            "body_markdown": body,
+            "originality_check": {"status": "pass", "publishable": True, "reasons": []},
+        }
+        with self.assertRaisesRegex(publisher.PublisherError, "frase interna/di attribuzione vietata"):
+            publisher.publish_one(draft, datetime.now(timezone.utc), MagicMock(), None)
+
     def test_rss_fallback_without_full_source_requires_manual_review(self):
         source = unique_words("estratto", 140)
         article = unique_words("articolo", 150)
