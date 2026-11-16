@@ -97,12 +97,12 @@ def _max_paragraph_overlap(article: str, source_ngrams: set[tuple[str, ...]]) ->
 def _paragraph_token_sets(value: str) -> list[set[str]]:
     """Estrae blocchi testuali separati, preservando l'ordine dei paragrafi."""
     raw = html.unescape(str(value or ""))
-    raw = re.sub(r"<(script|style)\\b[^>]*>.*?</\\1>", " ", raw, flags=re.I | re.S)
-    raw = re.sub(r"</?(?:p|div|section|article|h[1-6]|li|br)\\b[^>]*>", "\\n", raw, flags=re.I)
+    raw = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", raw, flags=re.I | re.S)
+    raw = re.sub(r"</?(?:p|div|section|article|h[1-6]|li|br)\b[^>]*>", "\n", raw, flags=re.I)
     raw = re.sub(r"<[^>]+>", " ", raw)
-    raw = re.sub(r"(?m)^\\s{0,3}#{1,6}\\s*", "", raw)
+    raw = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", raw)
     result = []
-    for chunk in re.split(r"\\n+", raw):
+    for chunk in re.split(r"\n+", raw):
         values = tokens(chunk)
         if len(values) >= MIN_PARAGRAPH_WORDS:
             result.append(set(values))
