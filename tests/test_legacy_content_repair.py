@@ -28,7 +28,7 @@ class LegacyContentRepairTests(unittest.TestCase):
         note = repair.price_notice("2026-10-01T10:00:00")
         self.assertIn(repair.NOTICE_MARKER, note)
         self.assertIn("1 ottobre 2026", note)
-        self.assertIn("potrebbero essere cambiate", note)
+        self.assertIn("possono essere cambiate", note)
 
     def test_old_offer_gets_notice_but_regular_product_news_does_not(self):
         today = date(2026, 11, 16)
