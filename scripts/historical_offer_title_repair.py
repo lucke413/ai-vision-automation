@@ -105,35 +105,42 @@ def main() -> int:
     if plan.get("site") != BASE or not isinstance(plan.get("changes"), list):
         raise RuntimeError("Piano non valido.")
     results = []
+    errors = []
     for row in plan["changes"]:
-        live = read(row["id"])
-        live_title = str((live.get("title") or {}).get("raw") or (live.get("title") or {}).get("rendered") or "")
-        live_content = (live.get("content") or {}).get("raw")
-        if (live.get("status") != "publish" or live.get("slug") != row["slug"]
-                or live.get("modified") != row["modified"] or live_title != row["before_title"]
-                or live_content != row["before_content"] or live.get("aivision_seo") != row["before_seo"]):
-            raise RuntimeError(f"Post {row['id']} modificato dopo il backup; stop per evitare sovrascritture.")
-        response = session.post(
-            f"{BASE}/wp-json/wp/v2/posts/{row['id']}", params={"context": "edit"},
-            json={"title": row["after_title"], "aivision_seo": row["after_seo"]},
-            timeout=(8, 40), allow_redirects=False)
-        response.raise_for_status()
-        saved = read(row["id"])
-        saved_title = str((saved.get("title") or {}).get("raw") or (saved.get("title") or {}).get("rendered") or "")
-        if saved_title != row["after_title"]:
-            raise RuntimeError(f"Verifica titolo fallita per post {row['id']}.")
-        saved_seo = saved.get("aivision_seo") or {}
-        for key, value in row["after_seo"].items():
-            if saved_seo.get(key) != value:
-                raise RuntimeError(f"Verifica SEO {key} fallita per post {row['id']}.")
-        results.append({"id": row["id"], "slug": row["slug"], "status": "updated_and_verified",
-                        "title": saved_title, "date": row["date"]})
-        print(f"Post {row['id']}: titolo e SEO aggiornati e verificati.")
+        try:
+            live = read(row["id"])
+            live_title = str((live.get("title") or {}).get("raw") or (live.get("title") or {}).get("rendered") or "")
+            live_content = (live.get("content") or {}).get("raw")
+            if (live.get("status") != "publish" or live.get("slug") != row["slug"]
+                    or live.get("modified") != row["modified"] or live_title != row["before_title"]
+                    or live_content != row["before_content"] or live.get("aivision_seo") != row["before_seo"]):
+                raise RuntimeError(f"Post {row['id']} modificato dopo il backup; salto per evitare sovrascritture.")
+            response = session.post(
+                f"{BASE}/wp-json/wp/v2/posts/{row['id']}", params={"context": "edit"},
+                json={"title": row["after_title"], "aivision_seo": row["after_seo"]},
+                timeout=(8, 40), allow_redirects=False)
+            if not response.ok:
+                raise RuntimeError(f"WordPress HTTP {response.status_code}: {response.text[:900]}")
+            saved = read(row["id"])
+            saved_title = str((saved.get("title") or {}).get("raw") or (saved.get("title") or {}).get("rendered") or "")
+            if saved_title != row["after_title"]:
+                raise RuntimeError(f"Verifica titolo fallita per post {row['id']}.")
+            saved_seo = saved.get("aivision_seo") or {}
+            for key, value in row["after_seo"].items():
+                if saved_seo.get(key) != value:
+                    raise RuntimeError(f"Verifica SEO {key} fallita per post {row['id']}.")
+            results.append({"id": row["id"], "slug": row["slug"], "status": "updated_and_verified",
+                            "title": saved_title, "date": row["date"]})
+            print(f"Post {row['id']}: titolo e SEO aggiornati e verificati.")
+        except Exception as exc:
+            error = {"id": row["id"], "slug": row["slug"], "status": "error", "error": str(exc)}
+            errors.append(error)
+            print(f"Post {row['id']}: ERRORE, saltato senza interrompere il lotto: {exc}")
     RESULT.parent.mkdir(parents=True, exist_ok=True)
     RESULT.write_text(json.dumps({"completed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-                                  "updated": len(results), "results": results},
+                                  "updated": len(results), "errors": errors, "results": results},
                                  ensure_ascii=False, indent=2), encoding="utf-8")
-    print("Completati:", len(results))
+    print("Completati:", len(results), "errori:", len(errors))
     return 0
 
 if __name__ == "__main__":
