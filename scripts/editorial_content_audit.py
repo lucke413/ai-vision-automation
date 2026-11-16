@@ -66,7 +66,14 @@ AFFILIATE_RE = re.compile(
     r"\b(?:potremmo|possiamo) ricevere (?:una )?commissione\b", re.I
 )
 REVIEW_TITLE_RE = re.compile(r"\b(?:recensione|in prova|test completo|prova su strada)\b", re.I)
-SECURITY_RE = re.compile(r"\b(?:vulnerabilit[aà]|zero.day|ransomware|exploit|patch di sicurezza|attacco informatico)\b", re.I)
+# Segnala eventi o avvisi di sicurezza realmente datati, non articoli prodotto
+# che menzionano genericamente patch, sicurezza o phishing come tema evergreen.
+SECURITY_RE = re.compile(
+    r"\b(?:CVE-\d{4}-\d{4,7}|zero[- ]day|ransomware|data breach|"
+    r"violazione dei dati|fuga di dati|attacco informatico|attacchi informatici|"
+    r"cyberattacco|ShinyHunters|estorsione informatica|fine del supporto|"
+    r"fine degli aggiornamenti|end of support)\b", re.I
+)
 MONTHS = {
     "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4, "maggio": 5,
     "giugno": 6, "luglio": 7, "agosto": 8, "settembre": 9,
