@@ -32,9 +32,9 @@ MIN_DUPLICATE_JACCARD = 0.36
 WORD_RE = re.compile(r"[a-z0-9à-öø-ÿ]+", re.I)
 OFFER_RE = re.compile(
     r"\b(?:in offerta|offerta\s+(?:su|a|al|amazon|prime)|"
-    r"scont[oi]\s+(?:del|di|fino|a)\s+\d{1,3}(?:[.,]\d+)?\s*(?:%|€|euro|percento|per cento)|"
+    r"scont[oi]\s+(?:del|di|fino|a)\s+\d{1,3}(?:[.,]\d+)?|"
     r"coupon|codice promozionale|prezzo minimo|prezzo speciale|al minimo storico|"
-    r"black friday|prime day|offerte prime|ribasso del \d{1,3}\s*(?:%|euro)|"
+    r"black friday|prime day|offerte prime|ribasso del \d{1,3}|"
     r"promozione amazon|promozione prime)\b", re.I
 )
 INSTANT_PROMO_RE = re.compile(
