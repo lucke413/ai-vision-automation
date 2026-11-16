@@ -31,17 +31,21 @@ MIN_DUPLICATE_JACCARD = 0.36
 
 WORD_RE = re.compile(r"[a-z0-9à-öø-ÿ]+", re.I)
 OFFER_RE = re.compile(
-    r"\b(?:offert[ae]|scont[oi]|coupon|codice promozionale|prezzo speciale|"
-    r"black friday|prime day|risparmio|ribasso|promozione)\b", re.I
+    r"\b(?:in offerta|offerta\s+(?:su|a|al|amazon|prime)|"
+    r"scont[oi]\s+(?:del|di|fino|a)|coupon|codice promozionale|"
+    r"prezzo minimo|prezzo speciale|al minimo storico|black friday|prime day|"
+    r"offerte prime|ribasso del|risparmio di|promozione amazon|promozione prime)\b", re.I
 )
 INSTANT_PROMO_RE = re.compile(
-    r"\b(?:solo oggi|scade oggi|ultime ore|acquista subito|disponibile ora|"
-    r"fino a mezzanotte|offerta lampo|prezzo minimo di oggi)\b", re.I
+    r"\b(?:solo oggi|scade oggi|ultime ore (?:di|per|dell')|acquista subito|"
+    r"fino a mezzanotte|offerta lampo|scade il \d{1,2})\b", re.I
 )
 HISTORICAL_CONTEXT_RE = re.compile(
-    r"\b(?:era disponibile|era in offerta|si è conclus[ao]|si è chius[ao]|"
-    r"offerta scaduta|promozione terminata|non è più attiva|prezzo storico|"
-    r"all'epoca|in quella data|fino al \d{1,2}\b)\b", re.I
+    r"\b(?:era disponibile|era in offerta|era stata proposta|era stato proposto|"
+    r"si è conclus[ao]|si è chius[ao]|offerta scaduta|promozione terminata|"
+    r"non è più attiva|non è una quotazione attuale|prezzo storico|"
+    r"all'epoca|in quella data|in quell'occasione|prezzo segnalato il|"
+    r"l'offerta risale|fino al \d{1,2}\b)\b", re.I
 )
 FIRST_HAND_RE = re.compile(
     r"\b(?:abbiamo (?:provato|testato|misurato|verificato)|"
@@ -165,7 +169,7 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
         add_flag(flags, "stale_offer_review", "high",
                  "Contenuto commerciale pubblicato da oltre 21 giorni senza chiara indicazione storica.",
                  body_text[:240])
-    if INSTANT_PROMO_RE.search(title_and_body) and age_days is not None and age_days > 2 and not has_historical_context:
+    if has_offer and INSTANT_PROMO_RE.search(title_and_body) and age_days is not None and age_days > 2 and not has_historical_context:
         add_flag(flags, "likely_expired_promo", "high",
                  "Formula promozionale immediata in un articolo non recente: verificare o aggiornare.",
                  body_text[:240])
