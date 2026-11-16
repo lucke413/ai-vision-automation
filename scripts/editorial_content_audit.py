@@ -51,9 +51,10 @@ HISTORICAL_CONTEXT_RE = re.compile(
     r"fino alle 23:59|fino al \d{1,2}\b)\b", re.I
 )
 FIRST_HAND_RE = re.compile(
-    r"\b(?:abbiamo (?:provato|testato|misurato|verificato)|"
-    r"nel nostro test|durante la nostra prova|nelle nostre prove|"
-    r"ci è sembrat[oa]|abbiamo riscontrato|abbiamo rilevato)\b", re.I
+    r"\b(?:abbiamo (?:provato|testato|misurato|verificato|utilizzato|apprezzato|"
+    r"notato|osservato|riscontrato|rilevato|constatato|valutato|trovato)|"
+    r"nel nostro test|nel nostro utilizzo|durante la nostra prova|nelle nostre prove|"
+    r"la nostra prova|ci è sembrat[oa]|ci ha convinto|ci ha colpito)\b", re.I
 )
 INTERNAL_NOTE_RE = re.compile(
     r"\b(?:prima della pubblicazione|bozza interna|istruzioni redazionali|"
