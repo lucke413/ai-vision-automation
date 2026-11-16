@@ -170,8 +170,8 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
     flags: list[dict] = []
     if words < 300:
         add_flag(flags, "very_short_content", "medium", "Corpo sotto 300 parole: verificare se risponde davvero alla domanda.")
-    elif words < 500:
-        add_flag(flags, "short_content_review", "low", "Corpo sotto 500 parole: valutare completezza, senza allungare artificialmente.")
+    elif words < 400:
+        add_flag(flags, "short_content_review", "low", "Corpo sotto 400 parole: verificare completezza e utilità, senza allungare artificialmente.")
 
     if words >= 500 and parser.h2 == 0:
         add_flag(flags, "missing_h2", "low", "Articolo lungo senza sottotitoli H2 nel corpo.")
