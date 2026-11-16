@@ -21,9 +21,21 @@ def italian_date(value: str) -> str:
     except (ValueError, TypeError):
         return "la data di pubblicazione"
 
+def seo_title(title: str, date_label: str) -> str:
+    try:
+        month_year = " ".join(date_label.split()[1:])
+    except Exception:
+        month_year = "ottobre 2026"
+    base = title.split(":", 1)[0].strip()
+    suffix = f": prezzo storico {month_year}"
+    room = max(10, 60 - len(suffix))
+    if len(base) > room:
+        base = base[:room].rsplit(" ", 1)[0].rstrip(" :,-")
+    return (base + suffix)[:60]
+
 def seo_description(date_label: str) -> str:
-    return (f"Promozione del {date_label}: prezzo e condizioni segnalati all'epoca. "
-            "Verifica prezzo, disponibilità e condizioni attuali presso il venditore.")
+    return (f"Prezzo riferito alla promozione del {date_label}. "
+            "Verifica disponibilità, prezzo e condizioni attuali presso il venditore.")
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -60,13 +72,15 @@ def main() -> int:
                 raise RuntimeError(f"Post {post_id}: nota storica assente; revisione manuale necessaria.")
             if not isinstance(seo, dict):
                 raise RuntimeError(f"Post {post_id}: metadati SEO non disponibili.")
-            if current_title == spec["title"]:
-                print(f"Post {post_id}: titolo già aggiornato, salto.")
-                continue
             date_label = italian_date(post.get("date"))
             after_seo = dict(seo)
-            after_seo["seo_title"] = spec["title"]
+            after_seo["seo_title"] = seo_title(spec["title"], date_label)
             after_seo["seo_description"] = seo_description(date_label)[:155]
+            if current_title == spec["title"] and all(
+                seo.get(key) == value for key, value in after_seo.items()
+            ):
+                print(f"Post {post_id}: titolo e SEO già aggiornati, salto.")
+                continue
             changes.append({
                 "id": post_id, "slug": spec["slug"], "modified": post.get("modified"),
                 "before_title": current_title, "after_title": spec["title"],
