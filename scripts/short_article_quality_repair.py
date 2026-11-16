@@ -214,8 +214,6 @@ UPDATES = {
 <p>Le fonti consultate descrivono l'arresto e le accuse iniziali, ma non forniscono un quadro completo di tutte le prove raccolte dagli investigatori né del ruolo attribuito all'indagato in ogni singola operazione. Alcuni atti risultavano secretati o parzialmente oscurati. Per questo motivo non è corretto dedurre la responsabilità per specifiche violazioni soltanto dalla relazione investigativa con il gruppo, né presentare come accertate le ricostruzioni diffuse online. Gli sviluppi processuali vanno verificati su documenti giudiziari successivi e comunicazioni delle autorità.</p>
 <p class="av-source-reference">Fonti: <a href="https://www.reuters.com/legal/government/canadian-ransomware-negotiator-arrested-amid-fbi-hacker-crackdown-2026-10-11/" rel="noopener noreferrer">Reuters – resoconto dell'11 ottobre 2026</a>; <a href="https://krebsonsecurity.com/2026/10/fbi-arrests-founder-of-ransomware-negotiation-firm/" rel="noopener noreferrer">KrebsOnSecurity – documenti giudiziari e ricostruzione dell'arresto</a>.</p>"""
 },
-
-}
 }
 
 def main() -> int:
