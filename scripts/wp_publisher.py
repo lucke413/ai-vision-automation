@@ -758,10 +758,10 @@ def source_reference_link(draft: dict, base_url: str) -> str:
     source_url = str(draft.get("source_url") or "").strip()
     try:
         parts = urlsplit(source_url)
-        base = urlsplit(base_url)
-        if (parts.scheme != "https" or not parts.hostname or parts.username or parts.password
+        base = urlsplit(str(base_url or "").strip())
+        if (not base.hostname or parts.scheme != "https" or not parts.hostname or parts.username or parts.password
                 or parts.port not in (None, 443)
-                or (base.hostname and parts.hostname.casefold() == base.hostname.casefold())):
+                or parts.hostname.casefold() == base.hostname.casefold()):
             return ""
     except ValueError:
         return ""
