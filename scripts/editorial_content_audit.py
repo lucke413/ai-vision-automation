@@ -31,7 +31,8 @@ MIN_DUPLICATE_JACCARD = 0.36
 
 WORD_RE = re.compile(r"[a-z0-9à-öø-ÿ]+", re.I)
 OFFER_RE = re.compile(
-    r"\b(?:in offerta|offerta\s+(?:su|a|al|amazon|prime)|"
+    r"\b(?:in offerta|offerta\s+(?:su|amazon|prime)|"
+    r"offerta\s+(?:al\s+(?:minimo storico|prezzo)|a\s+\d{1,3})|"
     r"scont[oi]\s+(?:del|di|fino|a)\s+\d{1,3}(?:[.,]\d+)?|"
     r"coupon|codice promozionale|prezzo minimo|prezzo speciale|al minimo storico|"
     r"black friday|prime day|offerte prime|ribasso del \d{1,3}|"
@@ -132,6 +133,7 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
     title = plain((post.get("title") or {}).get("rendered") or "")
     body_html = (post.get("content") or {}).get("rendered") or ""
     body_text = plain(body_html)
+    body_without_links = plain(re.sub(r"<a\b[^>]*>.*?</a>", " ", body_html, flags=re.I | re.S))
     excerpt = plain((post.get("excerpt") or {}).get("rendered") or "")
     parser = BodyParser()
     parser.feed(body_html)
@@ -173,9 +175,9 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
     if not post.get("featured_media"):
         add_flag(flags, "missing_featured_image", "low", "Immagine in evidenza assente.")
 
-    title_and_body = title + " " + body_text
+    title_and_body = title + " " + body_without_links
     has_offer = bool(OFFER_RE.search(title_and_body))
-    has_historical_context = bool(HISTORICAL_CONTEXT_RE.search(body_text))
+    has_historical_context = bool(HISTORICAL_CONTEXT_RE.search(body_without_links))
     if has_offer and age_days is not None and age_days > 21 and not has_historical_context:
         add_flag(flags, "stale_offer_review", "high",
                  "Contenuto commerciale pubblicato da oltre 21 giorni senza chiara indicazione storica.",
@@ -184,18 +186,18 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
         add_flag(flags, "likely_expired_promo", "high",
                  "Formula promozionale immediata in un articolo non recente: verificare o aggiornare.",
                  evidence_for(INSTANT_PROMO_RE, title_and_body))
-    if FIRST_HAND_RE.search(body_text):
+    if FIRST_HAND_RE.search(body_without_links):
         add_flag(flags, "first_hand_claim_attribution", "high",
                  "Il corpo contiene una dichiarazione di prova diretta: verificare che sia documentata e attribuita.",
-                 evidence_for(FIRST_HAND_RE, body_text))
+                 evidence_for(FIRST_HAND_RE, body_without_links))
     elif REVIEW_TITLE_RE.search(title):
         add_flag(flags, "review_title_attribution_review", "medium",
                  "Il titolo presenta il contenuto come recensione/prova: verificare che non suggerisca test diretti non documentati.",
                  title)
-    if INTERNAL_NOTE_RE.search(body_text):
+    if INTERNAL_NOTE_RE.search(body_without_links):
         add_flag(flags, "editorial_note_in_public_text", "high",
                  "Possibile nota redazionale o istruzione interna nel testo pubblico.",
-                 evidence_for(INTERNAL_NOTE_RE, body_text))
+                 evidence_for(INTERNAL_NOTE_RE, body_without_links))
     if AFFILIATE_RE.search(body_text):
         add_flag(flags, "affiliate_disclosure_check", "high",
                  "Il testo parla di link affiliati o commissioni: verificare che i link e la disclosure esistano davvero.",
