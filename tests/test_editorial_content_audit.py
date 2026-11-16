@@ -37,6 +37,28 @@ class EditorialContentAuditTests(unittest.TestCase):
         ), current)
         self.assertNotIn("stale_offer_review", {x["code"] for x in historical["flags"]})
 
+    def test_generic_product_offering_and_price_tracking_are_not_stale_promotions(self):
+        current = date(2026, 11, 16)
+        product_launch = audit.analyze_post(post(
+            "Nuance Audio Plus: gli occhiali acustici arrivano in Italia da 899 euro",
+            "<p>Il produttore amplia la propria offerta di tecnologia assistiva. " + "dettaglio " * 80 + "</p>",
+        ), current)
+        self.assertNotIn("stale_offer_review", {x["code"] for x in product_launch["flags"]})
+
+        price_tracking = audit.analyze_post(post(
+            "Safari introduce una funzione per monitorare prezzi e contenuti web",
+            "<p>La funzione permette di controllare le variazioni dei prezzi nel tempo. " + "dettaglio " * 80 + "</p>",
+        ), current)
+        self.assertNotIn("stale_offer_review", {x["code"] for x in price_tracking["flags"]})
+
+    def test_recent_news_about_last_hours_is_not_an_expired_offer(self):
+        result = audit.analyze_post(post(
+            "Account PlayStation a rischio hacker: come proteggersi",
+            "<p>Nelle ultime ore sono emersi nuovi tentativi di phishing. " + "dettaglio " * 80 + "</p>",
+            date_value="2026-10-06T10:00:00",
+        ), date(2026, 11, 16))
+        self.assertNotIn("likely_expired_promo", {x["code"] for x in result["flags"]})
+
     def test_internal_and_external_links_are_counted(self):
         body = (
             '<p>Un testo abbastanza lungo per verificare i collegamenti. ' + "contenuto " * 70 +
