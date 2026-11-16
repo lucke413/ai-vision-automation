@@ -237,7 +237,14 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
 def fetch_posts() -> tuple[list[dict], dict]:
     endpoint = BASE_URL + "/wp-json/wp/v2/posts"
     session = requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
+    # Bypass AlterVista/CDN cached REST responses after authenticated WordPress writes.
+    cache_bust = str(int(dt.datetime.now(dt.timezone.utc).timestamp() * 1_000_000))
+    session.headers.update({
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json",
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "Pragma": "no-cache",
+    })
     posts: list[dict] = []
     seen: set[int] = set()
     info = {"endpoint": endpoint, "pages": 0, "total_header": None, "complete": False, "errors": []}
@@ -246,6 +253,7 @@ def fetch_posts() -> tuple[list[dict], dict]:
             "status": "publish", "per_page": 100, "page": page,
             "orderby": "id", "order": "asc",
             "_fields": "id,title,content,excerpt,link,slug,date,modified,featured_media",
+            "_av_audit_bust": cache_bust,
         }, timeout=TIMEOUT)
         if response.status_code == 400 and posts:
             try:
