@@ -109,8 +109,8 @@ class EditorialOriginalityTests(unittest.TestCase):
             # Riordina le parole per non dipendere soltanto dalle sequenze esatte.
             article_parts.append(" ".join(reversed(article_words)))
         result = originality.assess_originality(
-            "\\n\\n".join(article_parts),
-            "\\n".join(source_parts),
+            "\n\n".join(article_parts),
+            "\n".join(source_parts),
             source_status="page_extracted",
         )
         self.assertGreaterEqual(result["structural_similarity"], 0.80)
@@ -125,7 +125,7 @@ class EditorialOriginalityTests(unittest.TestCase):
             source_parts.append(" ".join(words))
             article_parts.append(" ".join(reversed(words)))
         result = originality.assess_originality(
-            "\\n\\n".join(reversed(article_parts)),
+            "\n\n".join(reversed(article_parts)),
             "\\n".join(source_parts),
             source_status="page_extracted",
         )
