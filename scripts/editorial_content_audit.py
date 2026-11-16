@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+"""Audit editoriale completo e in sola lettura degli articoli pubblicati AI Vision.
+
+Non modifica WordPress e non formula giudizi automatici di conformità AdSense.
+Produce segnali verificabili per dare priorità alla revisione umana.
+"""
+from __future__ import annotations
+
+import collections
+import csv
+import datetime as dt
+import hashlib
+import html
+import itertools
+import json
+import re
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.parse import urljoin, urlsplit
+
+import requests
+
+BASE_URL = "https://aivision.altervista.org"
+OUTPUT_JSON = Path("data/editorial_content_audit.json")
+OUTPUT_CSV = Path("data/editorial_content_audit.csv")
+USER_AGENT = "AIVision-Editorial-Content-Audit/1.0 (read-only)"
+TIMEOUT = (6, 20)
+MAX_POSTS = 1000
+MIN_DUPLICATE_WORDS = 250
+MIN_DUPLICATE_JACCARD = 0.36
+
+WORD_RE = re.compile(r"[a-z0-9à-öø-ÿ]+", re.I)
+OFFER_RE = re.compile(
+    r"\b(?:offert[ae]|scont[oi]|coupon|codice promozionale|prezzo speciale|"
+    r"black friday|prime day|risparmio|ribasso|promozione)\b", re.I
+)
+INSTANT_PROMO_RE = re.compile(
+    r"\b(?:solo oggi|scade oggi|ultime ore|acquista subito|disponibile ora|"
+    r"fino a mezzanotte|offerta lampo|prezzo minimo di oggi)\b", re.I
+)
+HISTORICAL_CONTEXT_RE = re.compile(
+    r"\b(?:era disponibile|era in offerta|si è conclus[ao]|si è chius[ao]|"
+    r"offerta scaduta|promozione terminata|non è più attiva|prezzo storico|"
+    r"all'epoca|in quella data|fino al \d{1,2}\b)\b", re.I
+)
+FIRST_HAND_RE = re.compile(
+    r"\b(?:abbiamo (?:provato|testato|misurato|verificato)|"
+    r"nel nostro test|durante la nostra prova|nelle nostre prove|"
+    r"ci è sembrat[oa]|abbiamo riscontrato|abbiamo rilevato)\b", re.I
+)
+INTERNAL_NOTE_RE = re.compile(
+    r"\b(?:prima della pubblicazione|da verificare|fact[ -]?check|"
+    r"bozza interna|istruzioni redazionali|fonte fornita|dati della fonte)\b", re.I
+)
+AFFILIATE_RE = re.compile(
+    r"\b(?:link|collegament[oi])\s+(?:di\s+)?affiliat[oi]\b|"
+    r"\b(?:potremmo|possiamo) ricevere (?:una )?commissione\b", re.I
+)
+REVIEW_TITLE_RE = re.compile(r"\b(?:recensione|in prova|test completo|prova su strada)\b", re.I)
+SECURITY_RE = re.compile(r"\b(?:vulnerabilit[aà]|zero.day|ransomware|exploit|patch di sicurezza|attacco informatico)\b", re.I)
+MONTHS = {
+    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4, "maggio": 5,
+    "giugno": 6, "luglio": 7, "agosto": 8, "settembre": 9,
+    "ottobre": 10, "novembre": 11, "dicembre": 12,
+}
+
+
+def plain(value: str) -> str:
+    raw = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", value or "", flags=re.I | re.S)
+    raw = re.sub(r"<[^>]+>", " ", raw)
+    return " ".join(html.unescape(raw).split())
+
+
+def tokens(value: str) -> list[str]:
+    return WORD_RE.findall(plain(value).casefold())
+
+
+def shingles(value: str, size: int = 5) -> set[tuple[str, ...]]:
+    words = tokens(value)
+    return {tuple(words[i:i + size]) for i in range(max(0, len(words) - size + 1))}
+
+
+class BodyParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.links: list[str] = []
+        self.images = 0
+        self.images_missing_alt = 0
+        self.h2 = 0
+        self.h3 = 0
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "a" and attrs.get("href"):
+            self.links.append(str(attrs["href"]))
+        elif tag == "img":
+            self.images += 1
+            if not str(attrs.get("alt") or "").strip():
+                self.images_missing_alt += 1
+        elif tag == "h2":
+            self.h2 += 1
+        elif tag == "h3":
+            self.h3 += 1
+
+
+def add_flag(flags: list[dict], code: str, severity: str, message: str, evidence: str = ""):
+    flags.append({
+        "code": code,
+        "severity": severity,
+        "message": message,
+        "evidence": evidence[:240],
+    })
+
+
+def analyze_post(post: dict, today: dt.date | None = None) -> dict:
+    today = today or dt.datetime.now(dt.timezone.utc).date()
+    title = plain((post.get("title") or {}).get("rendered") or "")
+    body_html = (post.get("content") or {}).get("rendered") or ""
+    body_text = plain(body_html)
+    excerpt = plain((post.get("excerpt") or {}).get("rendered") or "")
+    parser = BodyParser()
+    parser.feed(body_html)
+
+    host = urlsplit(BASE_URL).hostname
+    internal_links, external_links = set(), set()
+    for href in parser.links:
+        full = urljoin(str(post.get("link") or BASE_URL), href)
+        parsed = urlsplit(full)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            continue
+        if parsed.hostname.casefold() == (host or "").casefold():
+            internal_links.add(parsed.path.rstrip("/") or "/")
+        else:
+            external_links.add(full)
+
+    words = len(tokens(body_html))
+    published = str(post.get("date") or "")
+    try:
+        published_date = dt.datetime.fromisoformat(published.replace("Z", "+00:00")).date()
+        age_days = max(0, (today - published_date).days)
+    except ValueError:
+        published_date, age_days = None, None
+
+    flags: list[dict] = []
+    if words < 300:
+        add_flag(flags, "very_short_content", "medium", "Corpo sotto 300 parole: verificare se risponde davvero alla domanda.")
+    elif words < 500:
+        add_flag(flags, "short_content_review", "low", "Corpo sotto 500 parole: valutare completezza, senza allungare artificialmente.")
+
+    if words >= 500 and parser.h2 == 0:
+        add_flag(flags, "missing_h2", "low", "Articolo lungo senza sottotitoli H2 nel corpo.")
+    if not internal_links:
+        add_flag(flags, "no_internal_links", "low", "Nessun collegamento interno nel corpo.")
+    if not external_links:
+        add_flag(flags, "no_external_references", "medium", "Nessun collegamento esterno: controllare attribuzione e fonti.")
+    if parser.images_missing_alt:
+        add_flag(flags, "images_missing_alt", "low", f"{parser.images_missing_alt} immagini senza testo alternativo.")
+    if not post.get("featured_media"):
+        add_flag(flags, "missing_featured_image", "low", "Immagine in evidenza assente.")
+
+    title_and_body = title + " " + body_text
+    has_offer = bool(OFFER_RE.search(title_and_body))
+    has_historical_context = bool(HISTORICAL_CONTEXT_RE.search(body_text))
+    if has_offer and age_days is not None and age_days > 21 and not has_historical_context:
+        add_flag(flags, "stale_offer_review", "high",
+                 "Contenuto commerciale pubblicato da oltre 21 giorni senza chiara indicazione storica.",
+                 body_text[:240])
+    if INSTANT_PROMO_RE.search(title_and_body) and age_days is not None and age_days > 2 and not has_historical_context:
+        add_flag(flags, "likely_expired_promo", "high",
+                 "Formula promozionale immediata in un articolo non recente: verificare o aggiornare.",
+                 body_text[:240])
+    if FIRST_HAND_RE.search(body_text) or (REVIEW_TITLE_RE.search(title) and not re.search(r"\b(?:secondo|test di|prova di|recensione di)\b", body_text, re.I)):
+        add_flag(flags, "first_hand_claim_attribution", "high",
+                 "Verificare che prove, recensioni e impressioni siano attribuite a chi le ha realmente svolte.")
+    if INTERNAL_NOTE_RE.search(body_text):
+        add_flag(flags, "editorial_note_in_public_text", "high",
+                 "Possibile nota redazionale o istruzione interna nel testo pubblico.",
+                 body_text[:240])
+    if AFFILIATE_RE.search(body_text):
+        add_flag(flags, "affiliate_disclosure_check", "high",
+                 "Il testo parla di link affiliati o commissioni: verificare che i link e la disclosure esistano davvero.")
+    if SECURITY_RE.search(title_and_body) and age_days is not None and age_days > 30:
+        add_flag(flags, "security_update_review", "medium",
+                 "Notizia di sicurezza oltre 30 giorni: controllare advisory, patch e stato attuale.")
+
+    severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+    priority = max((severity_rank.get(x["severity"], 0) for x in flags), default=0)
+    return {
+        "id": post.get("id"),
+        "title": title,
+        "slug": post.get("slug"),
+        "url": post.get("link"),
+        "date": published,
+        "modified": post.get("modified"),
+        "age_days": age_days,
+        "words": words,
+        "excerpt_length": len(excerpt),
+        "h2": parser.h2,
+        "h3": parser.h3,
+        "internal_links": len(internal_links),
+        "external_links": len(external_links),
+        "images": parser.images,
+        "images_missing_alt": parser.images_missing_alt,
+        "featured_media": post.get("featured_media"),
+        "priority": priority,
+        "flags": flags,
+        "body_text": body_text,
+    }
+
+
+def fetch_posts() -> tuple[list[dict], dict]:
+    endpoint = BASE_URL + "/wp-json/wp/v2/posts"
+    session = requests.Session()
+    session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
+    posts: list[dict] = []
+    seen: set[int] = set()
+    info = {"endpoint": endpoint, "pages": 0, "total_header": None, "complete": False, "errors": []}
+    for page in range(1, 1 + (MAX_POSTS + 99) // 100):
+        response = session.get(endpoint, params={
+            "status": "publish", "per_page": 100, "page": page,
+            "orderby": "id", "order": "asc",
+            "_fields": "id,title,content,excerpt,link,slug,date,modified,featured_media",
+        }, timeout=TIMEOUT)
+        if response.status_code == 400 and posts:
+            try:
+                code = response.json().get("code")
+            except (ValueError, AttributeError):
+                code = ""
+            if code == "rest_post_invalid_page_number":
+                break
+        response.raise_for_status()
+        values = response.json()
+        if not isinstance(values, list):
+            raise RuntimeError(f"Pagina {page}: risposta REST non valida.")
+        total = response.headers.get("X-WP-Total")
+        if total and total.isdigit():
+            info["total_header"] = int(total)
+        info["pages"] += 1
+        if not values:
+            break
+        ids = [x.get("id") for x in values if isinstance(x, dict)]
+        if len(ids) != len(values) or any(not isinstance(x, int) for x in ids):
+            raise RuntimeError(f"Pagina {page}: record senza ID valido.")
+        duplicate_ids = seen.intersection(ids)
+        if duplicate_ids:
+            raise RuntimeError(f"Paginazione REST ripetuta: ID {sorted(duplicate_ids)[:5]}.")
+        seen.update(ids)
+        posts.extend(values)
+        if info["total_header"] is not None and len(posts) >= info["total_header"]:
+            break
+        if len(values) < 100:
+            break
+        if len(posts) >= MAX_POSTS:
+            raise RuntimeError(f"Archivio oltre il limite di sicurezza ({MAX_POSTS}).")
+    info["retrieved"] = len(posts)
+    info["complete"] = (
+        not info["errors"]
+        and ((info["total_header"] is not None and len(posts) == info["total_header"])
+             or (info["total_header"] is None and bool(posts) and len(posts) % 100 != 0))
+    )
+    if not info["complete"]:
+        info["errors"].append("Copertura archivio non dimostrata: report non utilizzabile come inventario completo.")
+    return posts, info
+
+
+def find_similar_bodies(records: list[dict]) -> list[dict]:
+    candidates = [x for x in records if x["words"] >= MIN_DUPLICATE_WORDS]
+    shingle_sets = {x["id"]: shingles(x["body_text"]) for x in candidates}
+    pairs = []
+    for first, second in itertools.combinations(candidates, 2):
+        a, b = shingle_sets[first["id"]], shingle_sets[second["id"]]
+        if not a or not b:
+            continue
+        common = len(a & b)
+        if common < 25:
+            continue
+        score = common / len(a | b)
+        if score >= MIN_DUPLICATE_JACCARD:
+            pairs.append({
+                "first_id": first["id"], "second_id": second["id"],
+                "first_title": first["title"], "second_title": second["title"],
+                "first_url": first["url"], "second_url": second["url"],
+                "fivegram_jaccard": round(score, 4),
+            })
+    return sorted(pairs, key=lambda x: x["fivegram_jaccard"], reverse=True)[:100]
+
+
+def main() -> int:
+    posts, api = fetch_posts()
+    if not posts or not api["complete"]:
+        raise RuntimeError("Audit interrotto: inventario WordPress incompleto.")
+    today = dt.datetime.now(dt.timezone.utc).date()
+    records = [analyze_post(post, today) for post in posts]
+    counts = collections.Counter(flag["code"] for item in records for flag in item["flags"])
+    priorities = collections.Counter(str(item["priority"]) for item in records)
+    duplicates = find_similar_bodies(records)
+    report = {
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "site": BASE_URL,
+        "readonly": True,
+        "inventory": api,
+        "limitations": [
+            "L'audit usa l'API pubblica WordPress e controlli deterministici; non sostituisce la revisione del testo e delle fonti.",
+            "L'assenza di un link esterno non dimostra una violazione; segnala un controllo di attribuzione da fare.",
+            "L'audit non può verificare licenze delle immagini dai soli post pubblici.",
+            "Non misura indicizzazione o approvazione AdSense: per questo serve Google Search Console e la valutazione Google."
+        ],
+        "summary": {
+            "total_posts": len(records),
+            "priority_counts": dict(priorities),
+            "findings": dict(counts),
+            "similar_body_pairs": len(duplicates),
+            "high_priority_posts": sum(item["priority"] >= 3 for item in records),
+        },
+        "similar_body_pairs": duplicates,
+        "posts": [{k: v for k, v in item.items() if k != "body_text"} for item in records],
+    }
+    OUTPUT_JSON.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_JSON.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    with OUTPUT_CSV.open("w", newline="", encoding="utf-8-sig") as stream:
+        writer = csv.DictWriter(stream, fieldnames=[
+            "id", "title", "url", "date", "modified", "age_days", "words",
+            "internal_links", "external_links", "h2", "images", "priority", "flags",
+        ])
+        writer.writeheader()
+        for item in records:
+            writer.writerow({
+                **{key: item.get(key) for key in writer.fieldnames if key not in {"flags"}},
+                "flags": "; ".join(flag["code"] for flag in item["flags"]),
+            })
+    print("EDITORIAL CONTENT AUDIT - SOLA LETTURA")
+    print("Articoli:", len(records), "/", api.get("total_header"), "copertura completa:", api["complete"])
+    print("Priorità:", json.dumps(dict(priorities), ensure_ascii=False))
+    print("Segnali:", json.dumps(dict(counts), ensure_ascii=False))
+    print("Possibili coppie di contenuti simili:", len(duplicates))
+    print("Report:", OUTPUT_JSON)
+    print("CSV:", OUTPUT_CSV)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
