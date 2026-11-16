@@ -28,7 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 OUTPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 
-VERSION = "4.9"
+VERSION = "5.0"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 DAILY_LIMIT = 6
 RESERVE_LIMIT = 12
@@ -384,10 +384,18 @@ class SourceArticleParser(HTMLParser):
     CONTENT_CLASSES = {"entry-content", "post-content", "article-body",
                        "article-content", "story-body", "article__body"}
 
+    BLOCKED_CLASSES = {
+        "sidebar", "related", "related-posts", "related-articles",
+        "recommended", "recommendations", "most-read", "popular-posts",
+        "widget", "advert", "advertisement", "ad-container", "promo",
+        "newsletter", "social-share", "share-tools", "more-stories",
+    }
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.stack = []
         self.capture_depths = []
+        self.blocked_depths = []
         self.parts = []
 
     def handle_starttag(self, tag, attrs):
@@ -396,6 +404,12 @@ class SourceArticleParser(HTMLParser):
                        'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'}:
             self.stack.append(tag)
             classes = set(str(attrs.get("class") or "").lower().split())
+            element_id = str(attrs.get("id") or "").lower()
+            blocked_container = bool(classes & self.BLOCKED_CLASSES) or any(
+                token in element_id for token in ("sidebar", "related", "recommend", "advert", "newsletter")
+            )
+            if blocked_container:
+                self.blocked_depths.append(len(self.stack))
             is_body = (tag in {"article", "main"}
                        or str(attrs.get("itemprop") or "").lower() == "articlebody"
                        or bool(classes & self.CONTENT_CLASSES))
@@ -408,13 +422,15 @@ class SourceArticleParser(HTMLParser):
         if tag in self.stack:
             self.stack = self.stack[:len(self.stack) - 1 - self.stack[::-1].index(tag)]
             self.capture_depths = [d for d in self.capture_depths if d <= len(self.stack)]
+            self.blocked_depths = [d for d in self.blocked_depths if d <= len(self.stack)]
         if tag in {'p', 'h1', 'h2', 'h3', 'li'}:
             self.parts.append('\n')
 
     def handle_data(self, data):
         blocked = {'script', 'style', 'nav', 'aside', 'footer',
                    'form', 'noscript', 'button'}
-        if self.capture_depths and not blocked.intersection(self.stack):
+        inside_blocked_container = any(depth <= len(self.stack) for depth in self.blocked_depths)
+        if self.capture_depths and not blocked.intersection(self.stack) and not inside_blocked_container:
             self.parts.append(data)
 
     def text(self):
@@ -823,6 +839,9 @@ def normalize_draft(raw: dict, item: dict) -> dict:
             str(item.get("image") or item.get("image_url") or "").strip() or None
         ),
         "image_license": item.get("image_license", "unknown"),
+        "image_rights_status": item.get("image_rights_status", "unknown"),
+        "image_attribution": item.get("image_attribution", ""),
+        "source_published_at": item.get("published") or item.get("published_at") or item.get("date") or None,
         "category": category,
         "story_type": story_type,
         "editorial_kind": item.get("editorial_kind"),

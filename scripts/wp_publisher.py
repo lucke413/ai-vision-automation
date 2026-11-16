@@ -7,8 +7,8 @@ Il modulo è volutamente separato dalla pipeline RSS/Gemini. In assenza di
 Gestisce:
 - categorie macro di AI Vision;
 - creazione/riuso dei tag;
-- immagine dalla fonte o da OpenGraph;
-- copertina grafica locale di riserva quando non c'è un'immagine scaricabile;
+- immagini esterne solo con licenza/permesso esplicito;
+- copertina grafica locale quando i diritti dell'immagine non sono documentati;
 - sei orari giornalieri distribuiti in Europe/Rome;
 - report JSON anche in caso di errori su singoli articoli.
 """
@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "article_drafts.json"
 OUTPUT_FILE = BASE_DIR / "data" / "wp_publish_report.json"
 
-VERSION = "2.9"
+VERSION = "3.0"
 REQUEST_TIMEOUT = 30
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
@@ -84,6 +84,8 @@ PUBLIC_FORBIDDEN_PATTERNS = (
     re.compile(r"\b(?:secondo|stando a|come riportato da) (?:la )?fonte\b", re.IGNORECASE),
     re.compile(r"\bla fonte (?:riporta|segnala|fornita|indica)\b", re.IGNORECASE),
     re.compile(r"\b(?:questa bozza (?:editoriale|generata)|bozza interna|fact[_ -]?check|istruzioni (?:interne|editoriali))\b", re.IGNORECASE),
+    re.compile(r"\b(?:link|collegament[oi])\s+(?:di\s+)?affiliat[oi]\b", re.IGNORECASE),
+    re.compile(r"\b(?:potremmo|possiamo) ricevere (?:una )?commissione\b", re.IGNORECASE),
 )
 
 
@@ -752,13 +754,27 @@ def guide_resources(draft: dict) -> str:
 
 
 def source_reference_link(draft: dict, base_url: str) -> str:
-    """Le fonti restano nei metadati interni e non vengono mostrate negli articoli.
-
-    La verifica editoriale continua a usare source_url e source; questa funzione
-    resta come compatibilità per il publisher ma non aggiunge una bibliografia
-    o un link esterno al contenuto pubblico.
-    """
-    return ""
+    """Aggiunge una citazione trasparente alla fonte primaria della notizia."""
+    source_url = str(draft.get("source_url") or "").strip()
+    try:
+        parts = urlsplit(source_url)
+        base = urlsplit(str(base_url or "").strip())
+        if (not base.hostname or parts.scheme != "https" or not parts.hostname or parts.username or parts.password
+                or parts.port not in (None, 443)
+                or parts.hostname.casefold() == base.hostname.casefold()):
+            return ""
+    except ValueError:
+        return ""
+    label = str(draft.get("source") or parts.hostname or "Fonte originale").strip()
+    if not label:
+        label = "Fonte originale"
+    return (
+        '<p class="av-source-reference">Fonte: <a href="'
+        + html.escape(source_url, quote=True)
+        + '" rel="noopener noreferrer">'
+        + html.escape(label)
+        + '</a>.</p>'
+    )
 
 
 
@@ -793,6 +809,20 @@ def image_url_from_draft(draft: dict) -> str:
         if value.startswith(("http://", "https://")):
             return value
     return ""
+
+
+
+def image_rights_approved(draft: dict) -> bool:
+    """Usa immagini esterne solo con una prova esplicita dei diritti."""
+    status = str(draft.get("image_rights_status") or "unknown").strip().lower().replace("-", "_")
+    license_name = str(draft.get("image_license") or "").strip().lower()
+    approved = {"owned", "licensed", "permission_granted", "public_domain", "cc0", "cc_by", "cc_by_sa"}
+    if status not in approved or not license_name or license_name in {"unknown", "none", "n/a", "not verified"}:
+        return False
+    attribution_required = status in {"cc_by", "cc_by_sa"} or "cc by" in license_name or "creative commons attribution" in license_name
+    if attribution_required and not str(draft.get("image_attribution") or "").strip():
+        return False
+    return bool(image_url_from_draft(draft))
 
 
 def extract_og_image(source_url: str, session: requests.Session) -> str:
@@ -882,7 +912,7 @@ def download_image(url: str, session: requests.Session) -> tuple[bytes, str] | N
             "image/webp": ".webp",
             "image/gif": ".gif",
         }.get(content_type, ".jpg")
-    if content_type and not content_type.startswith("image/") and suffix not in VALID_IMAGE_EXTENSIONS:
+    if content_type and not content_type.startswith("image/"):
         return None
     return content, suffix
 
@@ -1246,7 +1276,8 @@ def publish_one(
             body += "\n" + category_link
 
     source_link = source_reference_link(draft, client.base_url)
-    if source_link:
+    source_url_for_citation = str(draft.get("source_url") or "").strip()
+    if source_link and source_url_for_citation not in raw_body:
         body += "\n" + source_link
 
     raw_tags = draft.get("tags") if isinstance(draft.get("tags"), list) else []
@@ -1264,22 +1295,20 @@ def publish_one(
 
     source_url = str(draft.get("source_url") or "").strip()
 
-    image_url = "" if draft.get("editorial_kind") else image_url_from_draft(draft)
+    rights_ok = image_rights_approved(draft)
+    image_url = "" if draft.get("editorial_kind") or not rights_ok else image_url_from_draft(draft)
     if client.dry_run:
         # Il dry-run non deve fare richieste esterne né scaricare immagini:
         # usa una copertina simulata e registra se una fonte era disponibile.
-        image_origin = "dry_run_guide" if draft.get("editorial_kind") else ("dry_run_source" if image_url else "dry_run_fallback")
+        image_origin = "dry_run_guide" if draft.get("editorial_kind") else ("dry_run_licensed_source_available" if image_url else "dry_run_fallback_rights_unverified")
         downloaded = (guide_infographic(draft), ".png") if draft.get("editorial_kind") else (fallback_png(category_name), ".png")
     else:
-        image_origin = "original_guide_infographic" if draft.get("editorial_kind") else "rss_or_draft"
+        image_origin = "original_guide_infographic" if draft.get("editorial_kind") else "licensed_source_image"
         downloaded = (guide_infographic(draft), ".png") if draft.get("editorial_kind") else (download_image(image_url, session) if image_url else None)
-        if downloaded is None and source_url and not draft.get("editorial_kind"):
-            image_url = extract_og_image(source_url, session)
-            image_origin = "open_graph"
-            downloaded = download_image(image_url, session) if image_url else None
         if downloaded is None:
             downloaded = (fallback_png(category_name), ".png")
-            image_origin = "generated_fallback"
+            image_origin = "generated_fallback" if rights_ok else "generated_fallback_rights_unverified"
+            image_url = ""
     image_bytes, suffix = downloaded
     filename = f"{slugify(title)}{suffix}"
     media = client.upload_media(
@@ -1324,6 +1353,8 @@ def publish_one(
         "tags": [tag.get("name") for tag in tags],
         "image_origin": image_origin,
         "image_source_url": image_url or None,
+        "image_rights_status": draft.get("image_rights_status", "unknown"),
+        "image_license": draft.get("image_license", "unknown"),
         "media_id": media.get("id"),
     }
 

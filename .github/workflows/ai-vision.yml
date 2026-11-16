@@ -129,8 +129,8 @@ jobs:
               "scripts/rss_collector.py": "2.3.4",
               "scripts/ai_filter.py": "3.1.2",
               "scripts/daily_selector.py": "3.1",
-              "scripts/article_generator.py": "4.9",
-              "scripts/wp_publisher.py": "2.9",
+              "scripts/article_generator.py": "5.0",
+              "scripts/wp_publisher.py": "3.0",
           }
 
           for filename, wanted in expected.items():

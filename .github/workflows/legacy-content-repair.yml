@@ -1,0 +1,49 @@
+name: AI Vision safe legacy content repair
+
+on:
+  workflow_run:
+    workflows:
+      - AI Vision full editorial content audit
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-legacy-content-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install repair dependencies
+        run: python -m pip install requests
+      - name: Run tests before any WordPress write
+        run: |
+          python -m compileall -q scripts tests
+          python -m unittest discover -s tests -v
+      - name: Add dated price notices and repair legacy review articles
+        env:
+          WP_BASE_URL: ${{ vars.WP_BASE_URL || 'https://aivision.altervista.org' }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/legacy_content_repair.py --apply
+      - name: Upload full backup and repair report
+        if: ${{ always() && hashFiles('data/legacy_content_repair_backup.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-legacy-content-repair-${{ github.run_id }}
+          path: data/legacy_content_repair_backup.json
+          if-no-files-found: error
+          retention-days: 90

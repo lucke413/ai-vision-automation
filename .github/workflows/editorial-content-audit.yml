@@ -1,0 +1,51 @@
+name: AI Vision full editorial content audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/editorial_content_audit.py'
+      - 'tests/test_editorial_content_audit.py'
+      - '.github/workflows/editorial-content-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/editorial_content_audit.py'
+      - '.github/workflows/editorial-content-audit.yml'
+  schedule:
+    - cron: '20 7 * * 1'
+      timezone: Europe/Rome
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-editorial-content-audit
+  cancel-in-progress: false
+
+jobs:
+  editorial-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install read-only audit dependency
+        run: python -m pip install requests
+      - name: Run full public content audit (read-only)
+        run: python scripts/editorial_content_audit.py
+      - name: Upload article-by-article report
+        if: ${{ always() && hashFiles('data/editorial_content_audit.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-editorial-content-audit-${{ github.run_id }}
+          path: |
+            data/editorial_content_audit.json
+            data/editorial_content_audit.csv
+          if-no-files-found: error
+          retention-days: 90

@@ -33,7 +33,7 @@ Riferimenti ufficiali:
 
 ## Originalità editoriale e blocco di pubblicazione
 
-Il generatore 4.9 esegue un controllo locale prima di inserire una bozza nel lotto pubblicabile:
+Il generatore 5.0 esegue un controllo locale prima di inserire una bozza nel lotto pubblicabile:
 
 - confronta l'articolo con il testo integrale estratto dalla fonte usando sequenze esatte di sette parole, sovrapposizione dei paragrafi e similarità dell'ordine lessicale;
 - blocca o mette in revisione manuale le bozze con sovrapposizione sospetta;
@@ -41,7 +41,7 @@ Il generatore 4.9 esegue un controllo locale prima di inserire una bozza nel lot
 - rileva marcatori di contenuto sponsorizzato nella fonte e richiede che la disclosure commerciale sia conservata nell'articolo;
 - conserva le bozze respinte nell'array `rejected_items` dell'artefatto, senza inviarle a WordPress.
 
-Il publisher 2.9 verifica nuovamente il risultato prima di creare il post. Le bozze prodotte dal nuovo generatore devono avere `originality_check.status` uguale a `pass` o `not_applicable` e `publishable=true`.
+Il publisher 3.0 verifica nuovamente il risultato prima di creare il post. Le bozze prodotte dal nuovo generatore devono avere `originality_check.status` uguale a `pass` o `not_applicable` e `publishable=true`.
 
 Il controllo è deterministico e non usa servizi antiplagio esterni. È un filtro di somiglianza testuale, non una certificazione legale né una prova di originalità semantica: parafrasi profonde, fatti copiati senza frasi identiche e qualità/accuratezza delle analisi richiedono ancora una revisione editoriale umana. I metadati di provenienza (URL fonte e risultato del controllo) sono conservati nel report WordPress; gli artefatti delle bozze e del report sono trattenuti 90 giorni per facilitare gli audit successivi.
 
@@ -55,3 +55,36 @@ python scripts/adsense_audit.py
 ```
 
 I dati generati, le cache Python e gli ambienti locali sono esclusi da Git. Conservare gli artefatti diagnostici tramite GitHub Actions.
+
+
+## Audit editoriale completo e controlli di pubblicazione (5.0 / 3.0)
+
+Il workflow `editorial-content-audit.yml` esegue una scansione pubblica, in sola lettura, di tutti gli articoli pubblicati e produce un JSON e un CSV articolo per articolo. Cerca segnali di offerte datate, contenuti promozionali potenzialmente scaduti, attribuzioni di prove/recensioni, note redazionali residue, dichiarazioni affiliate, assenza di link interni/esterni, struttura H2 e possibili corpi quasi duplicati. I segnali sono priorità di revisione, non verdetti automatici né regole Google.
+
+Il controllo di originalità 1.1 confronta anche la sovrapposizione tematica dei paragrafi e il loro ordine. Un testo che cambia le parole ma conserva la stessa scaletta può essere bloccato o inviato a revisione. Il test resta un filtro deterministico prudenziale: non certifica l'originalità semantica.
+
+Il publisher 3.0 aggiunge un link HTTPS alla fonte originale, quando valido, e non riutilizza immagini RSS/OpenGraph se la bozza non contiene una prova esplicita dei diritti. In assenza di licenza/permesso verificabile usa la copertina grafica generata localmente. Per licenze Creative Commons con attribuzione richiede anche il campo `image_attribution`. Le dichiarazioni di link affiliati/commissioni sono bloccate finché il contenuto non implementa realmente tali link.
+
+Il lettore delle fonti 5.0 esclude anche contenitori sidebar, articoli correlati, widget, pubblicità e newsletter, oltre ai tag di navigazione già ignorati.
+
+Per eseguire localmente il nuovo audit:
+
+```sh
+python -m pip install requests
+python scripts/editorial_content_audit.py
+```
+
+L'audit è read-only. Le modifiche agli articoli esistenti devono essere preparate con backup, controlli di concorrenza e verifica dopo la scrittura; non si applicano riscritture in massa sulla sola base del conteggio parole.
+
+
+Il JSON dell'audit conserva anche il testo pubblico integrale di ciascun articolo e gli estratti puntuali che hanno attivato i segnali, così la revisione può essere eseguita articolo per articolo senza indovinare il motivo dell'avviso.
+
+
+## Riparazione conservativa degli articoli legacy
+
+Dopo un audit editoriale completo riuscito sul ramo `main`, il workflow `legacy-content-repair.yml` esegue una riparazione WordPress con backup integrale e verifica post-scrittura. Le offerte commerciali datate ricevono una nota con la data di pubblicazione che avverte che prezzi e disponibilità possono essere cambiati. Alcuni vecchi titoli che promettevano recensioni/prove dirette vengono corretti; le schede che riprendevano troppo da vicino la struttura di testate terze vengono riscritte con un taglio informativo autonomo, fonti esplicite e copertine grafiche originali generate localmente.
+
+Il programma `scripts/legacy_content_repair.py` è in sola lettura per impostazione predefinita; il workflow lo esegue con `--apply` soltanto dopo che l'audit sul ramo principale è terminato con successo. Non elimina articoli, non cambia gli slug e conserva titolo, contenuto e media precedenti nel backup JSON caricato come artefatto GitHub Actions per 90 giorni. Le riparazioni sono idempotenti: le successive scansioni non duplicano le note e non riscrivono nuovamente gli articoli già corretti.
+
+
+Il repair workflow applica soltanto i record selezionati dalle regole dell'audit e usa marker idempotenti: una seconda esecuzione non duplica le note e non riscrive le schede già sistemate.

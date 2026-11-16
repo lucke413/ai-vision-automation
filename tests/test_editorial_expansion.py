@@ -352,7 +352,7 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(generator.TARGET_BODY_WORDS, 950)
         self.assertEqual(generator.QUALITY_MIN_BODY_WORDS, 550)
         self.assertEqual(generator.EXPANSION_TRIGGER_WORDS, 950)
-        self.assertEqual(generator.VERSION, "4.9")
+        self.assertEqual(generator.VERSION, "5.0")
         self.assertEqual(publisher.MIN_PUBLISH_WORDS, 550)
         self.assertEqual(generator.MAX_RETRIES, 4)
 
@@ -682,15 +682,14 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertNotIn("Menu da escludere", result)
         self.assertNotIn("no_script", result)
 
-    def test_source_reference_is_never_shown_in_public_articles(self):
+    def test_source_reference_is_shown_only_for_safe_external_https_urls(self):
         draft = {
             "source_url": "https://news.example.com/ai-story?a=1&b=2",
             "source": "News & Tech",
         }
-        self.assertEqual(
-            publisher.source_reference_link(draft, "https://aivision.altervista.org"),
-            "",
-        )
+        link = publisher.source_reference_link(draft, "https://aivision.altervista.org")
+        self.assertIn("news.example.com/ai-story", link)
+        self.assertIn("News &amp; Tech", link)
         self.assertEqual(
             publisher.source_reference_link(
                 {"source_url": "https://aivision.altervista.org/post/"},
@@ -760,8 +759,8 @@ class EditorialExpansionTests(unittest.TestCase):
             )
         self.assertEqual(result["status"], "scheduled")
         payload = client.create_post.call_args.args[0]
-        self.assertNotIn("Source Example", payload["content"])
-        self.assertNotIn("source.example.com/story", payload["content"])
+        self.assertIn("Source Example", payload["content"])
+        self.assertIn("source.example.com/story", payload["content"])
         self.assertIn("/category/news/", payload["content"])
 
     def test_existing_wordpress_post_does_not_upload_images(self):
