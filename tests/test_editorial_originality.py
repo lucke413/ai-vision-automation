@@ -103,8 +103,8 @@ class EditorialOriginalityTests(unittest.TestCase):
         source_parts = []
         article_parts = []
         for section in range(3):
-            source_words = [f"tema{section}dato{index}" for index in range(30)]
-            article_words = source_words[:23] + [f"rielaborato{section}{index}" for index in range(7)]
+            source_words = [f"tema{section}dato{index}" for index in range(40)]
+            article_words = source_words[:30] + [f"rielaborato{section}{index}" for index in range(10)]
             source_parts.append(" ".join(source_words))
             # Riordina le parole per non dipendere soltanto dalle sequenze esatte.
             article_parts.append(" ".join(reversed(article_words)))
@@ -121,7 +121,7 @@ class EditorialOriginalityTests(unittest.TestCase):
         source_parts = []
         article_parts = []
         for section in range(3):
-            words = [f"tema{section}dato{index}" for index in range(30)]
+            words = [f"tema{section}dato{index}" for index in range(40)]
             source_parts.append(" ".join(words))
             article_parts.append(" ".join(reversed(words)))
         result = originality.assess_originality(
