@@ -59,6 +59,35 @@ class LegacyContentRepairTests(unittest.TestCase):
         self.assertIn("AI Vision non ha eseguito test", plan[0]["new_content"])
         self.assertEqual(plan[0]["cover_category"], "Accessori e postazioni")
 
+    def test_rewritten_articles_get_exact_contextual_internal_links(self):
+        today = date(2026, 11, 16)
+        sony = post(
+            post_id=807,
+            title=repair.REVIEW_REPAIRS[807]["title"],
+            body=repair.SONY_BODY,
+        )
+        anker = post(
+            post_id=1753,
+            title=repair.REVIEW_REPAIRS[1753]["title"],
+            body=repair.ANKER_BODY,
+        )
+        plan = repair.build_plan([sony, anker], today)
+        by_id = {x["id"]: x for x in plan}
+        self.assertIn(repair.RELATED_LINKS[807]["url"], by_id[807]["new_content"])
+        self.assertIn(repair.RELATED_LINKS[1753]["url"], by_id[1753]["new_content"])
+        self.assertIn("contextual_internal_link", by_id[807]["reasons"])
+        self.assertIn("contextual_internal_link", by_id[1753]["reasons"])
+
+    def test_contextual_internal_link_is_idempotent(self):
+        today = date(2026, 11, 16)
+        link = repair.RELATED_LINKS[807]
+        body = repair.SONY_BODY + (
+            f'<p class="av-related-link">Approfondisci: '
+            f'<a href="{link["url"]}">{link["title"]}</a></p>'
+        )
+        existing = post(post_id=807, title=repair.REVIEW_REPAIRS[807]["title"], body=body)
+        self.assertEqual(repair.build_plan([existing], today), [])
+
     def test_repair_is_idempotent(self):
         today = date(2026, 11, 16)
         original = post(post_id=478, title="iPhone 18 Pro: recensione")
