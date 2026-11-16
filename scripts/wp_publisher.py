@@ -819,7 +819,8 @@ def image_rights_approved(draft: dict) -> bool:
     approved = {"owned", "licensed", "permission_granted", "public_domain", "cc0", "cc_by", "cc_by_sa"}
     if status not in approved or not license_name or license_name in {"unknown", "none", "n/a", "not verified"}:
         return False
-    if status in {"cc_by", "cc_by_sa"} and not str(draft.get("image_attribution") or "").strip():
+    attribution_required = status in {"cc_by", "cc_by_sa"} or "cc by" in license_name or "creative commons attribution" in license_name
+    if attribution_required and not str(draft.get("image_attribution") or "").strip():
         return False
     return bool(image_url_from_draft(draft))
 
@@ -1275,7 +1276,8 @@ def publish_one(
             body += "\n" + category_link
 
     source_link = source_reference_link(draft, client.base_url)
-    if source_link:
+    source_url_for_citation = str(draft.get("source_url") or "").strip()
+    if source_link and source_url_for_citation not in raw_body:
         body += "\n" + source_link
 
     raw_tags = draft.get("tags") if isinstance(draft.get("tags"), list) else []
@@ -1298,7 +1300,7 @@ def publish_one(
     if client.dry_run:
         # Il dry-run non deve fare richieste esterne né scaricare immagini:
         # usa una copertina simulata e registra se una fonte era disponibile.
-        image_origin = "dry_run_guide" if draft.get("editorial_kind") else ("dry_run_licensed_source" if image_url else "dry_run_fallback_rights_unverified")
+        image_origin = "dry_run_guide" if draft.get("editorial_kind") else ("dry_run_licensed_source_available" if image_url else "dry_run_fallback_rights_unverified")
         downloaded = (guide_infographic(draft), ".png") if draft.get("editorial_kind") else (fallback_png(category_name), ".png")
     else:
         image_origin = "original_guide_infographic" if draft.get("editorial_kind") else "licensed_source_image"
