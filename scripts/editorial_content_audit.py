@@ -28,6 +28,7 @@ TIMEOUT = (6, 20)
 MAX_POSTS = 1000
 MIN_DUPLICATE_WORDS = 250
 MIN_DUPLICATE_JACCARD = 0.36
+SECURITY_UPDATE_MARKER = "<!-- ai-vision-security-update:v1 -->"
 
 WORD_RE = re.compile(r"[a-z0-9à-öø-ÿ]+", re.I)
 OFFER_RE = re.compile(
@@ -210,7 +211,8 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
         add_flag(flags, "affiliate_disclosure_check", "high",
                  "Il testo parla di link affiliati o commissioni: verificare che i link e la disclosure esistano davvero.",
                  evidence_for(AFFILIATE_RE, body_text))
-    if SECURITY_RE.search(title_and_body) and age_days is not None and age_days > 30:
+    if (SECURITY_RE.search(title_and_body) and age_days is not None and age_days > 30
+            and SECURITY_UPDATE_MARKER not in body_html):
         add_flag(flags, "security_update_review", "medium",
                  "Notizia di sicurezza oltre 30 giorni: controllare advisory, patch e stato attuale.",
                  evidence_for(SECURITY_RE, title_and_body))
