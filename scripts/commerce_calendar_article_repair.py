@@ -13,7 +13,7 @@ UPDATES={
 "slug":"samsung-galaxy-watch8-offerta-amazon",
 "title":"Samsung Galaxy Watch8: caratteristiche e prezzo dell'offerta di ottobre",
 "seo":{"seo_title":"Samsung Galaxy Watch8: funzioni e prezzo di ottobre","seo_description":"Galaxy Watch8 40 mm: display AMOLED, Exynos W1000 e funzioni salute. I 229 euro erano il prezzo Amazon osservato nella promozione di ottobre 2026.","focus_keyphrase":"Samsung Galaxy Watch8"},
-"max_words":320,
+"max_words":650,
 "content":"""<p>Samsung Galaxy Watch8 nella versione Bluetooth da 40 mm è stato proposto su Amazon a 229 euro durante una promozione di ottobre 2026, contro il prezzo di listino indicato nell'articolo di 329 euro. Il prezzo di 229 euro è una rilevazione storica della campagna promozionale e non va considerato una quotazione attuale: offerte, disponibilità e venditore possono cambiare. La versione citata è quella Dark Gray da 40 mm, più compatta rispetto al modello da 44 mm e pensata per chi preferisce uno smartwatch leggero.</p>
 <h2>Display, processore e autonomia</h2>
 <p>Il Galaxy Watch8 da 40 mm utilizza un display Super AMOLED da 1,34 pollici con risoluzione di 438 x 438 pixel e modalità Always On. La cassa misura 40,4 x 42,7 x 8,6 millimetri e pesa circa 30 grammi senza cinturino. Al suo interno lavora il processore Exynos W1000 a cinque core, realizzato con processo a 3 nanometri, affiancato da 2 GB di RAM e 32 GB di memoria. Il sistema operativo è Wear OS 6 con interfaccia One UI 8 Watch.</p>
@@ -30,7 +30,7 @@ UPDATES={
 "slug":"giochi-in-uscita-ottobre-offerte",
 "title":"Giochi usciti a ottobre 2026: le principali novità per PC e console",
 "seo":{"seo_title":"Giochi usciti a ottobre 2026: date e piattaforme","seo_description":"Da Gears of War: E-Day a Phantom Blade Zero: i principali giochi arrivati a ottobre 2026 su PC, PS5, Xbox e Switch 2.","focus_keyphrase":"giochi usciti ottobre 2026"},
-"max_words":250,
+"max_words":650,
 "content":"""<p>Ottobre 2026 è stato uno dei mesi più densi dell'anno per il calendario videoludico, con uscite distribuite fra PC, PlayStation 5, Xbox Series X|S e Nintendo Switch 2. Il mese ha alternato remaster, nuovi capitoli di serie conosciute, giochi d'azione e produzioni indipendenti. A novembre il calendario di ottobre è ormai concluso: questa pagina diventa quindi un riepilogo delle principali uscite del mese, non una lista di preordini ancora da effettuare.</p>
 <h2>Le uscite di inizio ottobre</h2>
 <p>Il 1° ottobre sono arrivati <em>Dynasty Warriors 3: Complete Edition Remastered</em> e <em>End of Abyss</em>, insieme ad altre riedizioni e nuove produzioni. Il 2 ottobre è stata la volta di <em>Ace Combat 8: Wings of Theve</em>, nuovo capitolo della serie di combattimento aereo. Il 6 ottobre ha concentrato due nomi di grande richiamo: <em>Gears of War: E-Day</em>, destinato a Xbox e PC, e <em>Star Wars: Galactic Racer</em>, previsto anche su PlayStation 5.</p>
@@ -46,7 +46,7 @@ UPDATES={
 "slug":"pixel-10a-aumento-prezzo",
 "title":"Google Pixel 10a: prezzo ufficiale e offerte, cosa è cambiato",
 "seo":{"seo_title":"Google Pixel 10a: prezzo ufficiale 549 euro e offerte","seo_description":"Google Store indica Pixel 10a a 549 euro di listino e 449 euro in promozione. Le specifiche restano invariate: ecco cosa controllare prima dell'acquisto.","focus_keyphrase":"Google Pixel 10a prezzo"},
-"max_words":220,
+"max_words":650,
 "content":"""<p>Il prezzo del Google Pixel 10a è stato al centro di segnalazioni contrastanti, ma la scheda del Google Store italiano consultata l'11 novembre 2026 mostra un prezzo di vendita abituale di 549 euro e una promozione a partire da 449 euro. Non risulta quindi corretto presentare 649 euro come nuovo listino ufficiale senza una conferma del produttore. Il prezzo effettivo può variare in base a promozioni, configurazione e rivenditore: prima di acquistare è sempre opportuno controllare la pagina ufficiale e il prezzo finale nel carrello.</p>
 <h2>Che cosa offre Pixel 10a</h2>
 <p>Pixel 10a è uno smartphone di fascia media che punta su software Google, fotografia computazionale e un display OLED ad alta frequenza. Lo schermo Actua misura circa 6,3 pollici, ha risoluzione 1.080 x 2.424 pixel e supporta una frequenza variabile fra 60 e 120 Hz. Il vetro Corning Gorilla Glass 7i protegge la parte frontale e la luminosità di picco dichiarata arriva fino a 3.000 nit in condizioni specifiche, un valore utile per la leggibilità all'aperto.</p>
@@ -60,7 +60,7 @@ UPDATES={
 "slug":"smart-tv-in-offerta-65-75-pollici",
 "title":"Smart TV da 65 e 75 pollici: modelli e prezzi rilevati nelle offerte di ottobre",
 "seo":{"seo_title":"Smart TV 65 e 75 pollici: modelli e prezzi di ottobre","seo_description":"Riepilogo delle offerte di ottobre 2026 per TV Haier, LG e Philips da 65 e 75 pollici. I prezzi riportati sono storici, non quotazioni attuali.","focus_keyphrase":"Smart TV 65 e 75 pollici"},
-"max_words":230,
+"max_words":650,
 "content":"""<p>Le promozioni di ottobre 2026 hanno portato diversi televisori da 65 e 75 pollici sotto soglie di prezzo interessanti. Fra i modelli segnalati figuravano un Haier 4K con Google TV a 399,99 euro, un LG NanoCell AI da 65 pollici a 409 euro, un Philips Mini LED Quantum Dot da 65 pollici a 431 euro e un Philips da 75 pollici a 493 euro. Questi importi sono prezzi osservati nel periodo promozionale e vanno considerati come riferimento storico: non sono offerte garantite ancora disponibili oggi.</p>
 <h2>65 pollici: la scelta più equilibrata per molti salotti</h2>
 <p>Una diagonale da 65 pollici offre un'area di visione ampia senza richiedere lo spazio di un 75 pollici. Il modello Haier 4K con Google TV si rivolge a chi cerca una Smart TV essenziale con accesso alle principali app. LG NanoCell AI aggiunge l'elaborazione delle immagini tramite processore α7 e il sistema webOS, mentre il Philips Mini LED Quantum Dot punta su una gestione più evoluta della retroilluminazione e su una resa cromatica più ricca. Le differenze fra queste tecnologie contano più della sola diagonale: un pannello Mini LED può offrire un controllo della luminosità diverso rispetto a un LCD tradizionale, mentre la piattaforma smart determina l'accesso alle applicazioni e agli aggiornamenti.</p>
@@ -71,6 +71,31 @@ UPDATES={
 <p>Per un approfondimento su un modello specifico è disponibile la scheda della <a href="https://aivision.altervista.org/tv-lg-nanocell-ai-75-offerta-amazon/">LG NanoCell AI da 75 pollici</a>. Anche in quel caso il prezzo di ottobre è riportato come dato storico: prima di acquistare occorre verificare il prezzo corrente, il venditore, la spedizione e le condizioni di reso.</p>"""
 }
 }
+
+
+SOURCE_REFERENCES = {
+602: """\n<p class="av-source-reference">Fonti: <a href="https://www.samsung.com/it/watches/galaxy-watch/galaxy-watch8-40mm-graphite-bluetooth-sm-l320ndaaitv/" rel="noopener noreferrer">scheda ufficiale Samsung Galaxy Watch8 40 mm</a>; <a href="https://news.samsung.com/it/samsung-galaxy-watch8-series-comfort-estremo-dal-sonno-allallenamento" rel="noopener noreferrer">specifiche della serie Galaxy Watch8 su Samsung Newsroom</a>. I prezzi citati sono quelli rilevati nella promozione di ottobre 2026.</p>""",
+599: """\n<p class="av-source-reference">Fonti per il calendario delle uscite: <a href="https://www.everyeye.it/giochi/2026/ottobre/" rel="noopener noreferrer">calendario delle uscite videoludiche di ottobre 2026</a>; <a href="https://www.xbox.com/it-IT/games/gears-of-war-eday" rel="noopener noreferrer">pagina ufficiale Xbox di Gears of War: E-Day</a>. Le date possono variare in base a piattaforma e distribuzione regionale.</p>""",
+590: """\n<p class="av-source-reference">Fonti: <a href="https://store.google.com/it/product/pixel_10a?hl=it" rel="noopener noreferrer">Google Store Italia – Pixel 10a e prezzo di vendita</a>; <a href="https://store.google.com/it/product/pixel_10a_specs?hl=it" rel="noopener noreferrer">specifiche tecniche ufficiali Pixel 10a</a>. Prezzi e promozioni sono soggetti a variazioni.</p>""",
+587: """\n<p class="av-source-reference">Schede tecniche ufficiali dei modelli citati: <a href="https://www.haier-europe.com/it_IT/products/36200110-h65k85fux" rel="noopener noreferrer">Haier H65K85FUX</a>; <a href="https://www.lg.com/it/tv-soundbar/nanocell/65nano81a6a/" rel="noopener noreferrer">LG NanoCell 65NANO81A6A</a>; <a href="https://www.philips.it/c-p/65MLED820_12/tv-miniled-qd-4k" rel="noopener noreferrer">Philips 65MLED820</a>; <a href="https://www.philips.it/c-p/75PUS7000_12/led-tv-4k" rel="noopener noreferrer">Philips 75PUS7000</a>. Le pagine dei produttori documentano le caratteristiche tecniche, non i prezzi storici delle promozioni di ottobre.</p>"""
+}
+MONTHS_IT = ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+             "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre")
+
+def historical_price_note(published: str) -> str:
+    try:
+        d = dt.datetime.fromisoformat(str(published).replace("Z", "+00:00"))
+        date_label = f"{d.day} {MONTHS_IT[d.month - 1]} {d.year}"
+    except (ValueError, TypeError):
+        date_label = "la data di pubblicazione"
+    return (
+        '<!-- ai-vision-price-status:v1 --><div class="av-price-status-note" role="note">'
+        '<p><strong>Nota su prezzi e disponibilità:</strong> i prezzi e le condizioni commerciali '
+        f'riportati in questa pagina si riferiscono a quanto segnalato il {date_label}. '
+        'Promozioni e disponibilità possono essere cambiate: verifica sempre le condizioni aggiornate '
+        'sul sito del venditore prima dell’acquisto.</p></div>\n'
+    )
+
 def plain(s): return " ".join(html.unescape(re.sub(r"<[^>]+>"," ",s or "")).split())
 def words(s): return len(re.findall(r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’][\wÀ-ÖØ-öø-ÿ]+)*\b",plain(s)))
 def main():
@@ -87,11 +112,15 @@ def main():
    if p.get("status")!="publish" or p.get("slug")!=spec["slug"]: raise RuntimeError(f"Post {pid}: stato o slug inatteso.")
    raw=(p.get("content") or {}).get("raw");seo=p.get("aivision_seo")
    if not isinstance(raw,str) or not isinstance(seo,dict) or words(raw)>spec["max_words"]: raise RuntimeError(f"Post {pid}: contenuto o SEO inatteso.")
-   for link in re.findall(r'href="(https://aivision\.altervista\.org/[^"]+)"',spec["content"]):
+   after_content = spec["content"]
+   if pid in {602, 590, 587}:
+    after_content = historical_price_note(p.get("date")) + after_content
+   after_content += SOURCE_REFERENCES[pid]
+   for link in re.findall(r'href="(https://aivision\.altervista\.org/[^"]+)"',after_content):
     v=s.get(link,timeout=(8,25),allow_redirects=True)
     if v.status_code!=200 or not v.url.startswith(BASE+"/"): raise RuntimeError("Link interno non valido: "+link)
    after=dict(seo);after.update(spec["seo"])
-   changes.append({"id":pid,"slug":spec["slug"],"modified":p.get("modified"),"before_content":raw,"after_content":spec["content"],"before_seo":seo,"after_seo":after,"before_words":words(raw),"after_words":words(spec["content"])})
+   changes.append({"id":pid,"slug":spec["slug"],"modified":p.get("modified"),"before_content":raw,"after_content":after_content,"before_seo":seo,"after_seo":after,"before_words":words(raw),"after_words":words(after_content)})
   payload={"site":BASE,"created_at":dt.datetime.now(dt.timezone.utc).isoformat(),"changes":changes}
   PLAN.parent.mkdir(parents=True,exist_ok=True);PLAN.write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding="utf-8")
   BACKUP.write_text(json.dumps({"site":BASE,"created_at":payload["created_at"],"posts":[{"id":x["id"],"slug":x["slug"],"modified":x["modified"],"content_raw":x["before_content"],"aivision_seo":x["before_seo"]} for x in changes]},ensure_ascii=False,indent=2),encoding="utf-8")
