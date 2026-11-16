@@ -260,7 +260,7 @@ def main() -> int:
                     "mentre il prossimo anno arriverà sul mercato anche la variante Fire TV Stick Plus in alluminio e con tasti retroilluminati.",
                     ""
                 )
-                after_content = '<!-- ai-vision-price-status:v1 --><div class="av-price-status-note" role="note"><p><strong>Nota su prezzi e disponibilità:</strong> il prezzo di 35,99 euro era una promozione di lancio valida fino al 12 ottobre 2026. L\\'offerta è terminata e il prezzo attuale va verificato presso il venditore.</p></div>\n' + after_content
+                after_content = '<!-- ai-vision-price-status:v1 --><div class="av-price-status-note" role="note"><p><strong>Nota su prezzi e disponibilità:</strong> il prezzo di 35,99 euro era una promozione di lancio valida fino al 12 ottobre 2026. L\'offerta è terminata e il prezzo attuale va verificato presso il venditore.</p></div>\n' + after_content
             if post_id == 530:
                 after_content = after_content.replace("IP69K", "IP66/IP68")
             after_seo = dict(seo)
