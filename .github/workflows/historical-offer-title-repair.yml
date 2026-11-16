@@ -1,0 +1,60 @@
+name: AI Vision historic offer title cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/historical_offer_title_repair.py'
+      - '.github/workflows/historical-offer-title-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-historical-offer-title-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install WordPress API dependency
+        run: python -m pip install requests
+      - name: Validate script syntax
+        run: python -m py_compile scripts/historical_offer_title_repair.py
+      - name: Prepare historical titles and complete backup
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/historical_offer_title_repair.py prepare
+      - name: Save backup before WordPress writes
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-historical-offer-titles-backup-${{ github.run_id }}
+          path: |
+            data/historical_offer_titles_plan.json
+            data/historical_offer_titles_backup.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Apply and verify title and SEO changes
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/historical_offer_title_repair.py apply
+      - name: Upload verification result
+        if: ${{ always() && hashFiles('data/historical_offer_titles_result.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivision-historical-offer-titles-result-${{ github.run_id }}
+          path: data/historical_offer_titles_result.json
+          retention-days: 90
