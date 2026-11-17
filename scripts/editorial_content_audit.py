@@ -49,6 +49,7 @@ HISTORICAL_CONTEXT_RE = re.compile(
     r"non è più attiva|non è una quotazione attuale|prezzo storico|"
     r"all'epoca|in quella data|in quell'occasione|prezzo segnalato il|"
     r"si riferiscono a quanto segnalato il|promozioni e disponibilità possono essere cambiate|"
+    r"vecchia versione (?:di questa pagina|della pagina)|non va presentato come un'offerta ancora attiva|"
     r"l'offerta risale|ultimo giorno utile|ultima giornata|evento volge al termine|"
     r"fino alle 23:59|fino al \d{1,2}\b)\b", re.I
 )
