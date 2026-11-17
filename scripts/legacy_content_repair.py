@@ -179,6 +179,7 @@ REVIEW_REPAIRS = {
 
 def wp_fetch_posts(client: WordPressClient) -> list[dict]:
     posts = []
+    seen_ids: set[int] = set()
     for page in range(1, 20):
         response = client.session.get(
             client._url("posts"),
@@ -195,10 +196,59 @@ def wp_fetch_posts(client: WordPressClient) -> list[dict]:
             raise RuntimeError(f"Risposta WordPress non valida alla pagina {page}.")
         if not batch:
             break
+        for post in batch:
+            post_id = post.get("id") if isinstance(post, dict) else None
+            if not isinstance(post_id, int) or post_id <= 0:
+                raise RuntimeError(f"Record WordPress senza ID valido alla pagina {page}.")
+            if post_id in seen_ids:
+                raise RuntimeError(f"ID duplicato nella paginazione WordPress: {post_id}.")
+            seen_ids.add(post_id)
         posts.extend(batch)
         if len(batch) < 100:
             break
+    if not posts:
+        raise RuntimeError("WordPress non ha restituito articoli pubblicati: backup annullato.")
+    if len(posts) >= 1900:
+        raise RuntimeError("Archivio vicino al limite massimo di paginazione: backup non dimostrabile.")
     return posts
+
+
+def build_full_backup(posts: list[dict], plan: list[dict], mode: str) -> dict:
+    snapshots = []
+    for post in posts:
+        snapshots.append({
+            "id": int(post["id"]),
+            "url": post.get("link"),
+            "date": post.get("date"),
+            "modified": post.get("modified"),
+            "title": get_raw_title(post),
+            "content": get_raw_content(post),
+            "featured_media": post.get("featured_media"),
+        })
+    canonical = json.dumps(snapshots, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "site": BASE_URL,
+        "mode": mode,
+        "backup_type": "full_published_posts_snapshot",
+        "backup_complete": True,
+        "total_posts_scanned": len(posts),
+        "total_posts_backed_up": len(snapshots),
+        "snapshot_sha256": __import__("hashlib").sha256(canonical.encode("utf-8")).hexdigest(),
+        "planned_updates": len(plan),
+        "posts": snapshots,
+        "items": plan,
+    }
+
+
+def persist_backup(data: dict) -> None:
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    temporary = OUTPUT.with_suffix(OUTPUT.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    os.replace(temporary, OUTPUT)
 
 
 def get_raw_title(post: dict) -> str:
@@ -339,28 +389,20 @@ def main() -> int:
     client = WordPressClient(BASE_URL, username, app_password, dry_run=False)
     posts = wp_fetch_posts(client)
     plan = build_plan(posts)
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    backup = {
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "site": BASE_URL,
-        "mode": "apply" if args.apply else "dry_run",
-        "total_posts_scanned": len(posts),
-        "planned_updates": len(plan),
-        "items": plan,
-    }
-    # Persist the complete pre-change snapshot before the first WordPress write.
-    # This ensures the original title, body and featured image survive even if
-    # the workflow is interrupted while applying the repair plan.
+    backup = build_full_backup(posts, plan, "apply" if args.apply else "dry_run")
+    # Write the entire published-post snapshot atomically before any live write.
+    # A partial plan is not a sufficient backup: every published post is retained.
+    persist_backup(backup)
     backup["backup_persisted_before_apply"] = True
-    OUTPUT.write_text(json.dumps(backup, ensure_ascii=False, indent=2), encoding="utf-8")
+    persist_backup(backup)
 
     if args.apply:
         backup["apply_started"] = True
-        OUTPUT.write_text(json.dumps(backup, ensure_ascii=False, indent=2), encoding="utf-8")
+        persist_backup(backup)
         backup["results"] = apply_plan(client, plan)
         backup["updated"] = sum(x["status"] == "updated" for x in backup["results"])
         backup["errors"] = sum(x["status"] == "error" for x in backup["results"])
-    OUTPUT.write_text(json.dumps(backup, ensure_ascii=False, indent=2), encoding="utf-8")
+    persist_backup(backup)
     print("LEGACY CONTENT REPAIR", "APPLY" if args.apply else "DRY RUN")
     print("Articoli esaminati:", len(posts))
     print("Modifiche pianificate:", len(plan))
