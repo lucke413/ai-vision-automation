@@ -762,7 +762,7 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertIn("Source Example", payload["content"])
         self.assertIn("source.example.com/story", payload["content"])
         self.assertIn("/category/news/", payload["content"])
-        self.assertIn('<!-- wp:image {"id":1,"sizeSlug":"large","linkDestination":"none"} -->', payload["content"])
+        self.assertIn('<!-- wp:image {"id":1,"sizeSlug":"large","linkDestination":"none","style":{"border":{"width":"0px","style":"none"}}} -->', payload["content"])
         self.assertIn('src="https://aivision.altervista.org/wp-content/uploads/cover.png"', payload["content"])
         self.assertTrue(payload["meta"]["_jetpack_hide_featured_image"])
 
@@ -820,7 +820,7 @@ class EditorialExpansionTests(unittest.TestCase):
         client.get_or_create_term.side_effect = publisher.PublisherError("taxonomy unavailable")
         client.related_link.return_value = ""
         client.existing_post.return_value = None
-        client.upload_media.return_value = {"id": 1}
+        client.upload_media.return_value = {"id": 1, "source_url": "https://aivision.altervista.org/wp-content/uploads/cover.png"}
         client.create_post.return_value = {"id": 321, "link": "https://example.com/articolo", "status": "future"}
         client.save_seo.return_value = "warning"
         draft = {**item(80, "AI"), "title": "Un articolo informativo approfondito",
