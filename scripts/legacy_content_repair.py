@@ -250,6 +250,19 @@ def persist_backup(data: dict) -> None:
     )
     os.replace(temporary, OUTPUT)
 
+    # Read the file back from disk before allowing any live WordPress write.
+    persisted = json.loads(OUTPUT.read_text(encoding="utf-8"))
+    snapshots = persisted.get("posts")
+    expected_count = persisted.get("total_posts_scanned")
+    if not persisted.get("backup_complete") or not isinstance(snapshots, list):
+        raise RuntimeError("Backup non completo o non leggibile dopo il salvataggio.")
+    if expected_count != len(snapshots) or persisted.get("total_posts_backed_up") != len(snapshots):
+        raise RuntimeError("Conteggio del backup non coerente: applicazione bloccata.")
+    canonical = json.dumps(snapshots, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    actual_hash = __import__("hashlib").sha256(canonical.encode("utf-8")).hexdigest()
+    if actual_hash != persisted.get("snapshot_sha256"):
+        raise RuntimeError("Hash del backup non valido dopo il salvataggio: applicazione bloccata.")
+
 
 def get_raw_title(post: dict) -> str:
     title = post.get("title") or {}
