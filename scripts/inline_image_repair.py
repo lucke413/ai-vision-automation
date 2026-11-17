@@ -58,8 +58,14 @@ def raw_content(post: dict) -> str:
 
 def has_leading_cover(content: str) -> bool:
     value = str(content or "").lstrip()
-    return bool(re.match(r"(?:<!--\s*wp:image\b|<figure\b[^>]*>.*?<img\b|<img\b)", value, flags=re.IGNORECASE | re.DOTALL))
-
+    if re.match(r"<!--\\s*wp:image\\b", value, flags=re.IGNORECASE):
+        end = value.lower().find("<!-- /wp:image -->")
+        first_block = value[:end] if end >= 0 else value[:2500]
+        return bool(re.search(r"<img\\b", first_block, flags=re.IGNORECASE))
+    if re.match(r"<figure\\b", value, flags=re.IGNORECASE):
+        match = re.match(r"<figure\\b.*?</figure>", value, flags=re.IGNORECASE | re.DOTALL)
+        return bool(match and re.search(r"<img\\b", match.group(0), flags=re.IGNORECASE))
+    return bool(re.match(r"<img\\b", value, flags=re.IGNORECASE))
 
 def needs_inline_cover(post: dict) -> bool:
     content = raw_content(post)
