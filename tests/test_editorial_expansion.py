@@ -737,7 +737,7 @@ class EditorialExpansionTests(unittest.TestCase):
         }
         client.related_link.return_value = ""
         client.existing_post.return_value = None
-        client.upload_media.return_value = {"id": 1}
+        client.upload_media.return_value = {"id": 1, "source_url": "https://aivision.altervista.org/wp-content/uploads/cover.png"}
         client.create_post.return_value = {
             "id": 321, "link": "https://aivision.altervista.org/post/", "status": "future"
         }
@@ -762,6 +762,9 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertIn("Source Example", payload["content"])
         self.assertIn("source.example.com/story", payload["content"])
         self.assertIn("/category/news/", payload["content"])
+        self.assertIn('<!-- wp:image {"id":1,"sizeSlug":"large","linkDestination":"none"} -->', payload["content"])
+        self.assertIn('src="https://aivision.altervista.org/wp-content/uploads/cover.png"', payload["content"])
+        self.assertTrue(payload["meta"]["_jetpack_hide_featured_image"])
 
     def test_existing_wordpress_post_does_not_upload_images(self):
         client = MagicMock()
