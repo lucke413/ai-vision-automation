@@ -49,6 +49,7 @@ HISTORICAL_CONTEXT_RE = re.compile(
     r"non è più attiva|non è una quotazione attuale|prezzo storico|"
     r"all'epoca|in quella data|in quell'occasione|prezzo segnalato il|"
     r"si riferiscono a quanto segnalato il|promozioni e disponibilità possono essere cambiate|"
+    r"vecchia versione (?:di questa pagina|della pagina)|non va presentato come un'offerta ancora attiva|"
     r"l'offerta risale|ultimo giorno utile|ultima giornata|evento volge al termine|"
     r"fino alle 23:59|fino al \d{1,2}\b)\b", re.I
 )
@@ -79,6 +80,31 @@ MONTHS = {
     "giugno": 6, "luglio": 7, "agosto": 8, "settembre": 9,
     "ottobre": 10, "novembre": 11, "dicembre": 12,
 }
+
+VERIFIED_DATE_RE = re.compile(
+    r"\b(?:al momento del controllo|prezzo verificato|prezzo controllato|ricontrollato)"
+    r"\s+(?:(?:il|del)\s+)?(\d{1,2})\s+"
+    r"(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)"
+    r"\s+(\d{4})\b",
+    re.I,
+)
+
+
+def has_recent_price_check(text: str, today: dt.date, max_age_days: int = 7) -> bool:
+    for match in VERIFIED_DATE_RE.finditer(text or ""):
+        try:
+            checked = dt.date(
+                int(match.group(3)),
+                MONTHS[match.group(2).casefold()],
+                int(match.group(1)),
+            )
+        except (KeyError, ValueError):
+            continue
+        age = (today - checked).days
+        if 0 <= age <= max_age_days:
+            return True
+    return False
+
 
 
 def plain(value: str) -> str:
@@ -186,7 +212,10 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
 
     title_and_body = title + " " + body_without_links
     has_offer = bool(OFFER_RE.search(title_and_body))
-    has_historical_context = bool(HISTORICAL_CONTEXT_RE.search(body_without_links))
+    has_historical_context = (
+        bool(HISTORICAL_CONTEXT_RE.search(body_without_links))
+        or has_recent_price_check(body_without_links, today)
+    )
     if has_offer and age_days is not None and age_days > 21 and not has_historical_context:
         add_flag(flags, "stale_offer_review", "high",
                  "Contenuto commerciale pubblicato da oltre 21 giorni senza chiara indicazione storica.",
