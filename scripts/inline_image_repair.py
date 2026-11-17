@@ -58,7 +58,7 @@ def raw_content(post: dict) -> str:
 
 def has_leading_cover(content: str) -> bool:
     value = str(content or "").lstrip()
-    return bool(re.match(r"(?:<!--\\s*wp:image\\b|<figure\\b[^>]*>.*?<img\\b|<img\\b)", value, flags=re.IGNORECASE | re.DOTALL))
+    return bool(re.match(r"(?:<!--\s*wp:image\b|<figure\b[^>]*>.*?<img\b|<img\b)", value, flags=re.IGNORECASE | re.DOTALL))
 
 
 def needs_inline_cover(post: dict) -> bool:
@@ -77,7 +77,7 @@ def normalize_leading_cover(content: str) -> str:
         return value
     stripped = value.lstrip()
     if stripped.startswith("<!-- wp:image"):
-        match = re.match(r"(<!--\\s*wp:image\\s+)(\\{.*?\\})(\\s*-->)", stripped, flags=re.DOTALL)
+        match = re.match(r"(<!--\s*wp:image\s+)(\{.*?\})(\s*-->)", stripped, flags=re.DOTALL)
         if match:
             attrs = json.loads(match.group(2))
             style = attrs.setdefault("style", {})
@@ -87,7 +87,7 @@ def normalize_leading_cover(content: str) -> str:
             comment = match.group(1) + json.dumps(attrs, ensure_ascii=False, separators=(",", ":")) + match.group(3)
             value = value.replace(match.group(0), comment, 1)
         value = re.sub(
-            r'(<figure\\b[^>]*class="[^"]*)(")',
+            r'(<figure\b[^>]*class="[^"]*)(")',
             lambda m: m.group(1) + (" has-custom-border" if "has-custom-border" not in m.group(1) else "") + m.group(2),
             value,
             count=1,
@@ -95,16 +95,16 @@ def normalize_leading_cover(content: str) -> str:
         )
     def style_first_image(match):
         tag = match.group(0)
-        if re.search(r'\\bstyle\\s*=', tag, flags=re.IGNORECASE):
+        if re.search(r'\bstyle\s*=', tag, flags=re.IGNORECASE):
             return re.sub(
-                r'\\bstyle=(["\'])(.*?)\\1',
+                r'\bstyle=(["\'])(.*?)\1',
                 lambda m: 'style=' + m.group(1) + m.group(2).rstrip(";") + ';border-style:none;border-width:0px' + m.group(1),
                 tag,
                 count=1,
                 flags=re.IGNORECASE,
             )
         return tag[:-1] + ' style="border-style:none;border-width:0px">'
-    return re.sub(r"<img\\b[^>]*>", style_first_image, value, count=1, flags=re.IGNORECASE)
+    return re.sub(r"<img\b[^>]*>", style_first_image, value, count=1, flags=re.IGNORECASE)
 
 
 def fetch_all_posts(client: WordPressClient) -> list[dict]:
