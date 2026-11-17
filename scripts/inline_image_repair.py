@@ -14,7 +14,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.wp_publisher import PublisherError, WordPressClient, featured_image_block
+try:
+    from scripts.wp_publisher import PublisherError, WordPressClient, featured_image_block
+except ModuleNotFoundError:  # esecuzione diretta: python scripts/inline_image_repair.py
+    from wp_publisher import PublisherError, WordPressClient, featured_image_block
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKUP_PATH = ROOT / "data" / "inline_image_repair_backup.json"
