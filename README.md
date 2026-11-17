@@ -79,6 +79,8 @@ L'audit è read-only. Le modifiche agli articoli esistenti devono essere prepara
 
 Il JSON dell'audit conserva anche il testo pubblico integrale di ciascun articolo e gli estratti puntuali che hanno attivato i segnali, così la revisione può essere eseguita articolo per articolo senza indovinare il motivo dell'avviso.
 
+Per le offerte, il rilevatore riconosce anche una verifica del prezzo esplicitamente datata negli ultimi sette giorni; una verifica più vecchia non nasconde il segnale di contenuto potenzialmente scaduto.
+
 
 ## Riparazione conservativa degli articoli legacy
 
