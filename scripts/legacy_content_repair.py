@@ -348,7 +348,15 @@ def main() -> int:
         "planned_updates": len(plan),
         "items": plan,
     }
+    # Persist the complete pre-change snapshot before the first WordPress write.
+    # This ensures the original title, body and featured image survive even if
+    # the workflow is interrupted while applying the repair plan.
+    backup["backup_persisted_before_apply"] = True
+    OUTPUT.write_text(json.dumps(backup, ensure_ascii=False, indent=2), encoding="utf-8")
+
     if args.apply:
+        backup["apply_started"] = True
+        OUTPUT.write_text(json.dumps(backup, ensure_ascii=False, indent=2), encoding="utf-8")
         backup["results"] = apply_plan(client, plan)
         backup["updated"] = sum(x["status"] == "updated" for x in backup["results"])
         backup["errors"] = sum(x["status"] == "error" for x in backup["results"])
