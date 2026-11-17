@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -55,9 +56,55 @@ def raw_content(post: dict) -> str:
     return str(value or "")
 
 
+def has_leading_cover(content: str) -> bool:
+    value = str(content or "").lstrip()
+    return bool(re.match(r"(?:<!--\\s*wp:image\\b|<figure\\b[^>]*>.*?<img\\b|<img\\b)", value, flags=re.IGNORECASE | re.DOTALL))
+
+
 def needs_inline_cover(post: dict) -> bool:
     content = raw_content(post)
-    return bool(post.get("featured_media")) and "<img" not in content.lower() and "wp:image" not in content.lower()
+    if not post.get("featured_media"):
+        return False
+    if not has_leading_cover(content):
+        return True
+    # Anche una copertina già presente in cima deve essere priva del bordo blu.
+    return "border-style:none;border-width:0px" not in content[:2500]
+
+
+def normalize_leading_cover(content: str) -> str:
+    value = str(content or "")
+    if not has_leading_cover(value):
+        return value
+    stripped = value.lstrip()
+    if stripped.startswith("<!-- wp:image"):
+        match = re.match(r"(<!--\\s*wp:image\\s+)(\\{.*?\\})(\\s*-->)", stripped, flags=re.DOTALL)
+        if match:
+            attrs = json.loads(match.group(2))
+            style = attrs.setdefault("style", {})
+            border = style.setdefault("border", {})
+            border["width"] = "0px"
+            border["style"] = "none"
+            comment = match.group(1) + json.dumps(attrs, ensure_ascii=False, separators=(",", ":")) + match.group(3)
+            value = value.replace(match.group(0), comment, 1)
+        value = re.sub(
+            r'(<figure\\b[^>]*class="[^"]*)(")',
+            lambda m: m.group(1) + (" has-custom-border" if "has-custom-border" not in m.group(1) else "") + m.group(2),
+            value,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    def style_first_image(match):
+        tag = match.group(0)
+        if re.search(r'\\bstyle\\s*=', tag, flags=re.IGNORECASE):
+            return re.sub(
+                r'\\bstyle=(["\'])(.*?)\\1',
+                lambda m: 'style=' + m.group(1) + m.group(2).rstrip(";") + ';border-style:none;border-width:0px' + m.group(1),
+                tag,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        return tag[:-1] + ' style="border-style:none;border-width:0px">'
+    return re.sub(r"<img\\b[^>]*>", style_first_image, value, count=1, flags=re.IGNORECASE)
 
 
 def fetch_all_posts(client: WordPressClient) -> list[dict]:
@@ -119,8 +166,11 @@ def repair_post(client: WordPressClient, post: dict, media_cache: dict) -> dict:
     title_value = post.get("title")
     title = str(title_value.get("raw") or title_value.get("rendered") or "") if isinstance(title_value, dict) else str(title_value or "")
     media = fetch_media(client, media_id, media_cache)
-    block = featured_image_block(media, title)
-    updated_content = block + raw_content(post)
+    existing_content = raw_content(post)
+    if has_leading_cover(existing_content):
+        updated_content = normalize_leading_cover(existing_content)
+    else:
+        updated_content = featured_image_block(media, title) + existing_content
     request_with_retry(
         client.session,
         "post",
