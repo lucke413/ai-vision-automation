@@ -89,6 +89,19 @@ class LegacyContentRepairTests(unittest.TestCase):
             self.assertEqual(saved["posts"][0]["content"], original["content"]["raw"])
             self.assertFalse(destination.with_suffix(".json.tmp").exists())
 
+    def test_backup_with_invalid_hash_is_rejected_after_disk_readback(self):
+        import tempfile
+        from unittest.mock import patch
+
+        original = post(post_id=9004, title="Da proteggere")
+        backup = repair.build_full_backup([original], [], "apply")
+        backup["snapshot_sha256"] = "0" * 64
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "backup.json"
+            with patch.object(repair, "OUTPUT", destination):
+                with self.assertRaisesRegex(RuntimeError, "Hash del backup non valido"):
+                    repair.persist_backup(backup)
+
     def test_repair_is_idempotent(self):
         today = date(2026, 11, 16)
         original = post(post_id=478, title="iPhone 18 Pro: recensione")
