@@ -82,10 +82,10 @@ MONTHS = {
 }
 
 VERIFIED_DATE_RE = re.compile(
-    r"\\b(?:al momento del controllo|prezzo verificato|prezzo controllato|ricontrollato)"
-    r"\\s+(?:(?:il|del)\\s+)?(\\d{1,2})\\s+"
+    r"\b(?:al momento del controllo|prezzo verificato|prezzo controllato|ricontrollato)"
+    r"\s+(?:(?:il|del)\s+)?(\d{1,2})\s+"
     r"(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)"
-    r"\\s+(\\d{4})\\b",
+    r"\s+(\d{4})\b",
     re.I,
 )
 
