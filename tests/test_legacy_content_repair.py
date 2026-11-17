@@ -59,6 +59,36 @@ class LegacyContentRepairTests(unittest.TestCase):
         self.assertIn("AI Vision non ha eseguito test", plan[0]["new_content"])
         self.assertEqual(plan[0]["cover_category"], "Accessori e postazioni")
 
+    def test_full_backup_contains_every_published_post_not_only_repair_targets(self):
+        first = post(post_id=9001, title="Articolo ordinario")
+        second = post(post_id=9002, title="Altro articolo")
+        plan = repair.build_plan([first, second], date(2026, 11, 16))
+        backup = repair.build_full_backup([first, second], plan, "apply")
+
+        self.assertTrue(backup["backup_complete"])
+        self.assertEqual(backup["backup_type"], "full_published_posts_snapshot")
+        self.assertEqual(backup["total_posts_scanned"], 2)
+        self.assertEqual(backup["total_posts_backed_up"], 2)
+        self.assertEqual([item["id"] for item in backup["posts"]], [9001, 9002])
+        self.assertEqual(backup["posts"][0]["title"], "Articolo ordinario")
+        self.assertTrue(backup["snapshot_sha256"])
+
+    def test_backup_persistence_is_atomic_and_keeps_original_content(self):
+        import json
+        import tempfile
+        from unittest.mock import patch
+
+        original = post(post_id=9003, title="Originale")
+        backup = repair.build_full_backup([original], [], "dry_run")
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "backup.json"
+            with patch.object(repair, "OUTPUT", destination):
+                repair.persist_backup(backup)
+            saved = json.loads(destination.read_text(encoding="utf-8"))
+            self.assertEqual(saved["posts"][0]["title"], "Originale")
+            self.assertEqual(saved["posts"][0]["content"], original["content"]["raw"])
+            self.assertFalse(destination.with_suffix(".json.tmp").exists())
+
     def test_repair_is_idempotent(self):
         today = date(2026, 11, 16)
         original = post(post_id=478, title="iPhone 18 Pro: recensione")
