@@ -62,43 +62,40 @@ def needs_inline_cover(post: dict) -> bool:
 
 def fetch_all_posts(client: WordPressClient) -> list[dict]:
     posts: list[dict] = []
-    page = 1
-    while True:
-        response = request_with_retry(
-            client.session,
-            "get",
-            client._url("posts"),
-            params={
-                "status": "publish,future",
-                "context": "edit",
-                "per_page": PER_PAGE,
-                "page": page,
-                "orderby": "date",
-                "order": "desc",
-                "_fields": "id,title,status,date,modified,featured_media,content,meta,link",
-            },
-        )
-        batch = response.json()
-        if not isinstance(batch, list):
-            raise RuntimeError(f"Risposta inattesa da WordPress alla pagina {page}.")
-        posts.extend(item for item in batch if isinstance(item, dict))
-        total_pages = int(response.headers.get("X-WP-TotalPages") or 0)
-        if total_pages:
-            if page >= total_pages:
+    for status in ("publish", "future"):
+        page = 1
+        while True:
+            response = request_with_retry(
+                client.session,
+                "get",
+                client._url("posts"),
+                params={
+                    "status": status,
+                    "context": "edit",
+                    "per_page": PER_PAGE,
+                    "page": page,
+                    "orderby": "date",
+                    "order": "desc",
+                    "_fields": "id,title,status,date,modified,featured_media,content,meta,link",
+                },
+            )
+            batch = response.json()
+            if not isinstance(batch, list):
+                raise RuntimeError(f"Risposta inattesa da WordPress ({status}, pagina {page}).")
+            posts.extend(item for item in batch if isinstance(item, dict))
+            total_pages = int(response.headers.get("X-WP-TotalPages") or 0)
+            if total_pages:
+                if page >= total_pages:
+                    break
+            elif len(batch) < PER_PAGE:
                 break
-        elif len(batch) < PER_PAGE:
-            break
-        page += 1
-        if page > 100:
-            raise RuntimeError("Paginazione WordPress anomala: interruzione di sicurezza.")
-    ids = [p.get("id") for p in posts]
-    if len(ids) != len(set(ids)):
-        unique = {}
-        for post in posts:
-            unique[post.get("id")] = post
-        posts = list(unique.values())
-    return posts
-
+            page += 1
+            if page > 100:
+                raise RuntimeError("Paginazione WordPress anomala: interruzione di sicurezza.")
+    unique = {}
+    for post in posts:
+        unique[post.get("id")] = post
+    return list(unique.values())
 
 def fetch_media(client: WordPressClient, media_id: int, cache: dict) -> dict:
     if media_id in cache:
