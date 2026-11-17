@@ -1,0 +1,59 @@
+name: AI Vision inline image repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/inline_image_repair.py"
+      - "tests/test_inline_image_repair.py"
+      - ".github/workflows/inline-image-repair.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-vision-inline-image-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile and test repair
+        run: |
+          python -m py_compile scripts/wp_publisher.py scripts/inline_image_repair.py
+          python -m unittest tests.test_inline_image_repair -v
+
+      - name: Back up and repair published and scheduled articles
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          WP_INLINE_IMAGE_REPAIR: "true"
+        run: python scripts/inline_image_repair.py
+
+      - name: Upload full backup and repair report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-vision-inline-image-repair
+          path: |
+            data/inline_image_repair_backup.json
+            data/inline_image_repair_report.json
+          if-no-files-found: warn
+          retention-days: 90
