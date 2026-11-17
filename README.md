@@ -90,3 +90,10 @@ Il programma `scripts/legacy_content_repair.py` è in sola lettura per impostazi
 
 
 Il repair workflow applica soltanto i record selezionati dalle regole dell'audit e usa marker idempotenti: una seconda esecuzione non duplica le note e non riscrive le schede già sistemate.
+
+
+## Copertine nel corpo degli articoli
+
+Il publisher 3.1 inserisce la copertina caricata anche nel corpo del post come blocco immagine Gutenberg non collegato, con bordo disattivato. La copertina resta anche impostata come immagine in evidenza, ma viene nascosta nella pagina singola per evitare duplicati.
+
+Il workflow `inline-image-repair.yml` esegue una riparazione conservativa degli articoli già pubblicati e programmati: prima salva un backup integrale di tutti i post interessati, poi aggiunge soltanto le immagini in evidenza mancanti nel corpo. Verifica ogni modifica e carica backup e report come artefatti GitHub Actions con conservazione di 90 giorni. Il workflow non riscrive i testi, non cambia date o stati e non elimina contenuti.
