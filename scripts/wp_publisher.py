@@ -1143,8 +1143,8 @@ def featured_image_block(media: dict, title: str) -> str:
     safe_url = html.escape(image_url, quote=True)
     safe_alt = html.escape(str(title or "AI Vision"), quote=True)
     return (
-        f'<!-- wp:image {{"id":{int(media_id)},"sizeSlug":"large","linkDestination":"none"}} -->\n'
-        f'<figure class="wp-block-image size-large"><img src="{safe_url}" alt="{safe_alt}" class="wp-image-{int(media_id)}" /></figure>\n'
+        f'<!-- wp:image {{"id":{int(media_id)},"sizeSlug":"large","linkDestination":"none","style":{{"border":{{"width":"0px","style":"none"}}}}}} -->\n'
+        f'<figure class="wp-block-image size-large has-custom-border"><img src="{safe_url}" alt="{safe_alt}" class="wp-image-{int(media_id)}" style="border-style:none;border-width:0px" /></figure>\n'
         '<!-- /wp:image -->\n\n'
     )
 
