@@ -37,6 +37,18 @@ class EditorialContentAuditTests(unittest.TestCase):
         ), current)
         self.assertNotIn("stale_offer_review", {x["code"] for x in historical["flags"]})
 
+    def test_explicitly_identified_old_page_offer_is_historical(self):
+        current = date(2026, 11, 16)
+        result = audit.analyze_post(post(
+            "Samsung Galaxy Z Flip8: caratteristiche e prezzo",
+            "<p>La vecchia versione di questa pagina riportava una promozione Amazon "
+            "con uno sconto del 47%, ma non indicava il prezzo effettivo: "
+            "un dato del genere non va presentato come un'offerta ancora attiva. "
+            + "dettaglio " * 80 + "</p>",
+            date_value="2026-10-07T14:00:00",
+        ), current)
+        self.assertNotIn("stale_offer_review", {x["code"] for x in result["flags"]})
+
     def test_generic_product_offering_and_price_tracking_are_not_stale_promotions(self):
         current = date(2026, 11, 16)
         product_launch = audit.analyze_post(post(
