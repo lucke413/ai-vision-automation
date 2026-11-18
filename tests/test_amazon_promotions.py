@@ -21,7 +21,7 @@ class AmazonPromotionsTests(unittest.TestCase):
                 "isBuyBoxWinner": True,
                 "availability": {"type": "IN_STOCK"},
                 "condition": {"value": "New"},
-                "dealDetails": {"accessType": "PRIME_EXCLUSIVE",
+                "dealDetails": {"accessType": "PRIME_EXCLUSIVE", "badge": "Black Friday Deal",
                                 "endTime": (self.now + timedelta(hours=8)).isoformat()},
                 "price": {"money": {"currency": "EUR", "amount": 59.9},
                           "savings": {"percentage": 20}},
@@ -90,6 +90,9 @@ class AmazonPromotionsTests(unittest.TestCase):
         self.assertIn("Offerte Amazon del giorno · Black Friday", title)
         self.assertIn("OFFERTE DEL GIORNO · BLACK FRIDAY", label)
         self.assertGreater(len(intro.split()), 15)
+        self.assertTrue(promos.belongs_to_campaign(deal, campaign))
+        other_campaign = promos.replace(campaign, title="Prime Day")
+        self.assertFalse(promos.belongs_to_campaign(deal, other_campaign))
 
 
 if __name__ == "__main__":

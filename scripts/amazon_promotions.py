@@ -96,6 +96,7 @@ class Offer:
     affiliate: bool = False
     starts: datetime | None = None
     evidence_url: str = ""
+    campaign_badge: str = ""
 
 
 def italian_date(day: date, year: bool = True) -> str:
@@ -328,7 +329,8 @@ class CreatorsAPI:
                 used.add(family)
         return selected
 
-    def verify(self, selections: list[tuple[Category, Offer]], now: datetime) -> list[Offer]:
+    def verify(self, selections: list[tuple[Category, Offer]], now: datetime,
+               campaign: Offer | None = None) -> list[Offer]:
         if not selections:
             return []
         selected = {offer.key: category for category, offer in selections}
@@ -336,6 +338,7 @@ class CreatorsAPI:
         return [
             offer for item in items
             if (category := selected.get(item.get("asin"))) and (offer := product_offer(item, category, now, self.tag))
+            and (campaign is None or belongs_to_campaign(offer, campaign))
         ]
 
 
@@ -372,8 +375,13 @@ def product_offer(item: dict, category: Category, now: datetime, tag: str) -> Of
         terms = "Offerta riservata ai clienti Prime." if access == "PRIME_EXCLUSIVE" else ""
         return Offer(asin, category.title, " ".join(title.split())[:180], category.caveat, category.why,
                      terms, url, min(now + timedelta(hours=3), end - SAFETY_WINDOW), display, savings,
-                     affiliate=True)
+                     affiliate=True, campaign_badge=str(deal.get("badge") or ""))
     return None
+
+
+def belongs_to_campaign(offer: Offer, campaign: Offer) -> bool:
+    badge = offer.campaign_badge.casefold()
+    return campaign.title.casefold() in badge or (campaign.title == "Black Friday" and "cyber monday" in badge)
 
 
 def render_offers(offers: list[Offer], now: datetime) -> str:
@@ -492,13 +500,13 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
             report["catalog"] = "unavailable"
             report["warnings"].append(f"Ricerca Creators API: {type(exc).__name__}")
 
-    def publish(title, slug, intro, scene, label, bundles=(), first=()):
+    def publish(title, slug, intro, scene, label, bundles=(), first=(), event_only=None):
         def recheck():
             refreshed_at = datetime.now(get_timezone())
             if refreshed_at.date() != now.date():
                 return ""
             try:
-                verified = catalog.verify(list(bundles), refreshed_at)
+                verified = catalog.verify(list(bundles), refreshed_at, event_only)
             except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
                 verified = []
                 report["warnings"].append(f"Verifica prezzi Creators API: {type(exc).__name__}")
@@ -518,10 +526,12 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
     spotlight = []
     for category in CATEGORIES:
         same_category = [row for row in selections if row[0] == category]
+        if active:
+            same_category = [row for row in same_category if belongs_to_campaign(row[1], active)]
         daily.extend(same_category[:1 if active else 2])
         if active:
             spotlight.extend(same_category[1:])
-    if daily or services:
+    if daily or services or active:
         suffix = f" · {active.title}" if active else ("" if daily else " · libri e abbonamenti")
         title = f"Offerte Amazon del giorno{suffix} | {stamp}"
         scene = ("Photorealistic editorial still life, gift parcels and price label with no text, " +
@@ -530,9 +540,12 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                  ", warm amber lighting, subjects in the upper-right of the photograph")
         intro = ("La selezione di oggi raccoglie le promozioni confermate e le organizza per categoria. "
                  "Per ogni proposta trovi a chi può servire e cosa controllare prima di acquistarla.")
+        if active:
+            intro += f" La sezione Eventi Amazon è dedicata al {active.title}. Gli abbonamenti elencati sono promozioni distinte."
+        editorial = ([active] if active else []) + services
         publish(title, "offerte-amazon-del-giorno-" + now.date().isoformat(), intro, scene,
                 "OFFERTE DEL GIORNO" if not active else f"OFFERTE DEL GIORNO · {active.title.upper()}",
-                daily, services)
+                daily, editorial, event_only=active)
 
     for campaign in campaigns:
         title = f"{campaign.title} Amazon {campaign.starts.year} | calendario e consigli per gli acquisti"
@@ -552,7 +565,7 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                  "Confronta le specifiche del modello e quello che ti serve prima di decidere.")
         publish(title, f"amazon-{slugify(active.title)}-{slugify(category.title)}-{now.date().isoformat()}",
                 intro, f"Editorial photography of {category.scene}, amber tag and kraft parcel, clean counter",
-                f"{active.title.upper()} · {category.title.upper()}", picks)
+                f"{active.title.upper()} · {category.title.upper()}", picks, event_only=active)
 
     if not any(row["status"] in {"published", "already_exists", "planned"} for row in report["items"]):
         report["warnings"].append("Nessun articolo promozionale verificato o pubblicabile oggi.")
