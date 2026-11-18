@@ -875,7 +875,7 @@ def select_cover(draft: dict, session: requests.Session) -> tuple[bytes, str, st
         downloaded = download_image(url, session)
         if downloaded:
             return *downloaded, "wikimedia_commons", url, credit
-    return generate_ai_cover(draft), ".jpg", "ai_generated", "", CoverCredit("Illustrazione generata con IA")
+    return generate_ai_cover(draft), ".jpg", "ai_generated", "", CoverCredit("")
 
 
 class WordPressClient:

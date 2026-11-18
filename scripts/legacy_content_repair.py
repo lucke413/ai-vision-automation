@@ -355,7 +355,7 @@ def apply_plan(client: WordPressClient, plan: list[dict]) -> list[dict]:
                     f"ai-vision-legacy-{post_id}-{slugify(item['new_title'])}.jpg",
                     "image/jpeg",
                     item.get("cover_alt") or item["new_title"],
-                    "Illustrazione generata con IA",
+                    "",
                 )
                 if not media.get("id"):
                     raise RuntimeError("Copertina grafica non caricata.")

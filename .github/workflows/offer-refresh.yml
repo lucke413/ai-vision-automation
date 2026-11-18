@@ -1,0 +1,60 @@
+name: AI Vision offer covers and captions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/offer-refresh.yml'
+  workflow_dispatch:
+    inputs:
+      apply_changes:
+        description: 'Aggiorna le copertine e rimuovi le didascalie redazionali dalle immagini IA'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-vision-offer-refresh
+  cancel-in-progress: false
+
+jobs:
+  verify-and-refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+      WP_USERNAME: ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      AMAZON_ASSOCIATE_TAG: ${{ vars.AMAZON_ASSOCIATE_TAG }}
+      WP_TIMEZONE: Europe/Rome
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Test e inventario
+        run: |
+          python -m unittest discover -s tests -p 'test_wp_offer_refresh.py' -v
+          python scripts/wp_offer_refresh.py
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.apply_changes || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-REFRESH-OFFERS]')) }}
+        with:
+          name: ai-vision-offer-refresh-backups
+          path: data/offer_refresh_public_backups.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Aggiorna e verifica WordPress
+        if: ${{ inputs.apply_changes || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-REFRESH-OFFERS]')) }}
+        run: python scripts/wp_offer_refresh.py --apply
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('data/offer_refresh_result.json') != '' }}
+        with:
+          name: ai-vision-offer-refresh-report
+          path: data/offer_refresh_result.json
+          retention-days: 30

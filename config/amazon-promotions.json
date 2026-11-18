@@ -6,5 +6,88 @@
   "announcements": [
     "https://www.aboutamazon.it/notizie/company-news/amazon-black-friday-wonder-space",
     "https://www.aboutamazon.it/notizie/company-news/torna-il-mese-della-lettura-amazon"
-  ]
+  ],
+  "editorial_picks": {
+    "reading-2026-11": {
+      "until": "2026-12-01T00:00:00+01:00",
+      "terms": "Titolo segnalato per il Mese della Lettura. La scheda Amazon riporta formato, prezzo e disponibilità della specifica edizione.",
+      "products": [
+        {
+          "category": "Narrativa italiana",
+          "title": "Come l’arancio amaro — Milena Palminteri",
+          "url": "https://www.amazon.it/dp/883011037X",
+          "description": "Una storia familiare ambientata in Sicilia, in cui una scoperta d’archivio spinge la protagonista a rimettere insieme il proprio passato.",
+          "why": "Se cerchi un romanzo italiano in cui l’ambientazione e i rapporti tra generazioni contano più del ritmo da thriller."
+        },
+        {
+          "category": "Fantasy",
+          "title": "Onyx Storm — Rebecca Yarros, edizione italiana",
+          "url": "https://www.amazon.it/dp/8820077353",
+          "description": "Terzo volume della serie Empyrean, con draghi, intrighi e una guerra che allarga la posta in gioco.",
+          "why": "È la scelta per proseguire dopo Fourth Wing e Iron Flame. Parti dal primo volume se non conosci la serie."
+        },
+        {
+          "category": "Libri illustrati",
+          "title": "Il ladro di foglie — Alice Hemming e Nicola Slater",
+          "url": "https://www.amazon.it/dp/8829601357",
+          "description": "Un albo illustrato in cui uno scoiattolo sospetta che qualcuno stia facendo sparire le foglie del suo albero.",
+          "why": "Funziona bene come lettura ad alta voce per parlare con i bambini dei cambiamenti dell’autunno."
+        }
+      ]
+    },
+    "black-friday-2026": {
+      "until": "2026-12-01T00:00:00+01:00",
+      "terms": "Modello da tenere d’occhio durante la campagna. Controlla sulla scheda Amazon prezzo, disponibilità ed eventuale sconto.",
+      "products": [
+        {
+          "category": "Lettura",
+          "title": "Kindle Colorsoft Signature Edition (32 GB)",
+          "url": "https://www.amazon.it/dp/B0CX8YKQ2H",
+          "description": "Il display e-ink a colori serve soprattutto per fumetti, copertine e annotazioni. La versione Signature ha luce frontale automatica e supporta la ricarica wireless.",
+          "why": "Ha senso se leggi spesso contenuti a colori. Per i soli romanzi un e-reader in bianco e nero resta una scelta pratica."
+        },
+        {
+          "category": "Streaming",
+          "title": "Amazon Fire TV Stick 4K (Wi-Fi 6)",
+          "url": "https://www.amazon.it/dp/B0BTFWFRWN",
+          "description": "Una chiavetta HDMI con supporto 4K HDR e telecomando vocale, pensata per usare le app di streaming dalla TV.",
+          "why": "Può rinnovare una TV 4K le cui app interne sono lente. Controlla la compatibilità HDMI e i servizi che usi."
+        }
+      ]
+    },
+    "roborock-2026": {
+      "until": "2026-12-01T00:00:00+01:00",
+      "terms": "Verifica prezzo e disponibilità sulla scheda del modello e controlla il contenuto del pacchetto.",
+      "products": [
+        {
+          "category": "Robot con rullo",
+          "title": "Roborock Saros 20 Flow Complete",
+          "url": "https://www.amazon.it/dp/B0H83J9FWG",
+          "description": "Robot con rullo lavapavimenti e torretta retrattile, pensato per la pulizia programmata anche sotto arredi bassi.",
+          "why": "Conviene valutarlo se vuoi automatizzare pulizia e manutenzione su pavimenti duri e hai poco spazio sotto i mobili."
+        },
+        {
+          "category": "Robot con rullo",
+          "title": "Roborock Qrevo Curv 2 Flow con detergente",
+          "url": "https://www.amazon.it/dp/B0H2J4GXNS",
+          "description": "Robot con rullo risciacquato durante il lavaggio e stazione multifunzione. Questa scheda include il detergente da 480 ml.",
+          "why": "Da considerare se lavi spesso piastrelle o superfici dure e vuoi delegare al robot anche il risciacquo del rullo."
+        },
+        {
+          "category": "Robot con panni rotanti",
+          "title": "Roborock Qrevo S Pro",
+          "url": "https://www.amazon.it/dp/B0GHN3V6BP",
+          "description": "Robot con due panni rotanti e stazione di lavaggio, orientato alla pulizia di mantenimento.",
+          "why": "Può bastare per le pulizie frequenti di casa. Confronta gli accessori della confezione con quelli del Set citato nell’articolo."
+        },
+        {
+          "category": "Lavapavimenti a vapore",
+          "title": "Roborock F25 Steam",
+          "url": "https://it.roborock.com/products/roborock-f25-steam",
+          "description": "Lavapavimenti guidata a mano che combina aspirazione, rullo e vapore.",
+          "why": "Utile per intervenire in modo mirato sui residui aderenti, se il pavimento è compatibile con il vapore."
+        }
+      ]
+    }
+  }
 }

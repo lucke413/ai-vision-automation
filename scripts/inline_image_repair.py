@@ -265,7 +265,7 @@ def repair_post(client: WordPressClient, post: dict, upgrade: dict | None = None
         ).json()
         media = next((item for item in existing if item.get("mime_type") == "image/jpeg"
                       and wp_media_url(item.get("source_url", ""), client)), None)
-        credit = credit or CoverCredit("Illustrazione generata con IA")
+        credit = credit or CoverCredit("")
         if media is None:
             data = (UPGRADE_DIR / f"{post_id}.jpg").read_bytes() if upgrade else generate_ai_cover({"title": title})
             with Image.open(io.BytesIO(data)) as image:

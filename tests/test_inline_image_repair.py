@@ -64,7 +64,7 @@ class InlineImageRepairTests(unittest.TestCase):
         saved = MagicMock()
         saved.json.return_value = {
             "status": "future", "featured_media": 77,
-            "content": {"raw": repair.featured_image_block(new_media, "Titolo", repair.CoverCredit("Illustrazione generata con IA")) + "\n\n" + self.body},
+            "content": {"raw": repair.featured_image_block(new_media, "Titolo", repair.CoverCredit("")) + "\n\n" + self.body},
         }
         current = MagicMock()
         current.json.return_value = post
@@ -79,7 +79,7 @@ class InlineImageRepairTests(unittest.TestCase):
         self.assertNotIn(self.old_url, payload["content"])
         self.assertTrue(payload["content"].endswith(self.body))
         self.assertEqual(result["status"], "future")
-        self.assertIn("Illustrazione generata con IA", payload["content"])
+        self.assertNotIn("Illustrazione generata con IA", payload["content"])
 
     def test_later_image_is_not_captured_by_a_broken_leading_marker(self):
         content = '<!-- wp:image {"id":42} -->' + self.body + self.cover

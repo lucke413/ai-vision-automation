@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 if __package__:
     from .amazon_affiliate import DISCLOSURE, MARKER, SITE_HOSTS, configured_tag, product_asin, tracking_tag
@@ -55,29 +55,35 @@ class Category:
     why: str
     caveat: str
     scene: str
+    summary: str
 
 
 CATEGORIES = (
     Category("Audio", "cuffie bluetooth", r"cuffi|auricolar",
              "Ha senso se vuoi ascoltare in mobilità senza un cavo tra telefono e cuffie.",
              "Verifica comodità, autonomia e codec del tuo dispositivo.",
-             "wireless headphones"),
+             "wireless headphones",
+             "Cuffie senza filo pensate per ascolto quotidiano e spostamenti."),
     Category("PC e archiviazione", "ssd", r"\bssd\b",
              "È una possibilità per espandere lo spazio o sostituire un'unità lenta.",
              "Controlla formato, interfaccia e spazio libero nel tuo computer.",
-             "compact solid-state drive"),
+             "compact solid-state drive",
+             "Unità a stato solido per archiviare file, giochi o il sistema operativo."),
     Category("Casa smart", "presa smart wifi", r"\bpres[ae]\b",
              "È pensata per programmare l'accensione di piccoli elettrodomestici compatibili.",
              "Controlla carico massimo, tipo di presa e compatibilità con la rete di casa.",
-             "smart plug and warm lamp"),
+             "smart plug and warm lamp",
+             "Presa connessa per controllare un apparecchio compatibile anche senza essere a casa."),
     Category("Gaming", "controller gaming", r"\bcontroller\b|\bgamepad\b",
              "Può servire come secondo pad o per sostituire un controller usurato.",
              "Verifica piattaforma supportata, tipo di connessione e alimentazione.",
-             "game controller"),
+             "game controller",
+             "Controller dedicato al gioco, utile per chi preferisce i comandi fisici alla tastiera."),
     Category("Accessori smartphone", "power bank", r"power\s*bank|batteria portatile",
              "È una scelta pratica se il telefono arriva scarico a metà giornata.",
              "Prima di comprarlo, verifica capacità, peso e potenza USB-C.",
-             "USB-C power bank"),
+             "USB-C power bank",
+             "Batteria portatile per ricaricare telefono e piccoli dispositivi lontano dalla presa."),
 )
 
 
@@ -97,6 +103,7 @@ class Offer:
     starts: datetime | None = None
     evidence_url: str = ""
     campaign_badge: str = ""
+    product: bool = False
 
 
 def italian_date(day: date, year: bool = True) -> str:
@@ -311,7 +318,7 @@ class CreatorsAPI:
         result = payload.get("searchResult" if operation == "searchItems" else "itemsResult") or {}
         return result.get("items") or []
 
-    def shortlist(self, now: datetime) -> list[tuple[Category, Offer]]:
+    def shortlist(self, now: datetime, campaign: Offer | None = None) -> list[tuple[Category, Offer]]:
         selected = []
         used = set()
         for category in CATEGORIES:
@@ -320,7 +327,7 @@ class CreatorsAPI:
             offers = []
             for item in items:
                 offer = product_offer(item, category, now, self.tag)
-                if offer:
+                if offer and (campaign is None or belongs_to_campaign(offer, campaign)):
                     offers.append((item.get("parentASIN") or offer.key, offer))
             for family, offer in sorted(offers, key=lambda pair: pair[1].savings, reverse=True):
                 if family in used or sum(c == category for c, _ in selected) >= 2:
@@ -373,7 +380,8 @@ def product_offer(item: dict, category: Category, now: datetime, tag: str) -> Of
             continue
         display = f"{amount:,.2f}".translate(str.maketrans(",.", ".,")) + " €"
         terms = "Offerta riservata ai clienti Prime." if access == "PRIME_EXCLUSIVE" else ""
-        return Offer(asin, category.title, " ".join(title.split())[:180], category.caveat, category.why,
+        return Offer(asin, category.title, " ".join(title.split())[:180],
+                     f"{category.summary} {category.caveat}", category.why,
                      terms, url, min(now + timedelta(hours=3), end - SAFETY_WINDOW), display, savings,
                      affiliate=True, campaign_badge=str(deal.get("badge") or ""))
     return None
@@ -384,17 +392,22 @@ def belongs_to_campaign(offer: Offer, campaign: Offer) -> bool:
     return campaign.title.casefold() in badge or (campaign.title == "Black Friday" and "cyber monday" in badge)
 
 
-def render_offers(offers: list[Offer], now: datetime) -> str:
+def render_offers(offers: list[Offer], now: datetime, *, disclosure: bool = True,
+                  heading: str = "Scelte da AI Vision per voi") -> str:
     offers = [offer for offer in offers if now < offer.expires]
     if not offers:
         return ""
-    sections = [f'<div class="{MARKER}"><p>{DISCLOSURE}</p><h2>Scelte da AI Vision per voi</h2>']
+    sections = [f'<div class="{MARKER}">']
+    if disclosure:
+        sections.append(f"<p>{DISCLOSURE}</p>")
+    sections.append(f"<h2>{heading}</h2>")
     verified = now.strftime("%d/%m/%Y alle %H:%M")
     for category in dict.fromkeys(offer.category for offer in offers):
         sections.append(f"<h3>{html.escape(category)}</h3>")
         for offer in (item for item in offers if item.category == category):
             title = html.escape(offer.title)
-            label = "Clicca qui per acquistarlo su Amazon" if offer.savings else "Vai alla promozione"
+            label = ("Clicca qui per acquistarlo su Amazon" if product_asin(offer.url)
+                     else "Vai alla promozione")
             rel = ' rel="sponsored nofollow"' if offer.affiliate else ""
             sections.append(f"<!-- {MARK} {offer.expires.astimezone(timezone.utc).isoformat()} -->")
             sections.append(f"<h4>{title}</h4>")
@@ -404,8 +417,12 @@ def render_offers(offers: list[Offer], now: datetime) -> str:
                 wording = "Inizia" if start > now else "La campagna si svolge"
                 sections.append(f"<p>{wording} il {italian_date(start.date())}. "
                                 f"Termine il {italian_date(until)}.</p>")
-            sections.append(f"<p>{html.escape(offer.description)}</p>")
-            sections.append(f"<p><strong>Perché sceglierlo.</strong> {html.escape(offer.why)}</p>")
+            short_review = "<strong>Mini recensione.</strong> " if offer.product or product_asin(offer.url) else ""
+            sections.append(f"<p>{short_review}{html.escape(offer.description)}</p>")
+            reason = "Perché comprarlo" if offer.product or product_asin(offer.url) else "Perché sceglierla"
+            if offer.product and not offer.affiliate:
+                label = "Vedi il prodotto sul sito ufficiale"
+            sections.append(f"<p><strong>{reason}.</strong> {html.escape(offer.why)}</p>")
             if offer.price:
                 sections.append(f"<p><strong>{html.escape(offer.price)}</strong>. "
                                 f"Prezzo verificato e valido al momento della pubblicazione ({verified}, ora italiana). "
@@ -418,20 +435,81 @@ def render_offers(offers: list[Offer], now: datetime) -> str:
 
 
 def cover_label(content: bytes, label: str) -> bytes:
-    using = Image.open(io.BytesIO(content)).convert("RGB")
-    width, height = using.size
-    canvas = ImageDraw.Draw(using)
-    font = ImageFont.truetype("DejaVuSans-Bold.ttf", width // 19)
-    if canvas.textlength(label, font=font) > width * .80:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", width // 27)
-    canvas.text((width * .10, height * .75), label, font=font, anchor="lm",
-                fill="#fff4d7", stroke_width=4, stroke_fill="#191410")
-    caption_font = ImageFont.truetype("DejaVuSans-Bold.ttf", width // 42)
-    canvas.text((width * .10, height * .84), "Scelte da AI Vision per voi", font=caption_font,
-                anchor="lm", fill="#fff4d7", stroke_width=2, stroke_fill="#191410")
+    with Image.open(io.BytesIO(content)) as source:
+        photo = ImageOps.fit(source.convert("RGB"), (1200, 675), Image.Resampling.LANCZOS)
+    width, height = photo.size
+    fade = Image.new("RGBA", photo.size)
+    shade = ImageDraw.Draw(fade)
+    for x in range(width):
+        strength = max(0.0, 1 - x / 760)
+        shade.line((x, 0, x, height), fill=(15, 14, 29, round(227 * strength)))
+    cover = Image.alpha_composite(photo.convert("RGBA"), fade)
+    draw = ImageDraw.Draw(cover)
+    x = 92
+    brand = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
+    font = ImageFont.truetype("DejaVuSans-Bold.ttf", 75)
+    title = "\n".join("Offerte del giorno" if part.upper() == "OFFERTE DEL GIORNO" else
+                      part.title().replace("Pc ", "PC ") for part in label.split(" · "))
+    lines = []
+    for part in title.splitlines():
+        line = ""
+        for word in part.split():
+            joined = " ".join(filter(None, (line, word)))
+            if line and draw.textlength(joined, font=font) > 530:
+                lines.append(line)
+                line = word
+            else:
+                line = joined
+        if line:
+            lines.append(line)
+    title = "\n".join(lines)
+    box = draw.multiline_textbbox((0, 0), title, font=font, spacing=5)
+    title_top = max(112, (height - (box[3] - box[1])) // 2 - 22)
+    draw.text((x, title_top - 49), "AI VISION", font=brand, fill="#dbfa76")
+    draw.multiline_text((x, title_top), title, font=font, spacing=5, fill="#fbf8f3",
+                        stroke_width=1, stroke_fill="#202030")
+    draw.text((x, title_top + box[3] + 30), "Scelte da AI Vision per voi", font=brand, fill="#fbf8f3",
+              stroke_width=1, stroke_fill="#202030")
     buffer = io.BytesIO()
-    using.save(buffer, "JPEG", quality=90, optimize=True)
+    cover.convert("RGB").save(buffer, "JPEG", quality=88, optimize=True)
     return buffer.getvalue()
+
+
+def cover_scene(subject: str) -> str:
+    return ("Contemporary high-end technology and culture magazine editorial photography. On the right "
+            + subject + ". Sculptural translucent acrylic on graphite pedestal, cool lilac rim light, "
+            "subtle acid-lime accent, physically realistic materials. Empty dark left side, "
+            "sharp uncluttered typography space. No glyphs, gift boxes or logos.")
+
+
+def editorial_picks(group: str, now: datetime, tag: str) -> list[Offer]:
+    if not group:
+        return []
+    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    picks = config.get("editorial_picks", {}).get(group)
+    if not picks:
+        return []
+    until = parse_utc(picks["until"])
+    if now >= until:
+        return []
+    offers = []
+    for entry in picks["products"]:
+        url = str(entry["url"])
+        asin = product_asin(url)
+        if asin:
+            url = affiliate_url(f"{AMAZON}/dp/{asin}", tag)
+        elif not valid_https(url, {"it.roborock.com"}):
+            continue
+        offers.append(Offer(asin or slugify(entry["title"]), entry["category"], entry["title"], entry["description"],
+                            entry["why"], picks["terms"], url, until, affiliate=bool(asin), product=True))
+    return offers
+
+
+def picks_section(picks: list[Offer], now: datetime, *, disclosure: bool = True) -> str:
+    content = render_offers(picks, now, disclosure=disclosure, heading="Schede prodotto e link diretti")
+    if not content:
+        return ""
+    return '<!-- aivision-product-picks -->\n' + content + '\n<!-- /aivision-product-picks -->'
 
 
 def expire_in_body(body: str, now: datetime) -> str:
@@ -471,7 +549,7 @@ def publish_edition(client, session, title, slug, intro, scene, label, check):
     draft = {"title": title, "slug": slug, "article_id": slug, "editorial_kind": "OFFERTA",
              "category": "Offerte & Prezzi", "body_markdown": intro, "excerpt": intro,
              "seo_title": title, "seo_description": intro, "focus_keyphrase": "offerte Amazon del giorno",
-             "tags": ["Amazon", ONGOING], "cover_prompt": scene}
+             "tags": ["Amazon", ONGOING], "cover_prompt": cover_scene(scene)}
     return publish_one(draft, datetime.now(get_timezone()), client, session, live_offer_html=check,
                        offer_cover=lambda image: cover_label(image, label))
 
@@ -495,7 +573,7 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
         report["warnings"].append("Credenziali Creators API mancanti: selezione da promozioni pubbliche confermate.")
     if catalog_ready:
         try:
-            selections = catalog.shortlist(now)
+            selections = catalog.shortlist(now, active)
         except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
             report["catalog"] = "unavailable"
             report["warnings"].append(f"Ricerca Creators API: {type(exc).__name__}")
@@ -514,7 +592,14 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
             sources = list(dict.fromkeys(offer.evidence_url for offer in first if offer.evidence_url))
             confirmed = [offer for offer in newsroom_offers(session, refreshed_at, tag, overrides, sources)
                          if offer.key in keys] if sources else []
-            return render_offers([*confirmed, *verified], datetime.now(get_timezone()))
+            now_verified = datetime.now(get_timezone())
+            fallback = []
+            keys = {row.key for row in confirmed}
+            if "ebook-kindle" in keys and not verified:
+                fallback.extend(editorial_picks("reading-2026-11", now_verified, tag))
+            if "black-friday-2026-11-19" in keys and not verified:
+                fallback.extend(editorial_picks("black-friday-2026", now_verified, tag))
+            return render_offers([*verified, *fallback, *confirmed], now_verified)
         try:
             result = publish_edition(client, session, title, slug, intro, scene, label, recheck)
             report["items"].append({k: result.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
@@ -534,10 +619,8 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
     if daily or services or active:
         suffix = f" · {active.title}" if active else ("" if daily else " · libri e abbonamenti")
         title = f"Offerte Amazon del giorno{suffix} | {stamp}"
-        scene = ("Photorealistic editorial still life, gift parcels and price label with no text, " +
-                 (", ".join(category.scene for category, _ in daily[:3]) if daily else
-                  "stack of books, e-reader and wireless headphones") +
-                 ", warm amber lighting, subjects in the upper-right of the photograph")
+        scene = (", ".join(category.scene for category, _ in daily[:3]) if daily else
+                 "a thin e-reader, sculptural wireless headphones and two cloth hardbacks")
         intro = ("La selezione di oggi raccoglie le promozioni confermate e le organizza per categoria. "
                  "Per ogni proposta trovi a chi può servire e cosa controllare prima di acquistarla.")
         if active:
@@ -553,9 +636,9 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                  "Confronta il prezzo per la stessa variante e valuta garanzia e resi se cambi venditore. "
                  "Per gli accessori, controlla prima la compatibilità con quello che possiedi già.")
         publish(title, "amazon-" + campaign.key, intro,
-                "Photorealistic editorial shopping still life, charcoal gift box with burnt orange ribbon and "
-                "a cardboard parcel, wireless headphones and a blank hanging ticket against a warm studio wall",
-                campaign.title.upper(), first=[campaign])
+                "a graphite streaming remote, a thin color e-reader and a compact smart speaker",
+                campaign.title.upper(), selections[:5] if active == campaign else (), [campaign],
+                event_only=campaign)
 
     if active and spotlight:
         category, _ = spotlight[now.day % len(spotlight)]
@@ -564,7 +647,7 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
         intro = ("Questa selezione aggiuntiva è dedicata a chi sta già valutando un acquisto in questa categoria. "
                  "Confronta le specifiche del modello e quello che ti serve prima di decidere.")
         publish(title, f"amazon-{slugify(active.title)}-{slugify(category.title)}-{now.date().isoformat()}",
-                intro, f"Editorial photography of {category.scene}, amber tag and kraft parcel, clean counter",
+                intro, category.scene,
                 f"{active.title.upper()} · {category.title.upper()}", picks, event_only=active)
 
     if not any(row["status"] in {"published", "already_exists", "planned"} for row in report["items"]):
