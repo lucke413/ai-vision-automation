@@ -25,7 +25,7 @@ import random
 import unicodedata
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urljoin, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -1185,6 +1185,9 @@ def publish_one(
     planned_time: datetime,
     client: WordPressClient,
     session: requests.Session,
+    *,
+    live_offer_html: Callable[[], str] | None = None,
+    offer_cover: Callable[[bytes], bytes] | None = None,
 ) -> dict:
     title = str(draft.get("title") or "").strip()
     if not title:
@@ -1215,7 +1218,7 @@ def publish_one(
     if not body:
         raise PublisherError("Corpo articolo vuoto.")
     word_count = len(re.findall(r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\wÀ-ÖØ-öø-ÿ]+)*\b", raw_body, flags=re.UNICODE))
-    if word_count < MIN_PUBLISH_WORDS and original_word_count < MIN_PUBLISH_WORDS:
+    if live_offer_html is None and word_count < MIN_PUBLISH_WORDS and original_word_count < MIN_PUBLISH_WORDS:
         raise PublisherError(
             f"Quality gate: articolo di {word_count} parole; minimo {MIN_PUBLISH_WORDS}."
         )
@@ -1246,6 +1249,8 @@ def publish_one(
     image_origin, image_url, credit = "dry_run_cover_not_generated", "", CoverCredit("")
     if not client.dry_run:
         image_bytes, suffix, image_origin, image_url, credit = select_cover(draft, session)
+        if offer_cover is not None:
+            image_bytes, suffix = offer_cover(image_bytes), ".jpg"
 
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
         figures = guide_inline_figures(draft, client, slug)
@@ -1307,6 +1312,14 @@ def publish_one(
         )
         body = featured_image_block(media, title, credit) + body
 
+    if live_offer_html is not None:
+        offer_html = live_offer_html()
+        if not offer_html:
+            raise PublisherError("Nessuna promozione confermata al momento della pubblicazione.")
+        body += "\n" + offer_html
+        affiliate_status = "offer_links_checked"
+        planned_time = datetime.now(get_timezone())
+
     local_date = planned_time.strftime("%Y-%m-%dT%H:%M:%S")
     utc_date = planned_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     payload = {
@@ -1314,7 +1327,7 @@ def publish_one(
         "content": body,
         "excerpt": str(draft.get("excerpt") or ""),
         "slug": slug,
-        "status": "future",
+        "status": "publish" if live_offer_html is not None else "future",
         "date": local_date,
         "date_gmt": utc_date,
         "categories": category_ids,
@@ -1333,7 +1346,7 @@ def publish_one(
         "originality_status": originality_check.get("status", "legacy_unchecked"),
         "originality_check": originality_check or None,
         "title": title,
-        "status": "planned" if client.dry_run else "scheduled",
+        "status": "planned" if client.dry_run else ("published" if live_offer_html is not None else "scheduled"),
         "wp_status": created.get("status", "future" if not client.dry_run else "dry_run"),
         "post_id": created.get("id"),
         "link": created.get("link"),

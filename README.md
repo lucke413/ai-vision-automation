@@ -111,3 +111,24 @@ Il publisher 3.1 inserisce la copertina caricata anche nel corpo del post come b
 Il workflow `inline-image-repair.yml` esegue una riparazione conservativa degli articoli già pubblicati e programmati: salva un backup integrale, riconosce dai pixel le vecchie copertine a bande, le sostituisce in evidenza e all’inizio del corpo e ripristina le copertine mancanti. Verifica ogni modifica e carica backup e report come artefatti GitHub Actions con conservazione di 90 giorni. Il workflow non riscrive i testi, non cambia date o stati e non elimina contenuti. `assets/cover-upgrades/manifest.json` registra le sostituzioni autorizzate di copertine già riparate, vincolate all’ID dell’immagine precedente.
 
 La generazione automatica gira sulla CPU di GitHub Actions con i pesi pubblici di LCM DreamShaper, bloccati a una revisione. Il runner installa le dipendenze in live, le simulazioni non caricano il modello. Non occorre un servizio immagini a consumo. Se falliscono sia la ricerca sia la generazione, l’articolo interessato resta fuori dalla programmazione e il report WordPress conserva l’errore.
+
+### Rassegna Amazon e campagne
+
+`AI Vision Automation` verifica le campagne pubbliche di Amazon Italia e pubblica la rassegna
+del giorno nella categoria Offerte. Durante una campagna confermata, il nome dell'evento
+compare nel titolo e nella copertina. Il primo annuncio ha uno slug stabile e un approfondimento
+per categoria è disponibile quando il catalogo restituisce abbastanza prodotti distinti.
+I prezzi verificati vengono mostrati con data e ora di pubblicazione. Un controllo orario
+rimuove prezzi e link delle offerte scadute.
+
+- Il catalogo dei singoli prodotti richiede i secret Actions `AMAZON_CREATORS_CREDENTIAL_ID`
+  e `AMAZON_CREATORS_CREDENTIAL_SECRET` per Creators API EU 3.2. Il publisher usa il Tracking ID
+  Amazon Italia già configurato. Se il catalogo non è disponibile usa soltanto le campagne e
+  le promozioni pubbliche verificabili, senza stimare prezzi per singoli prodotti.
+- Per usare i link di campagna già creati per un servizio, imposta la variabile Actions
+  `AMAZON_PROMOTION_LINKS_JSON` come oggetto con chiavi `audible`, `kindle`, `music` e `prime-video`.
+  Inserisci il link specifico della promozione, incluso il suo codice campagna quando previsto.
+  Gli annunci verificati sono letti da About Amazon Italia. L'elenco iniziale delle pagine di
+  verifica è in `config/amazon-promotions.json`.
+- Per simulare usa **Run workflow** con **Pubblica automaticamente su WordPress** disattivato.
+  Il report `ai-vision-amazon-promotions` indica la disponibilità del catalogo e gli articoli preparati.
