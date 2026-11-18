@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from amazon_affiliate import configured_tag
-from amazon_promotions import cover_label, editorial_picks, picks_section
+from amazon_promotions import affiliate_url, cover_label, editorial_picks, picks_section
 from inline_image_repair import ATTACHMENT_CLASS, leading_cover, request_with_retry
 from wp_public_cleanup import API, FIELDS, content_hash, read_posts, wp_session, write_json
 from wp_publisher import WordPressClient, featured_image_block, get_timezone
@@ -88,6 +88,11 @@ def build_plan(session) -> None:
         config = EDITIONS.get(post["id"])
         cover = ""
         label = ""
+        if post["id"] == 2786 and MARKER in content and tag:
+            old = '<a href="https://it.roborock.com/products/roborock-f25-steam">Vedi il prodotto sul sito ufficiale</a>'
+            url = affiliate_url("https://www.amazon.it/dp/B0GSZRYJ7Y", tag)
+            direct = f'<a href="{html.escape(url, quote=True)}" rel="sponsored nofollow">Clicca qui per acquistarlo su Amazon</a>'
+            content = content.replace(old, direct, 1)
         if config and post["slug"] == config[0]:
             _, group, asset, label = config
             cover = asset if post["featured_media"] == OLD_MEDIA.get(post["id"]) else ""

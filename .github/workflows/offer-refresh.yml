@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/offer-refresh.yml'
+      - 'scripts/wp_offer_refresh.py'
   workflow_dispatch:
     inputs:
       apply_changes:
