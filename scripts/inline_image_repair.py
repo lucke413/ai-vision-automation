@@ -156,11 +156,12 @@ def image_state(url: str, client: WordPressClient, details: dict | None = None) 
     if width and height and (width < 300 or abs(width / height - 16 / 9) > .02 or
                              (details.get("filesize") or 0) > 220_000):
         return "ok"
+    headers = {"User-Agent": USER_AGENT, "Referer": client.base_url.rstrip("/") + "/"}
     for attempt in range(3):
         try:
             with requests.get(
-                url, headers={"User-Agent": USER_AGENT}, stream=True, timeout=(5, 12),
-                params={"av-cover-check": "1"} if attempt else None,
+                url, headers=headers, stream=True, timeout=(5, 12),
+                params={"av-cover-check": str(attempt)} if attempt else None,
             ) as response:
                 if response.status_code in (404, 410):
                     return "missing"
@@ -169,7 +170,7 @@ def image_state(url: str, client: WordPressClient, details: dict | None = None) 
             break
         except requests.RequestException as exc:
             if attempt == 2 or (exc.response is not None and exc.response.status_code not in
-                                {429, 500, 502, 503, 504}):
+                                {403, 429, 500, 502, 503, 504}):
                 raise
             time.sleep(2 ** attempt)
     if not content:
