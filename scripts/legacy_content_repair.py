@@ -22,7 +22,7 @@ from urllib.parse import urlsplit
 import requests
 
 from editorial_content_audit import analyze_post
-from wp_publisher import WordPressClient, fallback_png, slugify
+from wp_publisher import WordPressClient, editorial_cover, slugify
 
 BASE_URL = os.getenv("WP_BASE_URL", "https://aivision.altervista.org").rstrip("/")
 OUTPUT = Path("data/legacy_content_repair_backup.json")
@@ -345,7 +345,7 @@ def apply_plan(client: WordPressClient, plan: list[dict]) -> list[dict]:
 
             payload = {"title": item["new_title"], "content": item["new_content"]}
             if item.get("cover_category"):
-                image = fallback_png(item["cover_category"])
+                image = editorial_cover(item["new_title"], item["cover_category"])
                 media = client.upload_media(
                     image,
                     f"ai-vision-legacy-{post_id}-{slugify(item['new_title'])}.png",

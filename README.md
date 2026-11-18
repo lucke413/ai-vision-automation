@@ -63,7 +63,7 @@ Il workflow `editorial-content-audit.yml` esegue una scansione pubblica, in sola
 
 Il controllo di originalità 1.1 confronta anche la sovrapposizione tematica dei paragrafi e il loro ordine. Un testo che cambia le parole ma conserva la stessa scaletta può essere bloccato o inviato a revisione. Il test resta un filtro deterministico prudenziale: non certifica l'originalità semantica.
 
-Il publisher 3.0 aggiunge un link HTTPS alla fonte originale, quando valido, e non riutilizza immagini RSS/OpenGraph se la bozza non contiene una prova esplicita dei diritti. In assenza di licenza/permesso verificabile usa la copertina grafica generata localmente. Per licenze Creative Commons con attribuzione richiede anche il campo `image_attribution`. Le dichiarazioni di link affiliati/commissioni sono bloccate finché il contenuto non implementa realmente tali link.
+Il publisher 3.0 aggiunge un link HTTPS alla fonte originale, quando valido, e non riutilizza immagini RSS/OpenGraph se la bozza non contiene una prova esplicita dei diritti. Se manca un’immagine riutilizzabile o il file non è valido, genera localmente un’illustrazione editoriale in base al titolo e all’argomento. Per licenze Creative Commons con attribuzione richiede anche il campo `image_attribution`. Le dichiarazioni di link affiliati/commissioni sono bloccate finché il contenuto non implementa realmente tali link.
 
 Il lettore delle fonti 5.0 esclude anche contenitori sidebar, articoli correlati, widget, pubblicità e newsletter, oltre ai tag di navigazione già ignorati.
 
@@ -96,4 +96,4 @@ Il repair workflow applica soltanto i record selezionati dalle regole dell'audit
 
 Il publisher 3.1 inserisce la copertina caricata anche nel corpo del post come blocco immagine Gutenberg non collegato, con bordo disattivato. La copertina resta anche impostata come immagine in evidenza, ma viene nascosta nella pagina singola per evitare duplicati.
 
-Il workflow `inline-image-repair.yml` esegue una riparazione conservativa degli articoli già pubblicati e programmati: prima salva un backup integrale di tutti i post interessati, poi aggiunge soltanto le immagini in evidenza mancanti nel corpo. Verifica ogni modifica e carica backup e report come artefatti GitHub Actions con conservazione di 90 giorni. Il workflow non riscrive i testi, non cambia date o stati e non elimina contenuti.
+Il workflow `inline-image-repair.yml` esegue una riparazione conservativa degli articoli già pubblicati e programmati: salva un backup integrale, riconosce dai pixel le vecchie copertine a bande, le sostituisce in evidenza e all’inizio del corpo e ripristina le copertine mancanti. Verifica ogni modifica e carica backup e report come artefatti GitHub Actions con conservazione di 90 giorni. Il workflow non riscrive i testi, non cambia date o stati e non elimina contenuti.

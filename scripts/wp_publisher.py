@@ -8,23 +8,21 @@ Gestisce:
 - categorie macro di AI Vision;
 - creazione/riuso dei tag;
 - immagini esterne solo con licenza/permesso esplicito;
-- copertina grafica locale quando i diritti dell'immagine non sono documentati;
+- illustrazione editoriale locale quando non è disponibile un’immagine riutilizzabile;
 - sei orari giornalieri distribuiti in Europe/Rome;
 - report JSON anche in caso di errori su singoli articoli.
 """
 
 from __future__ import annotations
 
-import hashlib
 import html
+import io
 import json
 import os
 import re
-import struct
 import time
 import random
 import unicodedata
-import zlib
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -33,6 +31,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from requests.auth import HTTPBasicAuth
+from PIL import Image
+
+if __package__:
+    from .editorial_cover import editorial_cover, is_striped_cover
+else:
+    from editorial_cover import editorial_cover, is_striped_cover
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -76,7 +80,7 @@ SOURCE_CATEGORY_MAP = {
     "Tecnologia": "Tecnologia e prodotti",
 }
 
-VALID_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+IMAGE_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "GIF": ".gif"}
 MIN_PUBLISH_WORDS = 550
 PUBLIC_FORBIDDEN_PATTERNS = (
     re.compile(r"\bprima della pubblicazione\b", re.IGNORECASE),
@@ -825,96 +829,32 @@ def image_rights_approved(draft: dict) -> bool:
     return bool(image_url_from_draft(draft))
 
 
-def extract_og_image(source_url: str, session: requests.Session) -> str:
-    if not source_url:
-        return ""
-    try:
-        response = session.get(
-            source_url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-    except requests.RequestException:
-        return ""
-
-    markup = response.text[:750_000]
-    patterns = (
-        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
-        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
-        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)',
-        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image["\']',
-    )
-    for pattern in patterns:
-        match = re.search(pattern, markup, flags=re.IGNORECASE)
-        if match:
-            candidate = html.unescape(match.group(1).strip())
-            resolved = urljoin(source_url, candidate)
-            if resolved.startswith(("http://", "https://")):
-                return resolved
-    return ""
-
-
-def png_chunk(kind: bytes, payload: bytes) -> bytes:
-    return (
-        struct.pack(">I", len(payload))
-        + kind
-        + payload
-        + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
-    )
-
-
-def fallback_png(category: str) -> bytes:
-    """Crea una copertina grafica neutra senza dipendenze esterne."""
-    width, height = 1200, 675
-    digest = hashlib.sha256(category.encode("utf-8")).digest()
-    base = (24 + digest[0] % 35, 36 + digest[1] % 35, 64 + digest[2] % 55)
-    raw = bytearray()
-    for y in range(height):
-        raw.append(0)
-        for x in range(width):
-            diagonal = ((x + y) // 90) % 2 == 0
-            band = (x // 160) % 3 == 0
-            r, g, b = base
-            if diagonal:
-                r = min(255, r + 22)
-                g = min(255, g + 14)
-            if band and 90 < y < 585:
-                b = min(255, b + 28)
-            raw.extend((r, g, b))
-    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    return b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", ihdr) + png_chunk(
-        b"IDAT", zlib.compress(bytes(raw), level=6)
-    ) + png_chunk(b"IEND", b"")
+def read_image_response(response) -> bytes | None:
+    content = bytearray()
+    for chunk in response.iter_content(chunk_size=64 * 1024):
+        content.extend(chunk)
+        if len(content) > MAX_IMAGE_BYTES:
+            return None
+    return bytes(content)
 
 
 def download_image(url: str, session: requests.Session) -> tuple[bytes, str] | None:
-    if not url:
-        return None
     try:
-        response = session.get(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-    except requests.RequestException:
+        with session.get(url, headers={"User-Agent": USER_AGENT}, stream=True, timeout=15) as response:
+            response.raise_for_status()
+            content = read_image_response(response)
+        if not content:
+            return None
+        with Image.open(io.BytesIO(content)) as image:
+            suffix = IMAGE_FORMATS.get(image.format)
+            if not suffix or image.width < 480 or image.height < 270 or image.width * image.height > 24_000_000:
+                return None
+            image.load()
+            if is_striped_cover(image):
+                return None
+        return content, suffix
+    except (requests.RequestException, OSError, ValueError, Image.DecompressionBombError):
         return None
-    content = response.content
-    if not content or len(content) > MAX_IMAGE_BYTES:
-        return None
-    content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
-    suffix = Path(urlsplit(url).path).suffix.lower()
-    if suffix not in VALID_IMAGE_EXTENSIONS:
-        suffix = {
-            "image/jpeg": ".jpg",
-            "image/png": ".png",
-            "image/webp": ".webp",
-            "image/gif": ".gif",
-        }.get(content_type, ".jpg")
-    if content_type and not content_type.startswith("image/"):
-        return None
-    return content, suffix
 
 
 class WordPressClient:
@@ -1133,7 +1073,7 @@ class WordPressClient:
         return response.json()
 
 
-def featured_image_block(media: dict, title: str) -> str:
+def featured_image_block(media: dict, title: str, attribution: str = "") -> str:
     """Serializza la copertina caricata come immagine Gutenberg non collegata."""
     media_id = media.get("id")
     image_url = str(media.get("source_url") or "").strip()
@@ -1142,9 +1082,13 @@ def featured_image_block(media: dict, title: str) -> str:
         raise PublisherError("Immagine copertina non valida: pubblicazione bloccata.")
     safe_url = html.escape(image_url, quote=True)
     safe_alt = html.escape(str(title or "AI Vision"), quote=True)
+    caption = (
+        f'<figcaption class="wp-element-caption">{html.escape(attribution)}</figcaption>'
+        if attribution else ""
+    )
     return (
         f'<!-- wp:image {{"id":{int(media_id)},"sizeSlug":"large","linkDestination":"none","style":{{"border":{{"width":"0px","style":"none"}}}}}} -->\n'
-        f'<figure class="wp-block-image size-large has-custom-border"><img src="{safe_url}" alt="{safe_alt}" class="wp-image-{int(media_id)}" style="border-style:none;border-width:0px" /></figure>\n'
+        f'<figure class="wp-block-image size-large has-custom-border"><img src="{safe_url}" alt="{safe_alt}" class="wp-image-{int(media_id)}" style="border-style:none;border-width:0px" />{caption}</figure>\n'
         '<!-- /wp:image -->\n\n'
     )
 
@@ -1309,35 +1253,35 @@ def publish_one(
         except Exception as exc:
             print(f"AVVISO tag: salto {tag!r} ({type(exc).__name__}); la pubblicazione continua.")
 
-    source_url = str(draft.get("source_url") or "").strip()
-
-    rights_ok = image_rights_approved(draft)
-    image_url = "" if draft.get("editorial_kind") or not rights_ok else image_url_from_draft(draft)
-    if client.dry_run:
-        # Il dry-run non deve fare richieste esterne né scaricare immagini:
-        # usa una copertina simulata e registra se una fonte era disponibile.
-        image_origin = "dry_run_guide" if draft.get("editorial_kind") else ("dry_run_licensed_source_available" if image_url else "dry_run_fallback_rights_unverified")
-        downloaded = (guide_infographic(draft), ".png") if draft.get("editorial_kind") else (fallback_png(category_name), ".png")
+    image_url = image_url_from_draft(draft) if image_rights_approved(draft) else ""
+    attribution = ""
+    if draft.get("editorial_kind"):
+        image_bytes, suffix = guide_infographic(draft), ".png"
+        image_origin = "original_guide_infographic"
+        image_url = ""
     else:
-        image_origin = "original_guide_infographic" if draft.get("editorial_kind") else "licensed_source_image"
-        downloaded = (guide_infographic(draft), ".png") if draft.get("editorial_kind") else (download_image(image_url, session) if image_url else None)
-        if downloaded is None:
-            downloaded = (fallback_png(category_name), ".png")
-            image_origin = "generated_fallback" if rights_ok else "generated_fallback_rights_unverified"
+        downloaded = download_image(image_url, session) if image_url and not client.dry_run else None
+        if downloaded:
+            image_bytes, suffix = downloaded
+            image_origin = "licensed_source_image"
+            attribution = str(draft.get("image_attribution") or "").strip()
+        else:
+            image_bytes, suffix = editorial_cover(title, category_name), ".png"
+            image_origin = (
+                "dry_run_licensed_source_available" if image_url and client.dry_run
+                else "original_editorial_illustration"
+            )
             image_url = ""
-    image_bytes, suffix = downloaded
-    filename = f"{slugify(title)}{suffix}"
+
     media = client.upload_media(
         image_bytes,
-        filename,
+        f"{slugify(title)}{suffix}",
         image_mime(suffix),
         alt_text=title,
-        caption="",
+        caption=html.escape(attribution),
     )
-    # L'immagine veniva caricata e assegnata come featured_media, ma non
-    # compariva nel corpo. Includila anche nel contenuto e blocca upload invalidi.
     if not client.dry_run:
-        body = featured_image_block(media, title) + body
+        body = featured_image_block(media, title, attribution) + body
 
     local_date = planned_time.strftime("%Y-%m-%dT%H:%M:%S")
     utc_date = planned_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
@@ -1413,13 +1357,14 @@ def main() -> int:
     results: list[dict] = []
     errors: list[dict] = []
     used_slugs: set[str] = set()
+    image_session = requests.Session()
     for draft, planned_time in zip(drafts, schedule):
         try:
             slug = slugify(str(draft.get("slug") or draft.get("title") or ""))
             if slug in used_slugs:
                 raise PublisherError("Slug duplicato nello stesso lotto.")
             used_slugs.add(slug)
-            results.append(publish_one(draft, planned_time, client, client.session))
+            results.append(publish_one(draft, planned_time, client, image_session))
             print(f"OK: {draft.get('title', '')} -> {planned_time.isoformat()}")
         except Exception as exc:
             error = {

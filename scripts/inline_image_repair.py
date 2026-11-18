@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
-"""Ripara le copertine mancanti nel corpo degli articoli WordPress.
-
-Il programma è fail-closed: richiede WP_INLINE_IMAGE_REPAIR=true, salva prima
-un backup integrale di tutti i post publish/future e poi modifica soltanto i
-post con featured_media valido ma senza immagini nel contenuto.
-"""
+"""Sostituisce le copertine a bande e ripristina le copertine mancanti."""
 from __future__ import annotations
 
+import html
+import io
 import json
 import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import local
+from urllib.parse import unquote, urlsplit
 
-try:
-    from scripts.wp_publisher import PublisherError, WordPressClient, featured_image_block
-except ModuleNotFoundError:  # esecuzione diretta: python scripts/inline_image_repair.py
-    from wp_publisher import PublisherError, WordPressClient, featured_image_block
+import requests
+from PIL import Image
+
+if __package__:
+    from .editorial_cover import editorial_cover, is_striped_cover
+    from .wp_publisher import PublisherError, USER_AGENT, WordPressClient, featured_image_block, read_image_response
+else:
+    from editorial_cover import editorial_cover, is_striped_cover
+    from wp_publisher import PublisherError, USER_AGENT, WordPressClient, featured_image_block, read_image_response
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKUP_PATH = ROOT / "data" / "inline_image_repair_backup.json"
@@ -37,13 +43,14 @@ def request_with_retry(session, method: str, url: str, **kwargs):
     last_error = None
     for attempt in range(1, 5):
         try:
-            response = getattr(session, method)(url, timeout=45, **kwargs)
+            response = getattr(session, method)(url, timeout=(8, 45), **kwargs)
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last_error = exc
+        else:
             if response.status_code not in {429, 500, 502, 503, 504}:
                 response.raise_for_status()
                 return response
             last_error = RuntimeError(f"HTTP {response.status_code}")
-        except Exception as exc:
-            last_error = exc
         if attempt < 4:
             time.sleep(min(20, 2 ** attempt))
     raise RuntimeError(f"Richiesta WordPress fallita dopo 4 tentativi: {url}") from last_error
@@ -56,61 +63,25 @@ def raw_content(post: dict) -> str:
     return str(value or "")
 
 
-def has_leading_cover(content: str) -> bool:
-    value = str(content or "").lstrip()
-    if re.match(r"<!--\s*wp:image\b", value, flags=re.IGNORECASE):
-        end = value.lower().find("<!-- /wp:image -->")
-        first_block = value[:end] if end >= 0 else value[:2500]
-        return bool(re.search(r"<img\b", first_block, flags=re.IGNORECASE))
-    if re.match(r"<figure\b", value, flags=re.IGNORECASE):
-        match = re.match(r"<figure\b.*?</figure>", value, flags=re.IGNORECASE | re.DOTALL)
-        return bool(match and re.search(r"<img\b", match.group(0), flags=re.IGNORECASE))
-    return bool(re.match(r"<img\b", value, flags=re.IGNORECASE))
-
-def needs_inline_cover(post: dict) -> bool:
-    content = raw_content(post)
-    if not post.get("featured_media"):
-        return False
-    if not has_leading_cover(content):
-        return True
-    # Anche una copertina già presente in cima deve essere priva del bordo blu.
-    return "border-style:none;border-width:0px" not in content[:2500]
+IMAGE_MARKUP = r"(?:<figure\b(?:(?!</?figure\b).)*</figure>|<img\b[^>]*>)"
+LEADING_IMAGE = re.compile(
+    rf"^\s*(?:<!--\s*wp:image\b(?:(?!-->).)*-->\s*{IMAGE_MARKUP}\s*<!--\s*/wp:image\s*-->|{IMAGE_MARKUP})",
+    re.IGNORECASE | re.DOTALL,
+)
+IMAGE_SRC = re.compile(r"""<img\b[^>]*?\s+src\s*=\s*(["'])([^"']+)\1""", re.IGNORECASE)
+ATTACHMENT_CLASS = re.compile(r"\bwp-image-(\d+)\b")
 
 
-def normalize_leading_cover(content: str) -> str:
-    value = str(content or "")
-    if not has_leading_cover(value):
-        return value
-    stripped = value.lstrip()
-    if stripped.startswith("<!-- wp:image"):
-        match = re.match(r"(<!--\s*wp:image\s+)(\{.*?\})(\s*-->)", stripped, flags=re.DOTALL)
-        if match:
-            attrs = json.loads(match.group(2))
-            style = attrs.setdefault("style", {})
-            border = style.setdefault("border", {})
-            border["width"] = "0px"
-            border["style"] = "none"
-            comment = match.group(1) + json.dumps(attrs, ensure_ascii=False, separators=(",", ":")) + match.group(3)
-            value = value.replace(match.group(0), comment, 1)
-        value = re.sub(
-            r'(<figure\b[^>]*class="[^"]*)(")',
-            lambda m: m.group(1) + (" has-custom-border" if "has-custom-border" not in m.group(1) else "") + m.group(2),
-            value,
-            count=1,
-            flags=re.IGNORECASE,
-        )
-    def style_first_image(match):
-        tag = match.group(0)
-        if re.search(r'\bstyle\s*=', tag, flags=re.IGNORECASE):
-            return re.sub(
-                r'\bstyle=(["\'])(.*?)\1',
-                lambda m: 'style=' + m.group(1) + m.group(2).rstrip(";") + ';border-style:none;border-width:0px' + m.group(1),
-                tag,
-                count=1,
-                flags=re.IGNORECASE,
-            )
-        return tag[:-1] + ' style="border-style:none;border-width:0px">'
-    return re.sub(r"<img\b[^>]*>", style_first_image, value, count=1, flags=re.IGNORECASE)
+def leading_cover(content: str):
+    block = LEADING_IMAGE.match(content)
+    image = IMAGE_SRC.search(block.group()) if block else None
+    return (block, html.unescape(image.group(2))) if image else (None, "")
+
+
+def raw_title(post: dict) -> str:
+    value = post.get("title") or {}
+    title = value.get("raw") or value.get("rendered") if isinstance(value, dict) else value
+    return html.unescape(str(title or ""))
 
 
 def fetch_all_posts(client: WordPressClient) -> list[dict]:
@@ -129,7 +100,8 @@ def fetch_all_posts(client: WordPressClient) -> list[dict]:
                     "page": page,
                     "orderby": "date",
                     "order": "desc",
-                    "_fields": "id,title,status,date,modified,featured_media,content,meta,link",
+                    "_embed": "wp:featuredmedia",
+                    "_fields": "id,title,status,date,modified,featured_media,content,meta,link,categories,_links,_embedded",
                 },
             )
             batch = response.json()
@@ -150,59 +122,155 @@ def fetch_all_posts(client: WordPressClient) -> list[dict]:
         unique[post.get("id")] = post
     return list(unique.values())
 
-def fetch_media(client: WordPressClient, media_id: int, cache: dict) -> dict:
-    if media_id in cache:
-        return cache[media_id]
-    response = request_with_retry(
-        client.session,
-        "get",
+def fetch_media(client: WordPressClient, media_id: int) -> dict:
+    response = client.session.get(
         client._url(f"media/{media_id}"),
-        params={"context": "edit", "_fields": "id,source_url,alt_text,mime_type"},
+        params={"context": "edit", "_fields": "id,source_url,alt_text,mime_type,media_details"},
+        timeout=30,
     )
-    media = response.json()
-    if not isinstance(media, dict) or not str(media.get("mime_type") or "").startswith("image/"):
-        raise PublisherError(f"Allegato {media_id} non è un'immagine valida.")
-    cache[media_id] = media
-    return media
+    if response.status_code in (404, 410):
+        return {}
+    response.raise_for_status()
+    return response.json()
 
 
-def repair_post(client: WordPressClient, post: dict, media_cache: dict) -> dict:
+def wp_media_url(url: str, client: WordPressClient) -> bool:
+    parts = urlsplit(url)
+    return (
+        parts.scheme == "https"
+        and parts.netloc == urlsplit(client.base_url).netloc
+        and "/wp-content/uploads/" in parts.path
+    )
+
+
+def media_path(url: str) -> str:
+    path = unquote(urlsplit(url).path)
+    return re.sub(r"-\d+x\d+(?=\.[^./]+$)", "", path)
+
+
+def image_state(url: str, client: WordPressClient, details: dict | None = None) -> str:
+    if not wp_media_url(url, client):
+        return "unknown" if url else "missing"
+    details = details or {}
+    width, height = details.get("width"), details.get("height")
+    if width and height and (width < 300 or abs(width / height - 16 / 9) > .02 or
+                             (details.get("filesize") or 0) > 220_000):
+        return "ok"
+    for attempt in range(3):
+        try:
+            with requests.get(
+                url, headers={"User-Agent": USER_AGENT}, stream=True, timeout=(5, 12),
+                params={"av-cover-check": "1"} if attempt else None,
+            ) as response:
+                if response.status_code in (404, 410):
+                    return "missing"
+                response.raise_for_status()
+                content = read_image_response(response)
+            break
+        except requests.RequestException as exc:
+            if attempt == 2 or (exc.response is not None and exc.response.status_code not in
+                                {429, 500, 502, 503, 504}):
+                raise
+            time.sleep(2 ** attempt)
+    if not content:
+        return "unknown"
+    try:
+        with Image.open(io.BytesIO(content)) as image:
+            image.load()
+            return "striped" if is_striped_cover(image) else "ok"
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return "invalid"
+
+
+@dataclass
+class CoverRepair:
+    media: dict
+    replace_span: tuple[int, int] | None
+    featured_state: str
+    inline_state: str
+
+
+def plan_repair(client: WordPressClient, post: dict) -> CoverRepair | None:
+    content = raw_content(post)
+    block, inline_url = leading_cover(content)
+    media_id = int(post.get("featured_media") or 0)
+    media = {}
+    if media_id:
+        embeds = (post.get("_embedded") or {}).get("wp:featuredmedia") or []
+        media = next((item for item in embeds if item.get("id") == media_id), None)
+        if not media or not media.get("source_url"):
+            media = fetch_media(client, media_id)
+    media_url = str(media.get("source_url") or "")
+    featured_state = image_state(media_url, client, media.get("media_details"))
+    matching_inline = (
+        inline_url and wp_media_url(inline_url, client) and wp_media_url(media_url, client)
+        and media_path(inline_url) == media_path(media_url)
+    )
+    inline_state = featured_state if matching_inline else (
+        image_state(inline_url, client) if inline_url else "missing"
+    )
+    replace_featured = featured_state in {"striped", "missing", "invalid"}
+    replace_inline = inline_state in {"striped", "missing", "invalid"}
+    if not replace_featured and not replace_inline:
+        return None
+    if replace_featured and block and inline_state == "ok":
+        inline_id = ATTACHMENT_CLASS.search(block.group())
+        if inline_id:
+            inline_media = fetch_media(client, int(inline_id.group(1)))
+            if media_path(str(inline_media.get("source_url") or "")) == media_path(inline_url):
+                return CoverRepair(inline_media, None, featured_state, inline_state)
+    if not replace_featured and featured_state == "unknown":
+        raise PublisherError("Impossibile verificare l'immagine in evidenza.")
+    replace_span = block.span() if block and replace_inline else None
+    return CoverRepair({} if replace_featured else media, replace_span, featured_state, inline_state)
+
+
+def repair_post(client: WordPressClient, post: dict, categories: dict) -> dict | None:
+    plan = plan_repair(client, post)
+    if plan is None:
+        return None
+
+    media = plan.media
     post_id = int(post["id"])
-    media_id = int(post["featured_media"])
-    title_value = post.get("title")
-    title = str(title_value.get("raw") or title_value.get("rendered") or "") if isinstance(title_value, dict) else str(title_value or "")
-    media = fetch_media(client, media_id, media_cache)
-    existing_content = raw_content(post)
-    if has_leading_cover(existing_content):
-        updated_content = normalize_leading_cover(existing_content)
-    else:
-        updated_content = featured_image_block(media, title) + existing_content
-    request_with_retry(
-        client.session,
-        "post",
-        client._url(f"posts/{post_id}"),
-        params={"context": "edit"},
-        json={
-            "content": updated_content,
-            "meta": {"_jetpack_hide_featured_image": True},
-        },
-    )
-    verify = request_with_retry(
-        client.session,
-        "get",
-        client._url(f"posts/{post_id}"),
-        params={"context": "edit", "_fields": "id,status,featured_media,content,meta"},
-    ).json()
-    saved_content = raw_content(verify)
-    if "<img" not in saved_content.lower() or int(verify.get("featured_media") or 0) != media_id:
-        raise RuntimeError(f"Verifica fallita per articolo {post_id}.")
+    title = raw_title(post)
+    content = raw_content(post)
+    url = client._url(f"posts/{post_id}")
+    params = {"context": "edit", "_fields": "id,modified,status,featured_media,content,meta"}
+    current = request_with_retry(client.session, "get", url, params=params).json()
+    if (current.get("modified") != post.get("modified") or
+            current.get("featured_media") != post.get("featured_media") or raw_content(current) != content):
+        raise PublisherError("Articolo modificato durante il controllo, da riesaminare.")
+
+    if not media:
+        category = next((categories[term] for term in post.get("categories", []) if term in categories), "AI Vision")
+        filename = f"ai-vision-cover-{post_id}"
+        existing = request_with_retry(
+            client.session, "get", client._url("media"),
+            params={"slug": filename, "context": "edit", "_fields": "id,source_url,alt_text,mime_type"},
+        ).json()
+        media = next((item for item in existing if item.get("mime_type") == "image/png"
+                      and wp_media_url(item.get("source_url", ""), client)), None)
+        if media is None:
+            media = client.upload_media(editorial_cover(title, category), filename + ".png", "image/png",
+                                        title, "")
+
+    media_id = int(media["id"])
+    if not wp_media_url(str(media.get("source_url") or ""), client):
+        raise PublisherError("Copertina caricata senza un URL WordPress valido.")
+    payload = {"featured_media": media_id}
+    if plan.replace_span or not leading_cover(content)[0]:
+        block = featured_image_block(media, str(media.get("alt_text") or title))
+        remaining = content[plan.replace_span[1]:] if plan.replace_span else content
+        payload["content"] = block + remaining
+        payload["meta"] = {"_jetpack_hide_featured_image": True}
+    request_with_retry(client.session, "post", url, params={"context": "edit"}, json=payload)
+    saved = request_with_retry(client.session, "get", url, params=params).json()
+    if int(saved.get("featured_media") or 0) != media_id or raw_content(saved) != payload.get("content", content):
+        raise PublisherError(f"Verifica WordPress fallita per articolo {post_id}.")
     return {
-        "id": post_id,
-        "title": title,
-        "status": verify.get("status"),
-        "featured_media": media_id,
-        "image_in_content": True,
-        "hide_featured_image": (verify.get("meta") or {}).get("_jetpack_hide_featured_image"),
+        "id": post_id, "title": title, "status": saved.get("status"), "link": post.get("link"),
+        "featured_media": media_id, "source_url": media.get("source_url"),
+        "previous_featured": plan.featured_state, "previous_inline": plan.inline_state,
     }
 
 
@@ -228,32 +296,39 @@ def main() -> int:
     write_json_atomic(BACKUP_PATH, backup)
     print(f"Backup integrale salvato prima delle modifiche: {BACKUP_PATH} ({len(posts)} articoli).")
 
-    targets = [post for post in posts if needs_inline_cover(post)]
-    media_cache: dict[int, dict] = {}
+    categories = request_with_retry(
+        client.session, "get", client._url("categories"), params={"per_page": 100, "_fields": "id,name"},
+    ).json()
+    categories = {item["id"]: html.unescape(item["name"]) for item in categories}
     repaired: list[dict] = []
     errors: list[dict] = []
-    skipped: list[dict] = []
-    for index, post in enumerate(targets, start=1):
-        post_id = post.get("id")
-        if not post.get("featured_media"):
-            skipped.append({"id": post_id, "reason": "featured_media assente"})
-            continue
-        try:
-            result = repair_post(client, post, media_cache)
-            repaired.append(result)
-            print(f"[{index}/{len(targets)}] OK #{post_id}: immagine inserita nel contenuto.")
-        except Exception as exc:
-            errors.append({"id": post_id, "error": f"{type(exc).__name__}: {exc}"})
-            print(f"[{index}/{len(targets)}] ERRORE #{post_id}: {type(exc).__name__}: {exc}")
+    worker = local()
+
+    def process(post):
+        if not hasattr(worker, "client"):
+            worker.client = WordPressClient(base_url, username, app_password, dry_run=False)
+        return repair_post(worker.client, post, categories)
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        pending = {pool.submit(process, post): post["id"] for post in posts}
+        for future in as_completed(pending):
+            post_id = pending[future]
+            try:
+                result = future.result()
+                if result:
+                    repaired.append(result)
+                    print(f"OK #{post_id}: copertina {result['featured_media']} ({result['previous_featured']}/{result['previous_inline']}).")
+            except Exception as exc:
+                errors.append({"id": post_id, "error": f"{type(exc).__name__}: {exc}"})
+                print(f"ERRORE #{post_id}: {type(exc).__name__}: {exc}")
 
     report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "site": base_url,
         "posts_scanned": len(posts),
-        "repair_candidates": len(targets),
+        "repair_candidates": len(repaired) + len(errors),
         "repaired": len(repaired),
         "errors": errors,
-        "skipped": skipped,
         "items": repaired,
     }
     write_json_atomic(REPORT_PATH, report)
