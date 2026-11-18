@@ -1,10 +1,5 @@
 name: AI Vision short article quality repair
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/short_article_quality_repair.py'
-      - '.github/workflows/short-article-quality-repair.yml'
   workflow_dispatch:
 permissions:
   contents: read

@@ -1,10 +1,5 @@
 name: AI Vision security article updates
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/security_article_update.py'
-      - '.github/workflows/security-article-update.yml'
   workflow_dispatch:
 permissions:
   contents: read

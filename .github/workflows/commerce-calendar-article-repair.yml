@@ -1,11 +1,6 @@
 name: AI Vision update commerce and calendar articles
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/commerce_calendar_article_repair.py'
-      - '.github/workflows/commerce-calendar-article-repair.yml'
   workflow_dispatch:
 
 permissions:
