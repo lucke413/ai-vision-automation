@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Genera bozze editoriali dagli articoli giornalieri e dalle riserve.
 
-Il modulo non pubblica su WordPress e non inserisce ancora link affiliati.
+Il modulo prepara le bozze e i dati editoriali per il publisher WordPress.
 Produce soltanto data/article_drafts.json per la revisione.
 """
 
@@ -21,6 +21,7 @@ from html.parser import HTMLParser
 import requests
 
 from ai_cyber import EDITORIAL_BRIEF, SOURCE_HOSTS, TOPIC_KEY, TOPICS
+from amazon_affiliate import article_products, product_asin
 from daily_selector import (
     DAILY_LIMIT, TOTAL_DAILY_LIMIT, RESERVE_LIMIT, editorial_room, expansion_room,
     MAX_GUIDES_PER_DAY, MAX_TUTORIALS_PER_DAY, MAX_PRACTICAL_PER_DAY,
@@ -142,6 +143,13 @@ REGOLE EDITORIALI:
 - evita come cornice narrativa "secondo la fonte", "stando alla fonte",
   "la fonte riporta/segnala", "come riportato dalla fonte" e formule simili;
 - non inserire link affiliati, codici tracking o pubblicità nel testo;
+- Per le recensioni, gli articoli su prodotti e le offerte, elenca in
+  amazon_products fino a tre modelli esatti, inclusi marca e variante quando
+  sono nella fonte. Usa una lista vuota per altri articoli e per indiscrezioni
+  su prodotti non ancora annunciati. Non inventare nomi o codici prodotto.
+- Non riportare importi o disponibilità correnti di Amazon ripresi da altre
+  fonti. Se pertinente, puoi riportare un prezzo di listino documentato
+  indicando esplicitamente che è quello del produttore.
 - non presentare la bozza come verifica indipendente dei fatti.
 - Compila cover_prompt con una scena di 25-45 parole in inglese, incentrata
   su un soggetto visivo preciso, con ambiente, luce e inquadratura. Per persone,
@@ -405,6 +413,8 @@ class SourceArticleParser(HTMLParser):
         self.capture_depths = []
         self.blocked_depths = []
         self.parts = []
+        self.amazon_links = []
+        self._product_link = None
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -423,10 +433,17 @@ class SourceArticleParser(HTMLParser):
                        or bool(classes & self.CONTENT_CLASSES))
             if is_body:
                 self.capture_depths.append(len(self.stack))
+        if tag == 'a' and self.in_article():
+            href = str(attrs.get("href") or "")
+            if product_asin(href) and len(self.amazon_links) < 30:
+                self._product_link = {"url": href, "label": ""}
         if tag in {'p', 'h1', 'h2', 'h3', 'li', 'br'}:
             self.parts.append('\n')
 
     def handle_endtag(self, tag):
+        if tag == 'a' and self._product_link is not None:
+            self.amazon_links.append(self._product_link)
+            self._product_link = None
         if tag in self.stack:
             self.stack = self.stack[:len(self.stack) - 1 - self.stack[::-1].index(tag)]
             self.capture_depths = [d for d in self.capture_depths if d <= len(self.stack)]
@@ -434,12 +451,17 @@ class SourceArticleParser(HTMLParser):
         if tag in {'p', 'h1', 'h2', 'h3', 'li'}:
             self.parts.append('\n')
 
-    def handle_data(self, data):
+    def in_article(self):
         blocked = {'script', 'style', 'nav', 'aside', 'footer',
                    'form', 'noscript', 'button'}
         inside_blocked_container = any(depth <= len(self.stack) for depth in self.blocked_depths)
-        if self.capture_depths and not blocked.intersection(self.stack) and not inside_blocked_container:
+        return self.capture_depths and not blocked.intersection(self.stack) and not inside_blocked_container
+
+    def handle_data(self, data):
+        if self.in_article():
             self.parts.append(data)
+            if self._product_link is not None:
+                self._product_link["label"] += data
 
     def text(self):
         return '\n'.join(' '.join(line.split()) for line in ''.join(self.parts).splitlines() if line.strip())[:24000]
@@ -497,6 +519,7 @@ def enrich_source(item: dict) -> dict:
                 parser = SourceArticleParser()
                 parser.feed(bytes(chunks).decode(response.encoding or 'utf-8', errors='replace'))
                 text = parser.text()
+                result["amazon_source_links"] = parser.amazon_links
                 if len(text.split()) >= 100 and len(text) > max(len(str(item.get('description') or '')), len(result['source_text'])):
                     result['source_text'] = text
                     result['source_text_status'] = 'page_extracted'
@@ -694,6 +717,7 @@ Restituisci esattamente questo schema:
   "tags": ["tag1", "tag2", "tag3"],
   "fact_check_notes": ["dati da verificare prima della pubblicazione"],
   "affiliate_candidate": false,
+  "amazon_products": ["modello esatto presente nella fonte, oppure lista vuota"],
   "needs_review": true
 }}
 
@@ -847,6 +871,12 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         source_status=item.get("source_text_status"),
         editorial_kind=item.get("editorial_kind"),
     )
+    product_evidence = " ".join((str(item.get("title") or ""), str(item.get("description") or ""),
+                                 str(item.get("source_text") or "")))
+    products = article_products({
+        "title": title, "body_markdown": body, TOPIC_KEY: item.get(TOPIC_KEY),
+        "amazon_products": raw.get("amazon_products", []),
+    }, source=product_evidence)
     source_id = str(item.get("article_id") or "")
     draft_id = hashlib.sha256(source_id.encode("utf-8")).hexdigest()[:20]
     return {
@@ -898,6 +928,8 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         "tags": [str(tag).strip() for tag in tags[:8] if str(tag).strip()],
         "fact_check_notes": [str(note).strip() for note in notes[:10] if str(note).strip()],
         "affiliate_candidate": True if offer else bool(raw.get("affiliate_candidate", False)),
+        "amazon_products": products,
+        "amazon_source_links": item.get("amazon_source_links", []),
     }
 
 

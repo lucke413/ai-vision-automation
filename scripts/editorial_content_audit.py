@@ -20,6 +20,11 @@ from urllib.parse import urljoin, urlsplit
 
 import requests
 
+if __package__:
+    from .amazon_affiliate import DISCLOSURE, tracking_tag
+else:
+    from amazon_affiliate import DISCLOSURE, tracking_tag
+
 BASE_URL = "https://aivision.altervista.org"
 OUTPUT_JSON = Path("data/editorial_content_audit.json")
 OUTPUT_CSV = Path("data/editorial_content_audit.csv")
@@ -236,7 +241,10 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
         add_flag(flags, "editorial_note_in_public_text", "high",
                  "Possibile nota redazionale o istruzione interna nel testo pubblico.",
                  evidence_for(INTERNAL_NOTE_RE, body_without_links))
-    if AFFILIATE_RE.search(body_text):
+    verified_affiliate = DISCLOSURE in body_text and any(
+        link.startswith("https://") and tracking_tag(link) for link in parser.links
+    )
+    if AFFILIATE_RE.search(body_text) and not verified_affiliate:
         add_flag(flags, "affiliate_disclosure_check", "high",
                  "Il testo parla di link affiliati o commissioni: verificare che i link e la disclosure esistano davvero.",
                  evidence_for(AFFILIATE_RE, body_text))

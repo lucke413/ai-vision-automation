@@ -34,9 +34,11 @@ from requests.auth import HTTPBasicAuth
 from PIL import Image
 
 if __package__:
+    from .amazon_affiliate import affiliate_section, configured_tag
     from .ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
     from .cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 else:
+    from amazon_affiliate import affiliate_section, configured_tag
     from ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
     from cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 
@@ -1233,10 +1235,6 @@ def publish_one(
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
         if not draft.get("example_prompt") or not draft.get("advanced_prompt") or not guide_resources(draft):
             raise PublisherError("Quality gate: guida priva di prompt o link pratici ufficiali.")
-    # Amazon Associates: predisposizione sicura. Nessun link personale viene
-    # pubblicato automaticamente su Altervista senza autorizzazione esplicita.
-    if draft.get("affiliate_candidate"):
-        print("    AFFILIAZIONE: articolo candidato; link personale non inserito (verifica autorizzazione Altervista).")
     if not body:
         raise PublisherError("Corpo articolo vuoto.")
     word_count = len(re.findall(r"\b[\wÀ-ÖØ-öø-ÿ]+(?:['’‒–—-][\wÀ-ÖØ-öø-ÿ]+)*\b", raw_body, flags=re.UNICODE))
@@ -1277,6 +1275,11 @@ def publish_one(
         body = guide_place_figures(body, figures)
         body += guide_prompt_blocks(draft)
     body += guide_resources(draft)
+    affiliate_html, affiliate_status, amazon_links = affiliate_section(draft, body, configured_tag())
+    if affiliate_html:
+        body += "\n" + affiliate_html
+    if affiliate_status == "tracking_id_missing":
+        print("    AFFILIAZIONE: Tracking ID Amazon Italia mancante.")
 
     category_name = category_for(draft)
     try:
@@ -1366,6 +1369,8 @@ def publish_one(
         "scheduled_utc": utc_date,
         "category": category_name,
         "tags": [tag.get("name") for tag in tags],
+        "amazon_affiliate_status": affiliate_status,
+        "amazon_affiliate_links": amazon_links,
         "image_origin": image_origin,
         "image_source_url": image_url or None,
         "image_rights_status": draft.get("image_rights_status", "unknown"),

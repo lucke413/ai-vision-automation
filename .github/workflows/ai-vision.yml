@@ -23,6 +23,7 @@ on:
       - 'tests/**'
       - 'requirements.txt'
       - 'requirements-cover.txt'
+      - 'config/amazon-affiliate.json'
       - '.github/workflows/ai-vision.yml'
       - '.github/workflows/legacy-content-repair.yml'
   schedule:
@@ -303,6 +304,7 @@ jobs:
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           WP_DRY_RUN: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) || (github.event_name == 'workflow_dispatch' && !inputs.publish_live) || (github.event_name == 'schedule' && vars.WP_PUBLISH_MODE == 'dry-run')) && 'true' || 'false' }}
+          AMAZON_ASSOCIATE_TAG: ${{ vars.AMAZON_ASSOCIATE_TAG }}
           WP_TIMEZONE: Europe/Rome
           WP_SLOT_TIMES: "08:00,10:30,14:00,16:30,18:30,20:30"
           HF_HUB_DOWNLOAD_TIMEOUT: "60"

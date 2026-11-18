@@ -36,6 +36,13 @@ Riferimenti ufficiali:
 
 Il palinsesto prevede fino a sei articoli ordinari e un approfondimento aggiuntivo alle 19:30 (Europe/Rome), nella categoria Sicurezza con il tag IA e cybersicurezza. L'automazione raccoglie notizie pertinenti, privilegia fonti recenti, evita di proporre lo stesso tema due volte di fila e riutilizza una fonte della rubrica solo dopo almeno 30 giorni. Se manca una notizia idonea, può attingere a documenti ufficiali come quelli di OWASP e NCSC, presentandoli come approfondimenti di contesto. Le riserve di questa rubrica coprono soltanto il suo slot. Il pezzo parte da un caso comprensibile, spiega un meccanismo tecnico e presenta contromisure e limiti supportati dalle fonti.
 
+
+## Link Amazon affiliati
+
+Imposta la variabile Actions `AMAZON_ASSOCIATE_TAG` con il Tracking ID Amazon Italia oppure con un link completo ottenuto tramite **Copia link** in Altervista. In alternativa il publisher legge il campo `tracking_id` da `config/amazon-affiliate.json`. Il Tracking ID compare negli URL pubblicati.
+
+Per recensioni, articoli di prodotto e offerte il generatore identifica fino a tre modelli presenti nella fonte. Il publisher usa una scheda Amazon.it se il collegamento nella fonte identifica il modello esatto. Altrimenti usa una ricerca Amazon.it per quel modello e lo specifica nel testo del link. Il blocco contiene l’informativa Amazon con `rel="sponsored nofollow"`. L'automazione non indica prezzi Amazon o disponibilità nel blocco. I dettagli dell'inserimento risultano in `amazon_affiliate_status` e `amazon_affiliate_links` nel report WordPress.
+
 ## Originalità editoriale e blocco di pubblicazione
 
 Il generatore 5.0 esegue un controllo locale prima di inserire una bozza nel lotto pubblicabile:
@@ -68,7 +75,7 @@ Il workflow `editorial-content-audit.yml` esegue una scansione pubblica, in sola
 
 Il controllo di originalità 1.1 confronta anche la sovrapposizione tematica dei paragrafi e il loro ordine. Un testo che cambia le parole ma conserva la stessa scaletta può essere bloccato o inviato a revisione. Il test resta un filtro deterministico prudenziale: non certifica l'originalità semantica.
 
-Il publisher 3.0 aggiunge un link HTTPS alla fonte originale, quando valido, e non riutilizza immagini RSS/OpenGraph se la bozza non contiene una prova esplicita dei diritti. Il publisher usa prima le foto con permesso documentato, poi cerca su Wikimedia Commons una foto del soggetto esatto se il suo nome compare nel titolo. Verifica che il file sia riutilizzabile e mostra i crediti con i link alla fonte e alla licenza. Se non trova una foto idonea, genera una copertina distinta per la scena descritta nella bozza e la identifica come illustrazione IA. Per una foto Creative Commons fornita nella bozza richiede `image_attribution` e `image_license_url`. Le dichiarazioni di link affiliati/commissioni sono bloccate finché il contenuto non implementa realmente tali link.
+Il publisher 3.0 aggiunge un link HTTPS alla fonte originale, quando valido, e non riutilizza immagini RSS/OpenGraph se la bozza non contiene una prova esplicita dei diritti. Il publisher usa prima le foto con permesso documentato, poi cerca su Wikimedia Commons una foto del soggetto esatto se il suo nome compare nel titolo. Verifica che il file sia riutilizzabile e mostra i crediti con i link alla fonte e alla licenza. Se non trova una foto idonea, genera una copertina distinta per la scena descritta nella bozza e la identifica come illustrazione IA. Per una foto Creative Commons fornita nella bozza richiede `image_attribution` e `image_license_url`. Il publisher aggiunge l’informativa sui link affiliati quando inserisce un collegamento Amazon Italia.
 
 Il lettore delle fonti 5.0 esclude anche contenitori sidebar, articoli correlati, widget, pubblicità e newsletter, oltre ai tag di navigazione già ignorati.
 
