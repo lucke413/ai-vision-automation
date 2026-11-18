@@ -13,8 +13,6 @@ on:
     paths:
       - '.github/workflows/seo-archive-recovery.yml'
       - 'scripts/seo_archive_recovery.py'
-      - 'scripts/wp_publisher.py'
-      - 'scripts/wp_public_cleanup.py'
   schedule:
     - cron: '25 6 * * *'
       timezone: Europe/Rome
@@ -34,8 +32,6 @@ jobs:
       PYTHONUNBUFFERED: '1'
       # Se WP_PUBLISH_MODE è dry-run, anche le riparazioni SEO restano in simulazione.
       SEO_ARCHIVE_ALLOW_WRITES: ${{ vars.WP_PUBLISH_MODE == 'live' && (github.event_name != 'workflow_dispatch' || inputs.apply_safe_fixes) && 'YES' || 'NO' }}
-      # Pulizia dei footer solo dopo audit e revisione del report: marker esplicito nel commit.
-      SEO_PUBLIC_CLEANUP_ALLOW_WRITES: ${{ vars.WP_PUBLISH_MODE == 'live' && contains(github.event.head_commit.message, '[AI-VISION-SEO-CLEANUP]') && 'YES' || 'NO' }}
       WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
       WP_USERNAME: ${{ secrets.WP_USERNAME }}
       WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}

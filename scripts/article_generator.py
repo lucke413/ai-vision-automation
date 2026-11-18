@@ -106,6 +106,9 @@ forniti nel prompt.
 
 REGOLE EDITORIALI:
 - non copiare frasi dalla fonte;
+- usa le fonti per ricostruire i fatti. Nel testo pubblico ometti i link agli
+  articoli consultati e le bibliografie finali. Mantieni le attribuzioni
+  necessarie come normale testo, indicando chi ha prodotto una prova o un dato.
 - non inventare numeri, date, prezzi, caratteristiche o dichiarazioni;
 - distingui i fatti dalle interpretazioni e scrivi una sintesi originale;
 - evita di usare la testata come cornice ripetitiva ("secondo il sito X" o

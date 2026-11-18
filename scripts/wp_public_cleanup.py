@@ -1,89 +1,40 @@
 #!/usr/bin/env python3
-"""Audit e pulizia reversibile dei footer bibliografici dagli articoli AIVision.
-
-Default: sola lettura. La modalità di scrittura rimuove esclusivamente
-l'ultimo paragrafo se è una riga autonoma "Fonte: <link>" / "Bibliografia: <link>".
-Non modifica testo editoriale, titolo, slug, date, stato, immagini o SEO.
-"""
+"""Audit e pulizia dei link redazionali nei post pubblicati e programmati."""
 from __future__ import annotations
 
-import datetime as dt
-import html
+import collections
+import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
-import re
 from pathlib import Path
-from urllib.parse import urljoin
 
 import requests
 from requests.auth import HTTPBasicAuth
 
 import seo_archive_recovery as recovery
+from inline_image_repair import request_with_retry
+from public_source_links import clean_source_links, marked_source_url
+from source_originality_audit import audit_originality, recorded_checks
 
 OUTPUT = Path(__file__).resolve().parents[1] / "data" / "public_source_cleanup.json"
 BACKUP = Path(__file__).resolve().parents[1] / "data" / "public_source_cleanup_backups.json"
+PLAN = Path(__file__).resolve().parents[1] / "data" / "source_cleanup_plan.json"
+API = recovery.BASE_URL + "/wp-json/wp/v2/posts"
+FIELDS = "id,status,date,date_gmt,modified,slug,title,content,featured_media"
 TIMEOUT = (5, 20)
 UA = "AIVision-Public-Source-Cleanup/1.0"
-# 2026-11-02: eseguire solo sui footer autonomi confermati dal report read-only #17.
-FOOTER_LABEL = re.compile(
-    r"^(?:fonte(?:\s+di\s+riferimento)?|fonti(?:\s+di\s+riferimento)?|"
-    r"riferimenti|bibliografia)\s*:\s*[^.!?]{2,180}[.!?]?$",
-    re.IGNORECASE,
-)
-
-
-def last_source_footer(content: str) -> str:
-    """Restituisce l'ultimo paragrafo solo se è una bibliografia linkata autonoma."""
-    value = str(content or "")
-    blocks = list(re.finditer(
-        r"(?:<!--\s*wp:paragraph(?:\s+[^>]*)?-->\s*)?<p\b[^>]*>.*?</p\s*>(?:\s*<!--\s*/wp:paragraph\s*-->)?",
-        value, re.IGNORECASE | re.DOTALL,
-    ))
-    if not blocks:
-        return ""
-    match = blocks[-1]
-    if value[match.end():].strip():
-        return ""
-    block = match.group(0)
-    if not re.search(r"<a\b[^>]*href\s*=", block, re.IGNORECASE):
-        return ""
-    visible = html.unescape(re.sub(r"<[^>]+>", " ", block))
-    visible = re.sub(r"\s+", " ", visible).strip()
-    if len(visible) > 240 or not FOOTER_LABEL.fullmatch(visible):
-        return ""
-    return block
-
-
-def remove_last_source_footer(content: str) -> tuple[str, str]:
-    value = str(content or "")
-    block = last_source_footer(value)
-    if not block:
-        return value, ""
-    position = value.rfind(block)
-    if position < 0:
-        return value, ""
-    cleaned = (value[:position] + value[position + len(block):]).rstrip()
-    return cleaned, block
-
-
-def save_backup(rows: list[dict]) -> None:
-    BACKUP.parent.mkdir(parents=True, exist_ok=True)
-    temp = BACKUP.with_suffix(".tmp")
-    temp.write_text(json.dumps({
-        "site": recovery.BASE_URL,
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "scope": "only final standalone linked source paragraph",
-        "posts": rows,
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(BACKUP)
+def write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp.replace(path)
 
 
 def wp_session() -> requests.Session:
     session = requests.Session()
     session.headers["User-Agent"] = UA
-    base = os.environ.get("WP_BASE_URL", "").strip().rstrip("/")
-    if base.endswith("/wp-json"):
-        base = base[:-len("/wp-json")]
+    base = os.environ.get("WP_BASE_URL", "").strip().rstrip("/").removesuffix("/wp-json")
     username = os.environ.get("WP_USERNAME", "").strip()
     password = os.environ.get("WP_APP_PASSWORD", "").strip()
     if base and base != recovery.BASE_URL:
@@ -95,119 +46,138 @@ def wp_session() -> requests.Session:
     return session
 
 
-def read_edit_post(session: requests.Session, post_id: int) -> dict:
-    endpoint = urljoin(recovery.BASE_URL + "/", f"wp-json/wp/v2/posts/{post_id}")
-    response = recovery.get(session, endpoint, params={"context": "edit"})
-    response.raise_for_status()
-    value = response.json()
-    if not isinstance(value, dict):
-        raise ValueError("Risposta WordPress non valida.")
-    return value
+def read_posts(session: requests.Session) -> list[dict]:
+    posts = {}
+    for status in ("publish", "future") if session.auth else ("publish",):
+        page = 1
+        while True:
+            response = request_with_retry(session, "get", API, params={
+                "status": status, "context": "edit" if session.auth else "view", "page": page,
+                "per_page": 50, "orderby": "id", "order": "asc", "_fields": FIELDS,
+            })
+            batch = response.json()
+            pages = response.headers.get("X-WP-TotalPages")
+            if not isinstance(batch, list) or any(not isinstance(post, dict) for post in batch):
+                raise RuntimeError(f"Inventario WordPress non valido per {status}, pagina {page}.")
+            field = "raw" if session.auth else "rendered"
+            for post in batch:
+                if post.get("status") != status or not isinstance((post.get("content") or {}).get(field), str):
+                    raise RuntimeError(f"Inventario WordPress incompleto per articolo {post.get('id')}.")
+                posts[post["id"]] = post
+            if (pages and page >= int(pages)) or (not pages and len(batch) < 50):
+                break
+            page += 1
+            if page > 100:
+                raise RuntimeError("Troppe pagine nell'inventario WordPress.")
+    return list(posts.values())
+
+
+def content_hash(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def prepare(session: requests.Session) -> int:
+    posts = read_posts(session)
+    records, unreadable = recorded_checks()
+    field = "raw" if session.auth else "rendered"
+    changes = []
+    for post in posts:
+        before = post["content"][field]
+        record = records.setdefault(post["id"], {})
+        if not record.get("source_url"):
+            source = marked_source_url(before)
+            if source:
+                record["source_url"] = source
+        source = record.get("source_url") or ""
+        after, links = clean_source_links(before, source)
+        if after != before:
+            changes.append({"id": post["id"], "status": post["status"], "modified": post["modified"],
+                            "before": before, "after": after, "links": links})
+    count = collections.Counter(post["status"] for post in posts)
+    print(f"Inventario: {count['publish']} pubblicati, {count['future']} programmati. "
+          f"Articoli con riferimenti da rimuovere: {len(changes)}.")
+    # Full raw text of scheduled articles stays in the runner and WordPress.
+    backups = [
+        {"post_id": row["id"], "status": row["status"], "modified": row["modified"],
+         "before_sha256": content_hash(row["before"]), "after_sha256": content_hash(row["after"]),
+         **({"content_before": row["before"]} if row["status"] == "publish" else {})}
+        for row in changes
+    ]
+    write_json(BACKUP, {"site": recovery.BASE_URL, "posts": backups})
+    write_json(PLAN, {"inventory": dict(count), "changes": changes,
+                      "records": records, "unreadable_workflow_reports": unreadable})
+    return 0
+
+
+def apply_one(row: dict) -> dict:
+    session = wp_session()
+    endpoint = f"{API}/{row['id']}"
+    params = {"context": "edit", "_fields": FIELDS}
+    current = request_with_retry(session, "get", endpoint, params=params).json()
+    base = {"id": row["id"], "status_wp": current.get("status"), "links": row["links"]}
+    if (current.get("content") or {}).get("raw") == row["after"]:
+        return {**base, "status": "already_clean"}
+    if (current.get("modified") != row["modified"]
+            or (current.get("content") or {}).get("raw") != row["before"]
+            or current.get("status") not in {"publish", "future"}):
+        return {**base, "status": "changed_since_audit"}
+    request_with_retry(session, "post", endpoint, params=params, json={"content": row["after"]},
+                       allow_redirects=False)
+    saved = request_with_retry(session, "get", endpoint, params=params).json()
+    if ((saved.get("content") or {}).get("raw") != row["after"]
+            or any(saved.get(key) != current.get(key) for key in ("id", "status", "date", "date_gmt", "slug", "featured_media", "title"))):
+        raise RuntimeError("Esito WordPress da verificare.")
+    return {**base, "status": "removed_and_verified"}
+
+
+def apply(session: requests.Session) -> int:
+    if not session.auth:
+        raise PermissionError("Credenziali WordPress necessarie per gli articoli programmati.")
+    plan = json.loads(PLAN.read_text(encoding="utf-8"))
+    records = {int(key): value for key, value in plan["records"].items()}
+    removed = []
+    errors = []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        tasks = {pool.submit(apply_one, row): row["id"] for row in plan["changes"]}
+        for task in as_completed(tasks):
+            try:
+                removed.append(task.result())
+            except Exception as exc:
+                errors.append({"id": tasks[task], "error": f"{type(exc).__name__}: {exc}"})
+
+    posts = read_posts(session)
+    remaining = [
+        post["id"] for post in posts
+        if clean_source_links(post["content"]["raw"], records.get(post["id"], {}).get("source_url") or "")[1]
+    ]
+    verified = collections.Counter(row["status_wp"] for row in removed if row["status"] == "removed_and_verified")
+    output = {"inventory": plan["inventory"], "current_inventory": dict(collections.Counter(p["status"] for p in posts)),
+              "removed": dict(verified), "remaining": remaining, "errors": errors, "results": removed,
+              "unreadable_workflow_reports": plan["unreadable_workflow_reports"]}
+    write_json(OUTPUT, output)
+    print(f"Rimossi e verificati: {verified['publish']} pubblicati, {verified['future']} programmati. "
+          f"Da controllare: {len(remaining)}. Errori: {len(errors)}.")
+    by_status, live = audit_originality(posts, records)
+    output.update(originality_records=by_status, originality_rechecks=live)
+    write_json(OUTPUT, output)
+    print("Originalità registrata: " + json.dumps(by_status, ensure_ascii=False))
+    for state in ("publish", "future"):
+        sampled = collections.Counter(row["check"] for row in live if row["status_wp"] == state)
+        print(f"Confronto attuale {state}: {dict(sampled)}")
+    return 1 if errors or remaining else 0
 
 
 def main() -> int:
-    apply = os.environ.get("SEO_PUBLIC_CLEANUP_ALLOW_WRITES") == "YES"
+    import sys
     session = wp_session()
-    posts, inventory = recovery.archive(session)
-    if not inventory.get("complete"):
-        raise RuntimeError("Inventario WordPress incompleto: nessuna modifica consentita.")
-
-    candidates = []
-    for post in posts:
-        rendered = (post.get("content") or {}).get("rendered") or ""
-        footer = last_source_footer(rendered)
-        if footer:
-            title = recovery.plain((post.get("title") or {}).get("rendered") or "")
-            candidates.append({
-                "id": int(post["id"]),
-                "url": str(post.get("link") or ""),
-                "slug": str(post.get("slug") or ""),
-                "modified": str(post.get("modified") or ""),
-                "title": title,
-                "detected_footer": recovery.plain(footer),
-                "status": "candidate_readonly",
-            })
-
-    report = {
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "site": recovery.BASE_URL,
-        "mode": "apply" if apply else "dry_run",
-        "inventory": inventory,
-        "source_footers_found": len(candidates),
-        "source_footers_removed": 0,
-        "posts": candidates,
-        "errors": [],
-    }
-    backups: list[dict] = []
-    if apply:
-        if not session.auth:
-            raise PermissionError("Per scrivere servono credenziali WordPress nei secrets GitHub.")
-        if not candidates:
-            report["note"] = "Nessun footer bibliografico finale rilevato."
-        for row in candidates:
-            try:
-                current = read_edit_post(session, row["id"])
-                current_title = recovery.plain((current.get("title") or {}).get("rendered") or "")
-                raw = (current.get("content") or {}).get("raw")
-                if (
-                    current.get("status") != "publish"
-                    or current.get("link") != row["url"]
-                    or current.get("slug") != row["slug"]
-                    or current.get("modified") != row["modified"]
-                    or current_title != row["title"]
-                    or not isinstance(raw, str)
-                ):
-                    row["status"] = "skipped_post_changed_or_raw_unavailable"
-                    continue
-                cleaned, footer = remove_last_source_footer(raw)
-                if not footer:
-                    row["status"] = "skipped_footer_not_exact_in_edit_content"
-                    continue
-                backup = {
-                    "post_id": row["id"],
-                    "url": row["url"],
-                    "slug": row["slug"],
-                    "modified_before": row["modified"],
-                    "title": row["title"],
-                    "content_before": raw,
-                    "removed_footer": footer,
-                }
-                backups.append(backup)
-                save_backup(backups)
-                endpoint = urljoin(recovery.BASE_URL + "/", f"wp-json/wp/v2/posts/{row['id']}")
-                response = session.post(
-                    endpoint,
-                    params={"context": "edit"},
-                    json={"content": cleaned},
-                    timeout=TIMEOUT,
-                    allow_redirects=False,
-                )
-                response.raise_for_status()
-                saved = response.json()
-                saved_raw = (saved.get("content") or {}).get("raw")
-                if saved_raw != cleaned:
-                    row["status"] = "write_unconfirmed_check_wordpress"
-                    continue
-                row["status"] = "removed_and_verified"
-                report["source_footers_removed"] += 1
-            except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-                row["status"] = "error"
-                report["errors"].append({
-                    "post_id": row["id"],
-                    "error": f"{type(exc).__name__}: {str(exc)[:180]}",
-                })
-
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(
-        f"SOURCE FOOTER AUDIT: {inventory['retrieved']} articoli; "
-        f"{len(candidates)} footer autonomi rilevati; "
-        f"{report['source_footers_removed']} rimossi e verificati; "
-        f"errori: {len(report['errors'])}; mode={report['mode']}."
-    )
-    for row in candidates:
-        print(f"  [{row['id']}] {row['status']} | {row['title']} | {row['detected_footer']}")
-    print(f"Report: {OUTPUT}")
+    if sys.argv[1:] == ["--apply"]:
+        return apply(session)
+    prepare(session)
+    if os.environ.get("SEO_PUBLIC_CLEANUP_ALLOW_WRITES") == "YES":
+        return apply(session)
+    plan = json.loads(PLAN.read_text(encoding="utf-8"))
+    write_json(OUTPUT, {"mode": "dry_run", "inventory": plan["inventory"],
+                        "source_footers_found": len(plan["changes"])})
     return 0
 
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 import argparse, datetime as dt, html, json, os, re
 from pathlib import Path
+from public_source_links import clean_source_links
+
 import requests
 BASE="https://aivision.altervista.org"
 PLAN=Path("data/commerce_calendar_articles_plan.json")
@@ -116,6 +118,7 @@ def main():
    if pid in {602, 590, 587}:
     after_content = historical_price_note(p.get("date")) + after_content
    after_content += SOURCE_REFERENCES[pid]
+   after_content, _ = clean_source_links(after_content)
    for link in re.findall(r'href="(https://aivision\.altervista\.org/[^"]+)"',after_content):
     v=s.get(link,timeout=(8,25),allow_redirects=True)
     if v.status_code!=200 or not v.url.startswith(BASE+"/"): raise RuntimeError("Link interno non valido: "+link)

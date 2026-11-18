@@ -131,16 +131,6 @@ class EditorialOriginalityTests(unittest.TestCase):
         )
         self.assertLess(result["structural_order_ratio"], 0.50)
 
-    def test_source_reference_link_is_https_external_and_attributed(self):
-        link = publisher.source_reference_link({
-            "source_url": "https://example.com/news/story",
-            "source": "Example News",
-        }, "https://aivision.altervista.org")
-        self.assertIn('href="https://example.com/news/story"', link)
-        self.assertIn("Example News", link)
-        self.assertEqual(publisher.source_reference_link({"source_url": "http://example.com/a"}, "https://aivision.altervista.org"), "")
-        self.assertEqual(publisher.source_reference_link({"source_url": "https://aivision.altervista.org/other"}, "https://aivision.altervista.org"), "")
-
     def test_external_image_requires_explicit_rights_and_license(self):
         draft = {"source_image_url": "https://images.example.com/photo.jpg", "image_license": "unknown"}
         self.assertFalse(publisher.image_rights_approved(draft))

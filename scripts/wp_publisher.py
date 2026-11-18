@@ -34,10 +34,12 @@ from requests.auth import HTTPBasicAuth
 from PIL import Image
 
 if __package__:
+    from .public_source_links import clean_source_links
     from .amazon_affiliate import affiliate_section, configured_tag
     from .ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
     from .cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 else:
+    from public_source_links import clean_source_links
     from amazon_affiliate import affiliate_section, configured_tag
     from ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
     from cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
@@ -774,31 +776,6 @@ def guide_resources(draft: dict) -> str:
     return '<h2>Prova lo strumento</h2><p>Qui trovi il servizio con cui mettere in pratica i prompt. Aprilo e segui la guida, senza bisogno di leggere manuali tecnici.</p><ul>' + ''.join(links) + '</ul>' if links else ""
 
 
-def source_reference_link(draft: dict, base_url: str) -> str:
-    """Aggiunge una citazione trasparente alla fonte primaria della notizia."""
-    source_url = str(draft.get("source_url") or "").strip()
-    try:
-        parts = urlsplit(source_url)
-        base = urlsplit(str(base_url or "").strip())
-        if (not base.hostname or parts.scheme != "https" or not parts.hostname or parts.username or parts.password
-                or parts.port not in (None, 443)
-                or parts.hostname.casefold() == base.hostname.casefold()):
-            return ""
-    except ValueError:
-        return ""
-    label = str(draft.get("source") or parts.hostname or "Fonte originale").strip()
-    if not label:
-        label = "Fonte originale"
-    return (
-        '<p class="av-source-reference">Fonte: <a href="'
-        + html.escape(source_url, quote=True)
-        + '" rel="noopener noreferrer">'
-        + html.escape(label)
-        + '</a>.</p>'
-    )
-
-
-
 def category_archive_link(category: dict, base_url: str) -> str:
     """Link interno alla categoria come fallback se manca un articolo correlato."""
     link = str(category.get("link") or "").strip() if isinstance(category, dict) else ""
@@ -1231,7 +1208,7 @@ def publish_one(
         original_body, flags=re.UNICODE,
     ))
     raw_body = strip_public_source_notes(original_body)
-    body = markdown_to_html(raw_body)
+    body, _ = clean_source_links(markdown_to_html(raw_body), str(draft.get("source_url") or ""))
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
         if not draft.get("example_prompt") or not draft.get("advanced_prompt") or not guide_resources(draft):
             raise PublisherError("Quality gate: guida priva di prompt o link pratici ufficiali.")
@@ -1306,11 +1283,6 @@ def publish_one(
         category_link = category_archive_link(category, client.base_url)
         if category_link:
             body += "\n" + category_link
-
-    source_link = source_reference_link(draft, client.base_url)
-    source_url_for_citation = str(draft.get("source_url") or "").strip()
-    if source_link and source_url_for_citation not in raw_body:
-        body += "\n" + source_link
 
     raw_tags = draft.get("tags") if isinstance(draft.get("tags"), list) else []
     if draft.get(TOPIC_KEY):

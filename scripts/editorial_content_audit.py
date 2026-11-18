@@ -208,8 +208,6 @@ def analyze_post(post: dict, today: dt.date | None = None) -> dict:
         add_flag(flags, "missing_h2", "low", "Articolo lungo senza sottotitoli H2 nel corpo.")
     if not internal_links:
         add_flag(flags, "no_internal_links", "low", "Nessun collegamento interno nel corpo.")
-    if not external_links:
-        add_flag(flags, "no_external_references", "medium", "Nessun collegamento esterno: controllare attribuzione e fonti.")
     if parser.images_missing_alt:
         add_flag(flags, "images_missing_alt", "low", f"{parser.images_missing_alt} immagini senza testo alternativo.")
     if not post.get("featured_media"):

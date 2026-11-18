@@ -41,13 +41,13 @@ class LegacyContentRepairTests(unittest.TestCase):
         regular = post(title="Nuovo smartphone: caratteristiche e specifiche")
         self.assertEqual(repair.build_plan([regular], today), [])
 
-    def test_review_title_is_repaired_with_source_and_disclosure(self):
+    def test_review_title_is_repaired_with_disclosure_and_without_source_footer(self):
         today = date(2026, 11, 16)
         original = post(post_id=478, title="iPhone 18 Pro: recensione e novità")
         plan = repair.build_plan([original], today)
         self.assertEqual(len(plan), 1)
         self.assertEqual(plan[0]["new_title"], repair.REVIEW_REPAIRS[478]["title"])
-        self.assertIn("apple.com", plan[0]["new_content"])
+        self.assertNotIn("apple.com", plan[0]["new_content"])
         self.assertIn(repair.REPAIR_MARKER, plan[0]["new_content"])
 
     def test_known_near_copy_is_rewritten_and_receives_original_cover(self):

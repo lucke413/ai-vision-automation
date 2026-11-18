@@ -3,6 +3,8 @@
 from __future__ import annotations
 import argparse, datetime as dt, json, os
 from pathlib import Path
+from public_source_links import clean_source_links
+
 import requests
 
 BASE = "https://aivision.altervista.org"
@@ -249,6 +251,7 @@ def main() -> int:
                 print(f"Post {post_id}: aggiornamento già presente, salto.")
                 continue
             after_content = spec["html"] if spec["mode"] == "replace" else raw + "\n" + MARKER + "\n" + spec["html"]
+            after_content, _ = clean_source_links(after_content)
             if spec["mode"] == "replace":
                 after_content = MARKER + "\n" + after_content
             if post_id == 518:

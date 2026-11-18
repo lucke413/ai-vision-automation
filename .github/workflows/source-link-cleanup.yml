@@ -1,0 +1,63 @@
+name: AI Vision editorial source links
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/source-link-cleanup.yml'
+  workflow_dispatch:
+    inputs:
+      apply_cleanup:
+        description: 'Rimuovi i link editoriali dagli articoli pubblicati e programmati'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ai-vision-editorial-source-cleanup
+  cancel-in-progress: false
+
+jobs:
+  check-and-clean:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+      WP_USERNAME: ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      GITHUB_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Test source-link rules
+        run: python -m unittest discover -s tests -p 'test_wp_public_cleanup.py' -v
+      - name: Inventory WordPress and prepare cleanup
+        run: python scripts/wp_public_cleanup.py
+      - name: Save published backups before writing
+        if: ${{ inputs.apply_cleanup || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-SOURCE-CLEANUP]')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-link-cleanup-backup-${{ github.run_id }}
+          path: data/public_source_cleanup_backups.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Apply cleanup and verify originality
+        if: ${{ inputs.apply_cleanup || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-SOURCE-CLEANUP]')) }}
+        run: python scripts/wp_public_cleanup.py --apply
+      - name: Save results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-link-cleanup-report-${{ github.run_id }}
+          path: data/public_source_cleanup.json
+          if-no-files-found: warn
+          retention-days: 30

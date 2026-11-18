@@ -19,6 +19,8 @@ import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from public_source_links import clean_source_links
+
 import requests
 
 from editorial_content_audit import analyze_post
@@ -307,6 +309,7 @@ def build_plan(posts: list[dict], today: dt.date | None = None) -> list[dict]:
         if has_stale_offer and NOTICE_MARKER not in new_content:
             new_content = price_notice(str(post.get("date") or "")) + "\n" + new_content
 
+        new_content, _ = clean_source_links(new_content)
         if new_title != old_title or new_content != old_content or cover_category:
             plan.append({
                 "id": post_id,

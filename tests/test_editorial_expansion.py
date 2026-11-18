@@ -683,29 +683,6 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertNotIn("Menu da escludere", result)
         self.assertNotIn("no_script", result)
 
-    def test_source_reference_is_shown_only_for_safe_external_https_urls(self):
-        draft = {
-            "source_url": "https://news.example.com/ai-story?a=1&b=2",
-            "source": "News & Tech",
-        }
-        link = publisher.source_reference_link(draft, "https://aivision.altervista.org")
-        self.assertIn("news.example.com/ai-story", link)
-        self.assertIn("News &amp; Tech", link)
-        self.assertEqual(
-            publisher.source_reference_link(
-                {"source_url": "https://aivision.altervista.org/post/"},
-                "https://aivision.altervista.org",
-            ),
-            "",
-        )
-        self.assertEqual(
-            publisher.source_reference_link(
-                {"source_url": "javascript:alert(1)", "source": "malicious"},
-                "https://aivision.altervista.org",
-            ),
-            "",
-        )
-
     def test_category_archive_link_only_accepts_same_site_https(self):
         category = {
             "name": "News",
@@ -729,7 +706,7 @@ class EditorialExpansionTests(unittest.TestCase):
             "",
         )
 
-    def test_publish_adds_source_and_category_links_when_available(self):
+    def test_publish_keeps_source_in_report_and_category_link_in_article(self):
         client = MagicMock()
         client.dry_run = False
         client.base_url = "https://aivision.altervista.org"
@@ -758,8 +735,9 @@ class EditorialExpansionTests(unittest.TestCase):
             )
         self.assertEqual(result["status"], "scheduled")
         payload = client.create_post.call_args.args[0]
-        self.assertIn("Source Example", payload["content"])
-        self.assertIn("source.example.com/story", payload["content"])
+        self.assertNotIn("Source Example", payload["content"])
+        self.assertNotIn("source.example.com/story", payload["content"])
+        self.assertEqual(result["source_url"], "https://source.example.com/story")
         self.assertIn("/category/news/", payload["content"])
         self.assertIn('<!-- wp:image {"id":1,"sizeSlug":"large","linkDestination":"none","style":{"border":{"width":"0px","style":"none"}}} -->', payload["content"])
         self.assertIn('src="https://aivision.altervista.org/wp-content/uploads/cover.png"', payload["content"])
