@@ -147,6 +147,8 @@ class EditorialOriginalityTests(unittest.TestCase):
         draft.update({"image_rights_status": "permission_granted", "image_license": "Written permission"})
         self.assertTrue(publisher.image_rights_approved(draft))
         draft.update({"image_rights_status": "cc_by", "image_license": "CC BY 4.0", "image_attribution": "Photographer / source"})
+        self.assertFalse(publisher.image_rights_approved(draft))
+        draft["image_license_url"] = "https://creativecommons.org/licenses/by/4.0/"
         self.assertTrue(publisher.image_rights_approved(draft))
         draft["image_attribution"] = ""
         self.assertFalse(publisher.image_rights_approved(draft))

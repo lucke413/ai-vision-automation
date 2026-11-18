@@ -22,6 +22,7 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - 'requirements.txt'
+      - 'requirements-cover.txt'
       - '.github/workflows/ai-vision.yml'
       - '.github/workflows/legacy-content-repair.yml'
   schedule:
@@ -291,7 +292,12 @@ jobs:
           WP_DRY_RUN: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) || (github.event_name == 'workflow_dispatch' && !inputs.publish_live) || (github.event_name == 'schedule' && vars.WP_PUBLISH_MODE == 'dry-run')) && 'true' || 'false' }}
           WP_TIMEZONE: Europe/Rome
           WP_SLOT_TIMES: "08:00,10:30,14:00,16:30,18:30,20:30"
-        run: python scripts/wp_publisher.py
+          HF_HUB_DOWNLOAD_TIMEOUT: "60"
+        run: |
+          if [ "$WP_DRY_RUN" = false ]; then
+            python -m pip install -r requirements-cover.txt || echo "::warning::Generatore immagini non installato. Le foto con licenza verificata possono ancora essere pubblicate."
+          fi
+          python scripts/wp_publisher.py
 
       - name: Controlla report WordPress
         if: ${{ always() && hashFiles('data/wp_publish_report.json') != '' }}

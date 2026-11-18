@@ -665,7 +665,7 @@ class EditorialExpansionTests(unittest.TestCase):
         client.related_link.return_value='';client.existing_post.return_value=None
         client.upload_media.return_value={'id':0};client.create_post.return_value={'id':123}
         draft={**item(0,'Casa smart','GUIDA'), 'body_markdown':' '.join(['parola']*650)}
-        with patch.object(publisher,'editorial_cover',return_value=b'png'):
+        with patch.object(publisher,'generate_ai_cover',return_value=b'png'):
             publisher.publish_one(draft,datetime.now(timezone.utc),client,None)
         self.assertEqual(client.create_post.call_args.args[0]['categories'],[1,2])
         self.assertEqual(publisher.category_for(item(1,'Gaming')), 'Gaming e console')
@@ -751,7 +751,7 @@ class EditorialExpansionTests(unittest.TestCase):
             "source": "Source Example",
             "tags": [],
         }
-        with patch.object(publisher, "editorial_cover", return_value=b"png"):
+        with patch.object(publisher, "generate_ai_cover", return_value=b"png"):
             result = publisher.publish_one(
                 draft, datetime.now(timezone.utc), client, client.session
             )
@@ -823,7 +823,7 @@ class EditorialExpansionTests(unittest.TestCase):
         client.save_seo.return_value = "warning"
         draft = {**item(80, "AI"), "title": "Un articolo informativo approfondito",
                  "body_markdown": " ".join(["parola"] * 650), "slug": "articolo-prova"}
-        with patch.object(publisher, "editorial_cover", return_value=b"png"):
+        with patch.object(publisher, "generate_ai_cover", return_value=b"png"):
             result = publisher.publish_one(draft, datetime.now(timezone.utc), client, client.session)
         self.assertEqual(result["status"], "scheduled")
         self.assertEqual(client.create_post.call_args.args[0]["categories"], [])

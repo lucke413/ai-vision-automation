@@ -1,5 +1,8 @@
+import io
 import unittest
 from unittest.mock import MagicMock, patch
+
+from PIL import Image
 
 from scripts import inline_image_repair as repair
 
@@ -24,7 +27,7 @@ class InlineImageRepairTests(unittest.TestCase):
 
     @patch.object(repair, "image_state", return_value="ok")
     def test_healthy_post_is_untouched(self, state):
-        self.assertIsNone(repair.repair_post(self.client, self.post(self.cover + self.body), {}))
+        self.assertIsNone(repair.repair_post(self.client, self.post(self.cover + self.body)))
         self.client.session.post.assert_not_called()
         state.assert_called_once()
 
@@ -49,7 +52,11 @@ class InlineImageRepairTests(unittest.TestCase):
 
     @patch.object(repair, "image_state", return_value="striped")
     @patch.object(repair, "request_with_retry")
-    def test_replaces_both_covers_without_touching_body_or_schedule(self, request, _):
+    @patch.object(repair, "generate_ai_cover")
+    def test_replaces_both_covers_without_touching_body_or_schedule(self, generate, request, _):
+        output = io.BytesIO()
+        Image.new("RGB", (1200, 675), "red").save(output, "JPEG")
+        generate.return_value = output.getvalue()
         post = self.post(self.cover + self.body)
         new_media = {"id": 77, "source_url": self.new_url}
         self.client.upload_media.return_value = new_media
@@ -57,14 +64,14 @@ class InlineImageRepairTests(unittest.TestCase):
         saved = MagicMock()
         saved.json.return_value = {
             "status": "future", "featured_media": 77,
-            "content": {"raw": repair.featured_image_block(new_media, "Titolo") + "\n\n" + self.body},
+            "content": {"raw": repair.featured_image_block(new_media, "Titolo", repair.CoverCredit("Illustrazione generata con IA")) + "\n\n" + self.body},
         }
         current = MagicMock()
         current.json.return_value = post
         empty = MagicMock()
         empty.json.return_value = []
         request.side_effect = [current, empty, response, saved]
-        result = repair.repair_post(self.client, post, {})
+        result = repair.repair_post(self.client, post)
         payload = request.call_args_list[2].kwargs["json"]
         self.assertEqual(set(payload), {"content", "featured_media", "meta"})
         self.assertEqual(payload["featured_media"], 77)
@@ -72,6 +79,7 @@ class InlineImageRepairTests(unittest.TestCase):
         self.assertNotIn(self.old_url, payload["content"])
         self.assertTrue(payload["content"].endswith(self.body))
         self.assertEqual(result["status"], "future")
+        self.assertIn("Illustrazione generata con IA", payload["content"])
 
     def test_later_image_is_not_captured_by_a_broken_leading_marker(self):
         content = '<!-- wp:image {"id":42} -->' + self.body + self.cover

@@ -4,7 +4,7 @@
 - aggiunge una nota trasparente ai vecchi articoli commerciali;
 - rimuove titoli che promettono prove/recensioni non svolte da AI Vision;
 - riscrive alcune schede che seguivano troppo da vicino la struttura di testate terze;
-- crea copertine locali per le riscritture, senza riutilizzare immagini di fonte;
+- crea copertine IA per le riscritture, senza riutilizzare immagini di fonte;
 - conserva backup integrali e verifica ogni aggiornamento WordPress.
 
 Senza --apply il programma produce soltanto un piano e non scrive su WordPress.
@@ -22,7 +22,8 @@ from urllib.parse import urlsplit
 import requests
 
 from editorial_content_audit import analyze_post
-from wp_publisher import WordPressClient, editorial_cover, slugify
+from cover_media import generate_ai_cover
+from wp_publisher import WordPressClient, slugify
 
 BASE_URL = os.getenv("WP_BASE_URL", "https://aivision.altervista.org").rstrip("/")
 OUTPUT = Path("data/legacy_content_repair_backup.json")
@@ -345,13 +346,13 @@ def apply_plan(client: WordPressClient, plan: list[dict]) -> list[dict]:
 
             payload = {"title": item["new_title"], "content": item["new_content"]}
             if item.get("cover_category"):
-                image = editorial_cover(item["new_title"], item["cover_category"])
+                image = generate_ai_cover({"title": item["new_title"]})
                 media = client.upload_media(
                     image,
-                    f"ai-vision-legacy-{post_id}-{slugify(item['new_title'])}.png",
-                    "image/png",
+                    f"ai-vision-legacy-{post_id}-{slugify(item['new_title'])}.jpg",
+                    "image/jpeg",
                     item.get("cover_alt") or item["new_title"],
-                    "Copertina grafica originale AI Vision",
+                    "Illustrazione generata con IA",
                 )
                 if not media.get("id"):
                     raise RuntimeError("Copertina grafica non caricata.")

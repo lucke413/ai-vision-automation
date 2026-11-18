@@ -20,16 +20,17 @@ import requests
 from PIL import Image
 
 if __package__:
-    from .editorial_cover import editorial_cover, is_striped_cover
+    from .cover_media import CoverCredit, generate_ai_cover, is_interim_card, is_retired_cover, is_striped_cover
     from .wp_publisher import PublisherError, USER_AGENT, WordPressClient, featured_image_block, read_image_response
 else:
-    from editorial_cover import editorial_cover, is_striped_cover
+    from cover_media import CoverCredit, generate_ai_cover, is_interim_card, is_retired_cover, is_striped_cover
     from wp_publisher import PublisherError, USER_AGENT, WordPressClient, featured_image_block, read_image_response
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKUP_PATH = ROOT / "data" / "inline_image_repair_backup.json"
 REPORT_PATH = ROOT / "data" / "inline_image_repair_report.json"
 PER_PAGE = 100
+UPGRADE_DIR = ROOT / "assets" / "cover-upgrades"
 
 
 def write_json_atomic(path: Path, payload: dict) -> None:
@@ -178,6 +179,8 @@ def image_state(url: str, client: WordPressClient, details: dict | None = None) 
     try:
         with Image.open(io.BytesIO(content)) as image:
             image.load()
+            if is_interim_card(image):
+                return "previous_illustration"
             return "striped" if is_striped_cover(image) else "ok"
     except (OSError, ValueError, Image.DecompressionBombError):
         return "invalid"
@@ -210,8 +213,8 @@ def plan_repair(client: WordPressClient, post: dict) -> CoverRepair | None:
     inline_state = featured_state if matching_inline else (
         image_state(inline_url, client) if inline_url else "missing"
     )
-    replace_featured = featured_state in {"striped", "missing", "invalid"}
-    replace_inline = inline_state in {"striped", "missing", "invalid"}
+    replace_featured = featured_state in {"striped", "previous_illustration", "missing", "invalid"}
+    replace_inline = inline_state in {"striped", "previous_illustration", "missing", "invalid"}
     if not replace_featured and not replace_inline:
         return None
     if replace_featured and block and inline_state == "ok":
@@ -226,15 +229,28 @@ def plan_repair(client: WordPressClient, post: dict) -> CoverRepair | None:
     return CoverRepair({} if replace_featured else media, replace_span, featured_state, inline_state)
 
 
-def repair_post(client: WordPressClient, post: dict, categories: dict) -> dict | None:
-    plan = plan_repair(client, post)
-    if plan is None:
-        return None
-
-    media = plan.media
+def repair_post(client: WordPressClient, post: dict, upgrade: dict | None = None) -> dict | None:
     post_id = int(post["id"])
     title = raw_title(post)
     content = raw_content(post)
+    credit = None
+    filename = f"ai-vision-photo-{post_id}"
+    if upgrade and post.get("featured_media") == upgrade["previous_media"]:
+        block, inline_url = leading_cover(content)
+        inline_id = ATTACHMENT_CLASS.search(block.group()) if block else None
+        if block and not (
+            (inline_id and int(inline_id.group(1)) == upgrade["previous_media"])
+            or media_path(inline_url).endswith(f"/ai-vision-cover-{post_id}.png")
+        ):
+            raise PublisherError("Copertina interna modificata dopo la verifica.")
+        plan = CoverRepair({}, block.span() if block else None, "previous_illustration", "previous_illustration")
+        credit = CoverCredit(**upgrade["credit"])
+    else:
+        upgrade = None
+        plan = plan_repair(client, post)
+        if plan is None:
+            return None
+    media = plan.media
     url = client._url(f"posts/{post_id}")
     params = {"context": "edit", "_fields": "id,modified,status,featured_media,content,meta"}
     current = request_with_retry(client.session, "get", url, params=params).json()
@@ -243,24 +259,27 @@ def repair_post(client: WordPressClient, post: dict, categories: dict) -> dict |
         raise PublisherError("Articolo modificato durante il controllo, da riesaminare.")
 
     if not media:
-        category = next((categories[term] for term in post.get("categories", []) if term in categories), "AI Vision")
-        filename = f"ai-vision-cover-{post_id}"
         existing = request_with_retry(
             client.session, "get", client._url("media"),
             params={"slug": filename, "context": "edit", "_fields": "id,source_url,alt_text,mime_type"},
         ).json()
-        media = next((item for item in existing if item.get("mime_type") == "image/png"
+        media = next((item for item in existing if item.get("mime_type") == "image/jpeg"
                       and wp_media_url(item.get("source_url", ""), client)), None)
+        credit = credit or CoverCredit("Illustrazione generata con IA")
         if media is None:
-            media = client.upload_media(editorial_cover(title, category), filename + ".png", "image/png",
-                                        title, "")
+            data = (UPGRADE_DIR / f"{post_id}.jpg").read_bytes() if upgrade else generate_ai_cover({"title": title})
+            with Image.open(io.BytesIO(data)) as image:
+                if image.format != "JPEG" or image.width < 960 or image.height < 540 or is_retired_cover(image):
+                    raise PublisherError("Il file sostitutivo non è una copertina JPEG valida.")
+                image.load()
+            media = client.upload_media(data, filename + ".jpg", "image/jpeg", title, credit.markup())
 
     media_id = int(media["id"])
     if not wp_media_url(str(media.get("source_url") or ""), client):
         raise PublisherError("Copertina caricata senza un URL WordPress valido.")
     payload = {"featured_media": media_id}
     if plan.replace_span or not leading_cover(content)[0]:
-        block = featured_image_block(media, str(media.get("alt_text") or title))
+        block = featured_image_block(media, str(media.get("alt_text") or title), credit)
         remaining = content[plan.replace_span[1]:] if plan.replace_span else content
         payload["content"] = block + remaining
         payload["meta"] = {"_jetpack_hide_featured_image": True}
@@ -297,10 +316,8 @@ def main() -> int:
     write_json_atomic(BACKUP_PATH, backup)
     print(f"Backup integrale salvato prima delle modifiche: {BACKUP_PATH} ({len(posts)} articoli).")
 
-    categories = request_with_retry(
-        client.session, "get", client._url("categories"), params={"per_page": 100, "_fields": "id,name"},
-    ).json()
-    categories = {item["id"]: html.unescape(item["name"]) for item in categories}
+    manifest = UPGRADE_DIR / "manifest.json"
+    upgrades = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
     repaired: list[dict] = []
     errors: list[dict] = []
     worker = local()
@@ -308,7 +325,7 @@ def main() -> int:
     def process(post):
         if not hasattr(worker, "client"):
             worker.client = WordPressClient(base_url, username, app_password, dry_run=False)
-        return repair_post(worker.client, post, categories)
+        return repair_post(worker.client, post, upgrades.get(str(post["id"])))
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         pending = {pool.submit(process, post): post["id"] for post in posts}

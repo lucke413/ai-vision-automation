@@ -141,6 +141,12 @@ REGOLE EDITORIALI:
   "la fonte riporta/segnala", "come riportato dalla fonte" e formule simili;
 - non inserire link affiliati, codici tracking o pubblicità nel testo;
 - non presentare la bozza come verifica indipendente dei fatti.
+- Compila cover_prompt con una scena di 25-45 parole in inglese, incentrata
+  su un soggetto visivo preciso, con ambiente, luce e inquadratura. Per persone,
+  notizie e prodotti specifici preferisci una scena simbolica, senza ritratti,
+  loghi, schermate ufficiali o dettagli inventati. Niente testo nell’immagine.
+- In cover_subject inserisci un nome completo di persona, luogo o modello
+  esatto presente nel titolo e adatto alla ricerca di una foto, oppure "".
 - ogni notizia deve spiegare che cosa cambia concretamente per il lettore,
   soltanto se tale conseguenza è documentabile nella fonte;
 - elimina le notizie con informazioni insufficienti invece di amplificarle;
@@ -542,6 +548,8 @@ Restituisci esclusivamente JSON con i campi:
 {{
  "title": "titolo utile e chiaro, senza promesse inventate",
  "excerpt": "sintesi utile entro 200 caratteri",
+ "cover_prompt": "scena in inglese per una copertina editoriale",
+ "cover_subject": "",
  "body_markdown": "guida originale in Markdown",
  "focus_keyphrase": "frase SEO di 2-5 parole",
  "seo_title": "titolo SEO entro 60 caratteri",
@@ -663,6 +671,8 @@ Restituisci esattamente questo schema:
 {{
   "title": "titolo originale in italiano",
   "excerpt": "riassunto di massimo duecento caratteri",
+ "cover_prompt": "scena in inglese per una copertina editoriale",
+ "cover_subject": "nome completo ed esatto presente nel titolo, oppure stringa vuota",
   "body_markdown": "articolo originale tra {target_min} e {target_max} parole, in Markdown",
   "focus_keyphrase": "frase chiave specifica di 2-5 parole",
   "seo_title": "titolo SEO di massimo 60 caratteri",
@@ -841,6 +851,10 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         "image_license": item.get("image_license", "unknown"),
         "image_rights_status": item.get("image_rights_status", "unknown"),
         "image_attribution": item.get("image_attribution", ""),
+        "image_license_url": item.get("image_license_url", ""),
+        "image_source_page": item.get("image_source_page", ""),
+        "cover_prompt": str(raw.get("cover_prompt") or "").strip()[:300],
+        "cover_subject": str(raw.get("cover_subject") or "").strip()[:110],
         "source_published_at": item.get("published") or item.get("published_at") or item.get("date") or None,
         "category": category,
         "story_type": story_type,

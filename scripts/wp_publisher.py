@@ -8,7 +8,7 @@ Gestisce:
 - categorie macro di AI Vision;
 - creazione/riuso dei tag;
 - immagini esterne solo con licenza/permesso esplicito;
-- illustrazione editoriale locale quando non è disponibile un’immagine riutilizzabile;
+- copertina generata con IA quando non è disponibile una foto riutilizzabile;
 - sei orari giornalieri distribuiti in Europe/Rome;
 - report JSON anche in caso di errori su singoli articoli.
 """
@@ -34,9 +34,9 @@ from requests.auth import HTTPBasicAuth
 from PIL import Image
 
 if __package__:
-    from .editorial_cover import editorial_cover, is_striped_cover
+    from .cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 else:
-    from editorial_cover import editorial_cover, is_striped_cover
+    from cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -810,7 +810,7 @@ def category_archive_link(category: dict, base_url: str) -> str:
 def image_url_from_draft(draft: dict) -> str:
     for key in ("source_image_url", "image", "image_url"):
         value = str(draft.get(key) or "").strip()
-        if value.startswith(("http://", "https://")):
+        if safe_https_url(value):
             return value
     return ""
 
@@ -821,10 +821,15 @@ def image_rights_approved(draft: dict) -> bool:
     status = str(draft.get("image_rights_status") or "unknown").strip().lower().replace("-", "_")
     license_name = str(draft.get("image_license") or "").strip().lower()
     approved = {"owned", "licensed", "permission_granted", "public_domain", "cc0", "cc_by", "cc_by_sa"}
-    if status not in approved or not license_name or license_name in {"unknown", "none", "n/a", "not verified"}:
+    if (status not in approved or not license_name
+            or license_name in {"unknown", "none", "n/a", "not verified"}
+            or re.search(r"\b(?:nc|nd|noncommercial|nonderivatives)\b", license_name)):
         return False
     attribution_required = status in {"cc_by", "cc_by_sa"} or "cc by" in license_name or "creative commons attribution" in license_name
-    if attribution_required and not str(draft.get("image_attribution") or "").strip():
+    if attribution_required and not (
+        str(draft.get("image_attribution") or "").strip()
+        and safe_https_url(str(draft.get("image_license_url") or ""))
+    ):
         return False
     return bool(image_url_from_draft(draft))
 
@@ -850,11 +855,33 @@ def download_image(url: str, session: requests.Session) -> tuple[bytes, str] | N
             if not suffix or image.width < 480 or image.height < 270 or image.width * image.height > 24_000_000:
                 return None
             image.load()
-            if is_striped_cover(image):
+            if is_retired_cover(image):
                 return None
         return content, suffix
     except (requests.RequestException, OSError, ValueError, Image.DecompressionBombError):
         return None
+
+
+def select_cover(draft: dict, session: requests.Session) -> tuple[bytes, str, str, str, CoverCredit]:
+    image_url = image_url_from_draft(draft)
+    if image_rights_approved(draft):
+        downloaded = download_image(image_url, session)
+        if downloaded:
+            credit = CoverCredit(
+                str(draft.get("image_attribution") or "").strip(),
+                str(draft.get("image_source_page") or image_url),
+                str(draft.get("image_license") or ""),
+                str(draft.get("image_license_url") or ""),
+            )
+            return *downloaded, "licensed_source_image", image_url, credit
+    commons = commons_photo(image_url, str(draft.get("cover_subject") or ""),
+                           str(draft.get("title") or ""), session)
+    if commons:
+        url, credit = commons
+        downloaded = download_image(url, session)
+        if downloaded:
+            return *downloaded, "wikimedia_commons", url, credit
+    return generate_ai_cover(draft), ".jpg", "ai_generated", "", CoverCredit("Illustrazione generata con IA")
 
 
 class WordPressClient:
@@ -1073,7 +1100,7 @@ class WordPressClient:
         return response.json()
 
 
-def featured_image_block(media: dict, title: str, attribution: str = "") -> str:
+def featured_image_block(media: dict, title: str, credit: CoverCredit | None = None) -> str:
     """Serializza la copertina caricata come immagine Gutenberg non collegata."""
     media_id = media.get("id")
     image_url = str(media.get("source_url") or "").strip()
@@ -1082,10 +1109,8 @@ def featured_image_block(media: dict, title: str, attribution: str = "") -> str:
         raise PublisherError("Immagine copertina non valida: pubblicazione bloccata.")
     safe_url = html.escape(image_url, quote=True)
     safe_alt = html.escape(str(title or "AI Vision"), quote=True)
-    caption = (
-        f'<figcaption class="wp-element-caption">{html.escape(attribution)}</figcaption>'
-        if attribution else ""
-    )
+    credit_markup = credit.markup() if credit else ""
+    caption = f'<figcaption class="wp-element-caption">{credit_markup}</figcaption>' if credit_markup else ""
     return (
         f'<!-- wp:image {{"id":{int(media_id)},"sizeSlug":"large","linkDestination":"none","style":{{"border":{{"width":"0px","style":"none"}}}}}} -->\n'
         f'<figure class="wp-block-image size-large has-custom-border"><img src="{safe_url}" alt="{safe_alt}" class="wp-image-{int(media_id)}" style="border-style:none;border-width:0px" />{caption}</figure>\n'
@@ -1203,6 +1228,10 @@ def publish_one(
                 "status": "already_exists", "wp_status": existing.get("status"),
                 "post_id": existing.get("id"), "link": existing.get("link")}
 
+    image_origin, image_url, credit = "dry_run_cover_not_generated", "", CoverCredit("")
+    if not client.dry_run:
+        image_bytes, suffix, image_origin, image_url, credit = select_cover(draft, session)
+
     if draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"}:
         figures = guide_inline_figures(draft, client, slug)
         body = guide_place_figures(body, figures)
@@ -1253,35 +1282,13 @@ def publish_one(
         except Exception as exc:
             print(f"AVVISO tag: salto {tag!r} ({type(exc).__name__}); la pubblicazione continua.")
 
-    image_url = image_url_from_draft(draft) if image_rights_approved(draft) else ""
-    attribution = ""
-    if draft.get("editorial_kind"):
-        image_bytes, suffix = guide_infographic(draft), ".png"
-        image_origin = "original_guide_infographic"
-        image_url = ""
-    else:
-        downloaded = download_image(image_url, session) if image_url and not client.dry_run else None
-        if downloaded:
-            image_bytes, suffix = downloaded
-            image_origin = "licensed_source_image"
-            attribution = str(draft.get("image_attribution") or "").strip()
-        else:
-            image_bytes, suffix = editorial_cover(title, category_name), ".png"
-            image_origin = (
-                "dry_run_licensed_source_available" if image_url and client.dry_run
-                else "original_editorial_illustration"
-            )
-            image_url = ""
-
-    media = client.upload_media(
-        image_bytes,
-        f"{slugify(title)}{suffix}",
-        image_mime(suffix),
-        alt_text=title,
-        caption=html.escape(attribution),
-    )
+    media = {"id": None}
     if not client.dry_run:
-        body = featured_image_block(media, title, attribution) + body
+        media = client.upload_media(
+            image_bytes, f"{slugify(title)}{suffix}", image_mime(suffix),
+            alt_text=title, caption=credit.markup(),
+        )
+        body = featured_image_block(media, title, credit) + body
 
     local_date = planned_time.strftime("%Y-%m-%dT%H:%M:%S")
     utc_date = planned_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
@@ -1319,7 +1326,8 @@ def publish_one(
         "image_origin": image_origin,
         "image_source_url": image_url or None,
         "image_rights_status": draft.get("image_rights_status", "unknown"),
-        "image_license": draft.get("image_license", "unknown"),
+        "image_license": credit.license_name or None,
+        "image_credit_source": credit.source_url or None,
         "media_id": media.get("id"),
     }
 
