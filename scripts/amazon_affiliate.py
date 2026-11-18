@@ -81,7 +81,7 @@ def mentions(name: str, text: str) -> bool:
 
 def article_products(draft: dict, source: str | None = None) -> list[str]:
     values = draft.get("amazon_products") or []
-    if not isinstance(values, list) or draft.get("ai_cyber_topic"):
+    if not isinstance(values, list):
         return []
     title = str(draft.get("title") or "")
     if PREVIEW_ONLY.search(title):

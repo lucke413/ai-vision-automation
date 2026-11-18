@@ -874,8 +874,7 @@ def normalize_draft(raw: dict, item: dict) -> dict:
     product_evidence = " ".join((str(item.get("title") or ""), str(item.get("description") or ""),
                                  str(item.get("source_text") or "")))
     products = article_products({
-        "title": title, "body_markdown": body, TOPIC_KEY: item.get(TOPIC_KEY),
-        "amazon_products": raw.get("amazon_products", []),
+        "title": title, "body_markdown": body, "amazon_products": raw.get("amazon_products", []),
     }, source=product_evidence)
     source_id = str(item.get("article_id") or "")
     draft_id = hashlib.sha256(source_id.encode("utf-8")).hexdigest()[:20]
