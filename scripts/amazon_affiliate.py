@@ -17,7 +17,7 @@ ASIN_PATH = re.compile(r"(?:^|/)(?:dp|gp/product|gp/aw/d)/([A-Z0-9]{10})(?:/|$)"
 MARKER = "av-amazon-affiliate"
 DISCLOSURE = "In qualità di Affiliato Amazon io ricevo un guadagno dagli acquisti idonei."
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "amazon-affiliate.json"
-MAX_PRODUCTS = 3
+MAX_PRODUCTS = 12
 PLATFORM_TAG = "gz-blog-21"
 
 # Price and stock data remain on Amazon. An article can still quote a
@@ -140,12 +140,36 @@ class AffiliateLink:
     product: str
     asin: str
     url: str
+    summary: str = ""
+    why: str = ""
 
     def markup(self) -> str:
         product = html.escape(self.product)
         url = html.escape(self.url, quote=True)
         label = "Clicca qui per acquistarlo su Amazon" if self.asin else "Cerca questo modello su Amazon"
-        return f'<p><strong>{product}</strong> <a href="{url}" rel="sponsored nofollow">{label}</a></p>'
+        link = f'<a href="{url}" rel="sponsored nofollow">{label}</a>'
+        if self.summary and self.why:
+            return (f"<h3>{product}</h3><p><strong>Mini recensione.</strong> {html.escape(self.summary)}</p>"
+                    f"<p><strong>Perché comprarlo.</strong> {html.escape(self.why)}</p><p>{link}</p>")
+        return f"<p><strong>{product}</strong> {link}</p>"
+
+
+def product_notes(values: object, products: list[str]) -> dict[str, dict[str, str]]:
+    if not isinstance(values, list):
+        return {}
+    names = {words(product) for product in products}
+    collected = {}
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        name = words(str(value.get("product") or ""))
+        if name not in names:
+            continue
+        fields = {key: " ".join(str(value.get(key) or "").split()) for key in ("summary", "why")}
+        if all(22 <= len(line) <= 280 and not re.search(PRICE + r"|https?://|www\.", line, re.I)
+               for line in fields.values()):
+            collected.setdefault(name, fields)
+    return collected
 
 
 def affiliate_section(draft: dict, body: str, tag: str) -> tuple[str, str, list[dict]]:
@@ -162,6 +186,7 @@ def affiliate_section(draft: dict, body: str, tag: str) -> tuple[str, str, list[
     source_links = draft.get("amazon_source_links") or []
     if not isinstance(source_links, list):
         source_links = []
+    notes = product_notes(draft.get("amazon_product_notes"), products)
     links = []
     for product in products:
         asin = matched_asin(product, source_links)
@@ -169,7 +194,7 @@ def affiliate_section(draft: dict, body: str, tag: str) -> tuple[str, str, list[
             url = f"https://www.amazon.it/dp/{asin}?" + urlencode({"tag": tag})
         else:
             url = "https://www.amazon.it/s?" + urlencode({"k": product, "tag": tag})
-        links.append(AffiliateLink(product, asin, url))
+        links.append(AffiliateLink(product, asin, url, **notes.get(words(product), {})))
     markup = f'<div class="{MARKER}"><p><strong>Link affiliati Amazon</strong></p>'
     markup += "<p>" + DISCLOSURE + "</p>"
     markup += "".join(link.markup() for link in links) + "</div>"

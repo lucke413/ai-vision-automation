@@ -147,9 +147,13 @@ REGOLE EDITORIALI:
   "la fonte riporta/segnala", "come riportato dalla fonte" e formule simili;
 - non inserire link affiliati, codici tracking o pubblicità nel testo;
 - Per le recensioni, gli articoli su prodotti e le offerte, elenca in
-  amazon_products fino a tre modelli esatti, inclusi marca e variante quando
+  amazon_products tutti i modelli trattati singolarmente, fino a dodici, includendo marca e variante quando
   sono nella fonte. Usa una lista vuota per altri articoli e per indiscrezioni
   su prodotti non ancora annunciati. Non inventare nomi o codici prodotto.
+  Negli articoli di offerte e nelle guide allo shopping, per ciascun modello
+  inserisci anche in amazon_product_notes il nome esatto già in amazon_products,
+  una mini recensione con un dettaglio documentato e una ragione pratica per
+  sceglierlo. Usa una frase breve per campo, senza prezzi, URL o prove inventate.
 - Non riportare importi o disponibilità correnti di Amazon ripresi da altre
   fonti. Se pertinente, puoi riportare un prezzo di listino documentato
   indicando esplicitamente che è quello del produttore.
@@ -721,6 +725,7 @@ Restituisci esattamente questo schema:
   "fact_check_notes": ["dati da verificare prima della pubblicazione"],
   "affiliate_candidate": false,
   "amazon_products": ["modello esatto presente nella fonte, oppure lista vuota"],
+  "amazon_product_notes": [{{"product": "lo stesso modello", "summary": "mini recensione", "why": "perché comprarlo"}}],
   "needs_review": true
 }}
 
@@ -931,6 +936,7 @@ def normalize_draft(raw: dict, item: dict) -> dict:
         "fact_check_notes": [str(note).strip() for note in notes[:10] if str(note).strip()],
         "affiliate_candidate": True if offer else bool(raw.get("affiliate_candidate", False)),
         "amazon_products": products,
+        "amazon_product_notes": raw.get("amazon_product_notes", []) if isinstance(raw.get("amazon_product_notes"), list) else [],
         "amazon_source_links": item.get("amazon_source_links", []),
     }
 

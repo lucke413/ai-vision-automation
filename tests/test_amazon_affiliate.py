@@ -37,6 +37,26 @@ class AmazonAffiliateTests(unittest.TestCase):
         self.assertIn(DISCLOSURE, block)
         self.assertIn('rel="sponsored nofollow"', block)
 
+    def test_roundup_gives_each_exact_model_its_own_card(self):
+        models = [f"Marca Modello {n}" for n in range(1, 5)]
+        draft = {
+            "title": "Promozioni Marca",
+            "body_markdown": ". ".join(models),
+            "amazon_products": models,
+            "amazon_source_links": [{"label": model, "url": f"https://www.amazon.it/dp/B01234567{n}"}
+                                    for n, model in enumerate(models)],
+            "amazon_product_notes": [
+                {"product": model, "summary": "La scheda descrive un dispositivo da viaggio.",
+                 "why": "Utile quando serve una soluzione compatta."} for model in models
+            ],
+        }
+        block, status, links = affiliate_section(draft, "<p>Testo</p>", TEST_TAG)
+        self.assertEqual(status, "inserted")
+        self.assertEqual(len(links), 4)
+        self.assertEqual(block.count("Mini recensione"), 4)
+        self.assertEqual(block.count("Perché comprarlo"), 4)
+        self.assertEqual(block.count("/dp/"), 4)
+
     def test_unknown_or_ambiguous_asin_uses_labelled_search(self):
         self.draft["amazon_source_links"].append({
             "label": "Sony WH-CH730N", "url": "https://www.amazon.it/dp/B987654321"
