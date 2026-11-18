@@ -356,11 +356,12 @@ class EditorialExpansionTests(unittest.TestCase):
         self.assertEqual(publisher.MIN_PUBLISH_WORDS, 550)
         self.assertEqual(generator.MAX_RETRIES, 4)
 
-    def test_quality_mode_six_posts_with_quality_gates(self):
+    def test_quality_mode_six_regular_posts_plus_cyber_slot(self):
         from zoneinfo import ZoneInfo
         self.assertEqual(selector.DAILY_LIMIT, 6)
         self.assertEqual(generator.DAILY_LIMIT, 6)
-        self.assertEqual(generator.MAX_ITEMS, 6 + generator.RESERVE_LIMIT)
+        self.assertEqual(selector.TOTAL_DAILY_LIMIT, 7)
+        self.assertEqual(generator.MAX_ITEMS, 7 + generator.RESERVE_LIMIT)
         self.assertEqual(selector.RESERVE_LIMIT, generator.RESERVE_LIMIT)
         self.assertEqual(selector.MAX_NEWS_PER_DAY, 3)
         self.assertEqual(selector.MAX_GUIDES_PER_DAY, 2)

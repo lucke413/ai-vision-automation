@@ -31,6 +31,11 @@ Riferimenti ufficiali:
 - https://support.google.com/adsense/answer/12176698?hl=it
 - https://support.google.com/adsense/answer/12171612?hl=it
 
+
+## Un approfondimento quotidiano su IA e cybersicurezza
+
+Il palinsesto prevede fino a sei articoli ordinari e un approfondimento aggiuntivo alle 19:30 (Europe/Rome), nella categoria Sicurezza con il tag IA e cybersicurezza. L'automazione raccoglie notizie pertinenti, privilegia fonti recenti, evita di proporre lo stesso tema due volte di fila e riutilizza una fonte della rubrica solo dopo almeno 30 giorni. Se manca una notizia idonea, può attingere a documenti ufficiali come quelli di OWASP e NCSC, presentandoli come approfondimenti di contesto. Le riserve di questa rubrica coprono soltanto il suo slot. Il pezzo parte da un caso comprensibile, spiega un meccanismo tecnico e presenta contromisure e limiti supportati dalle fonti.
+
 ## Originalità editoriale e blocco di pubblicazione
 
 Il generatore 5.0 esegue un controllo locale prima di inserire una bozza nel lotto pubblicabile:

@@ -93,6 +93,7 @@ jobs:
           for name in (
               "data/rss_output.json",
               "data/ai_candidates.json",
+              "data/ai_cyber_candidates.json",
               "data/daily_articles.json",
               "data/article_drafts.json",
           ):
@@ -209,6 +210,9 @@ jobs:
               print(f"{i}. [{item['final_score']}] [{item['category']}] {item['title']}")
           PY
 
+      - name: Raccogli fonti per IA e cybersicurezza
+        run: python scripts/ai_cyber.py
+
       - name: Escludi notizie già pubblicate o pianificate
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -224,8 +228,11 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/daily_articles.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 6:
+          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 7:
               raise SystemExit("ERRORE: selezione giornaliera non valida.")
+          cyber = sum(bool(item.get("ai_cyber_topic")) for item in items)
+          if cyber > 1 or len(items) - cyber > 6:
+              raise SystemExit("ERRORE: superato il numero di slot ordinari o IA e cybersicurezza.")
           ids = [item.get("article_id") for item in items]
           if not all(ids) or len(ids) != len(set(ids)):
               raise SystemExit("ERRORE: identificativi articolo mancanti o duplicati.")
@@ -235,7 +242,9 @@ jobs:
           reserve_ids = [item.get("article_id") for item in reserves]
           if any(item_id in ids for item_id in reserve_ids) or len(reserve_ids) != len(set(reserve_ids)):
               raise SystemExit("ERRORE: duplicati tra articoli giornalieri e riserve.")
-          print(f"OK: {len(items)} articoli giornalieri; riserve: {len(reserves)}; offerte: {data.get('offer_count', 0)}")
+          print(f"OK: {len(items)} articoli giornalieri; IA e cybersicurezza: {cyber}; riserve: {len(reserves)}; offerte: {data.get('offer_count', 0)}")
+          for warning in data.get("warnings", []):
+              print(f"AVVISO selezione: {warning}")
           if data.get("offer_count", 0) > 1:
               print("AVVISO: più di un'offerta usata perché non c'erano abbastanza notizie non commerciali.")
           PY
@@ -252,7 +261,7 @@ jobs:
           from pathlib import Path
           data = json.loads(Path("data/article_drafts.json").read_text(encoding="utf-8"))
           items = data.get("items")
-          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 18:
+          if data.get("status") not in {"ok", "ok_with_warnings", "empty"} or not isinstance(items, list) or len(items) > 19:
               raise SystemExit("ERRORE: output bozze non valido.")
           ids = [item.get("draft_id") for item in items]
           if not all(ids) or len(ids) != len(set(ids)):
@@ -276,6 +285,10 @@ jobs:
                   if item.get("quality_warnings"):
                       print(f"AVVISO qualità: {item.get('title', 'articolo')} -> {item.get('quality_warnings')}")
           daily = sum(1 for item in items if item.get("publication_slot") == "today")
+          cyber = sum(bool(item.get("ai_cyber_topic")) for item in items if item.get("publication_slot") == "today")
+          if cyber > 1 or daily - cyber > 6:
+              raise SystemExit("ERRORE: quote di pubblicazione superate nelle bozze.")
+          print(f"Bozze giornaliere IA e cybersicurezza: {cyber}")
           reserve = sum(1 for item in items if item.get("publication_slot") == "reserve")
           rejected = data.get("rejected_items", [])
           print(f"OK: {len(items)} bozze approvate dal gate; oggi: {daily}; riserve: {reserve}; respinte per revisione: {len(rejected) if isinstance(rejected, list) else 0}.")

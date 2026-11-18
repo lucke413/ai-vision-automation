@@ -9,7 +9,7 @@ Gestisce:
 - creazione/riuso dei tag;
 - immagini esterne solo con licenza/permesso esplicito;
 - copertina generata con IA quando non è disponibile una foto riutilizzabile;
-- sei orari giornalieri distribuiti in Europe/Rome;
+- sei orari giornalieri e uno slot dedicato a IA e cybersicurezza in Europe/Rome;
 - report JSON anche in caso di errori su singoli articoli.
 """
 
@@ -34,8 +34,10 @@ from requests.auth import HTTPBasicAuth
 from PIL import Image
 
 if __package__:
+    from .ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
     from .cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 else:
+    from ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
     from cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 
 
@@ -50,6 +52,7 @@ USER_AGENT = "AI-Vision-WordPress-Publisher/1.0"
 
 DEFAULT_TIMEZONE = "Europe/Rome"
 DEFAULT_SLOT_TIMES = "08:00,10:30,14:00,16:30,18:30,20:30"
+AI_CYBER_SLOT = dt_time(19, 30)
 
 MACRO_CATEGORIES = (
     "News",
@@ -185,6 +188,18 @@ def next_publication_times(count: int, now: datetime | None = None) -> list[date
     if len(result) != count:
         raise PublisherError("Impossibile costruire gli orari di pubblicazione.")
     return result
+
+
+def next_ai_cyber_time(occupied: set[date], now: datetime) -> datetime:
+    current = now.astimezone(get_timezone())
+    if AI_CYBER_SLOT in parse_slot_times():
+        raise PublisherError("Lo slot delle 19:30 è riservato a IA e cybersicurezza.")
+    for offset in range(14):
+        day = current.date() + timedelta(days=offset)
+        candidate = datetime.combine(day, AI_CYBER_SLOT, tzinfo=current.tzinfo)
+        if day not in occupied and candidate > current + timedelta(minutes=2):
+            return candidate
+    raise PublisherError("Nessuno slot libero per IA e cybersicurezza nei prossimi 14 giorni.")
 
 
 def category_for(draft: dict) -> str:
@@ -974,6 +989,29 @@ class WordPressClient:
         values = response.json()
         return values[0] if values else None
 
+    def ai_cyber_dates(self, now: datetime) -> set[date]:
+        if self.dry_run:
+            return set()
+        tag_id = self.get_or_create_term("tags", AI_CYBER_TAG).get("id")
+        if not tag_id:
+            raise PublisherError("Impossibile assegnare l'etichetta IA e cybersicurezza.")
+        current = now.astimezone(get_timezone())
+        days: set[date] = set()
+        for status in ("publish", "future"):
+            response = self.session.get(
+                self._url("posts"),
+                params={"tags": tag_id, "status": status, "per_page": 100, "context": "edit",
+                        "after": (current.date() - timedelta(days=1)).isoformat() + "T00:00:00",
+                        "_fields": "date_gmt"},
+                timeout=REQUEST_TIMEOUT,
+            )
+            response.raise_for_status()
+            for post in response.json():
+                timestamp = datetime.fromisoformat(post["date_gmt"])
+                timestamp = timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=timezone.utc)
+                days.add(timestamp.astimezone(current.tzinfo).date())
+        return days
+
     def upload_media(self, content: bytes, filename: str, mime_type: str, alt_text: str, caption: str) -> dict:
         if self.dry_run:
             return {"id": None, "source_url": "dry-run", "alt_text": alt_text}
@@ -1225,6 +1263,8 @@ def publish_one(
     existing = client.existing_post(slug)
     if existing:
         return {"article_id": draft.get("article_id"), "title": title,
+                TOPIC_KEY: draft.get(TOPIC_KEY), "source_url": draft.get("source_url"),
+                "scheduled_utc": existing.get("date_gmt"),
                 "status": "already_exists", "wp_status": existing.get("status"),
                 "post_id": existing.get("id"), "link": existing.get("link")}
 
@@ -1270,6 +1310,8 @@ def publish_one(
         body += "\n" + source_link
 
     raw_tags = draft.get("tags") if isinstance(draft.get("tags"), list) else []
+    if draft.get(TOPIC_KEY):
+        raw_tags = [AI_CYBER_TAG, *raw_tags]
     tags = []
     seen_tags: set[str] = set()
     for raw_tag in raw_tags:
@@ -1311,6 +1353,7 @@ def publish_one(
     return {
         "seo_status": seo_status,
         "article_id": draft.get("article_id"),
+        TOPIC_KEY: draft.get(TOPIC_KEY),
         "source_url": draft.get("source_url"),
         "originality_status": originality_check.get("status", "legacy_unchecked"),
         "originality_check": originality_check or None,
@@ -1361,13 +1404,22 @@ def main() -> int:
         return 0
 
     client = WordPressClient(base_url, username, app_password, dry_run)
-    schedule = next_publication_times(len(drafts))
+    now = datetime.now(timezone.utc)
+    regular_count = sum(not draft.get(TOPIC_KEY) for draft in drafts)
+    cyber_count = len(drafts) - regular_count
+    if cyber_count > 1:
+        raise PublisherError("Sono state richieste più bozze per lo slot IA e cybersicurezza.")
+    regular_schedule = iter(next_publication_times(regular_count, now))
     results: list[dict] = []
     errors: list[dict] = []
     used_slugs: set[str] = set()
     image_session = requests.Session()
-    for draft, planned_time in zip(drafts, schedule):
+    for draft in drafts:
         try:
+            planned_time = (
+                next_ai_cyber_time(client.ai_cyber_dates(now), now) if draft.get(TOPIC_KEY)
+                else next(regular_schedule)
+            )
             slug = slugify(str(draft.get("slug") or draft.get("title") or ""))
             if slug in used_slugs:
                 raise PublisherError("Slug duplicato nello stesso lotto.")
@@ -1390,6 +1442,7 @@ def main() -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "timezone": os.environ.get("WP_TIMEZONE", DEFAULT_TIMEZONE),
         "slot_times": [value.strftime("%H:%M") for value in parse_slot_times()],
+        "ai_cyber_slot": AI_CYBER_SLOT.strftime("%H:%M"),
         "requested": len(drafts),
         "source_daily_requested": data.get("daily_requested", 0),
         "source_daily_generated": data.get("daily_generated", 0),

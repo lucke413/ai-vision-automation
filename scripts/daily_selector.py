@@ -16,6 +16,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+if __package__:
+    from .ai_cyber import TOPIC_KEY, source_identity
+else:
+    from ai_cyber import TOPIC_KEY, source_identity
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
@@ -23,6 +28,8 @@ OUTPUT_FILE = BASE_DIR / "data" / "daily_articles.json"
 
 VERSION = "3.1"
 DAILY_LIMIT = 6
+TOTAL_DAILY_LIMIT = DAILY_LIMIT + 1
+CYBER_RESERVE_LIMIT = 3
 RESERVE_LIMIT = 12
 MAX_OFFERS = 1
 MAX_NEWS_PER_DAY = 3
@@ -206,17 +213,49 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
     return selected, reserves
 
 
+def select_with_ai_cyber(regular: list[dict], cyber: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Mantiene sei slot ordinari e riserva il settimo all'incrocio IA/cyber."""
+    ranked = sorted(cyber, key=lambda item: (
+        not item.get("recent_ai_cyber_topic"), not item.get("ai_cyber_reference"),
+        str(item.get("published") or ""),
+    ), reverse=True)
+    if not ranked:
+        return select_daily(regular)
+
+    primary, *alternatives = ranked
+    # Mantieni alternative su temi diversi. Questo aiuta anche quando la
+    # prima fonte è troppo breve o il generatore esclude una bozza.
+    extra_reserves = []
+    used_topics = {primary[TOPIC_KEY]}
+    for item in alternatives:
+        topic = item[TOPIC_KEY]
+        if topic not in used_topics:
+            extra_reserves.append({**item, "article_id": stable_id(item), "publication_slot": "reserve"})
+            used_topics.add(topic)
+        if len(extra_reserves) >= CYBER_RESERVE_LIMIT:
+            break
+
+    related_urls = {source_identity(item["url"]) for item in [primary, *extra_reserves]}
+    regular = [item for item in regular if source_identity(item["url"]) not in related_urls]
+    selected, reserves = select_daily(regular)
+    selected.append({**primary, "article_id": stable_id(primary), "publication_slot": "today"})
+    return selected, [*extra_reserves, *reserves[:RESERVE_LIMIT - len(extra_reserves)]]
+
+
 def main() -> int:
     if not INPUT_FILE.is_file():
         raise FileNotFoundError(f"File non trovato: {INPUT_FILE}")
     data = json.loads(INPUT_FILE.read_text(encoding="utf-8"))
     candidates = valid_candidates(data)
-    selected, reserves = select_daily(candidates)
-    status = "ok" if len(selected) == DAILY_LIMIT else ("ok_with_warnings" if selected else "empty")
+    cyber = data.get("ai_cyber_candidates", [])
+    selected, reserves = select_with_ai_cyber(candidates, cyber)
+    status = "ok" if len(selected) == TOTAL_DAILY_LIMIT else ("ok_with_warnings" if selected else "empty")
     warnings = []
-    if len(selected) < DAILY_LIMIT:
-        warnings.append(f"Solo {len(selected)} articoli disponibili su {DAILY_LIMIT}; il run prosegue.")
-    if not candidates:
+    if len(selected) < TOTAL_DAILY_LIMIT:
+        warnings.append(f"Solo {len(selected)} articoli disponibili su {TOTAL_DAILY_LIMIT}; il run prosegue.")
+    if not any(item.get(TOPIC_KEY) for item in selected):
+        warnings.append("Nessuna fonte idonea per lo slot IA e cybersicurezza.")
+    if not candidates and not cyber:
         warnings.append("Nessun candidato valido disponibile in questo run.")
 
     output = {
@@ -225,14 +264,15 @@ def main() -> int:
         "status": status,
         "warnings": warnings,
         "source_filter_version": data.get("filter_version"),
-        "daily_limit": DAILY_LIMIT,
+        "daily_limit": TOTAL_DAILY_LIMIT,
+        "ai_cyber_count": sum(bool(item.get(TOPIC_KEY)) for item in selected),
         "reserve_limit": RESERVE_LIMIT,
-        "total_candidates": len(candidates),
+        "total_candidates": len(candidates) + len(cyber),
         "selected_count": len(selected),
         "reserve_count": len(reserves),
         "category_distribution": dict(Counter(x.get("category", "Tecnologia") for x in selected)),
         "offer_count": sum(1 for x in selected if is_offer(x)),
-        "news_count": sum(x.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for x in selected),
+        "news_count": sum(not x.get(TOPIC_KEY) and x.get("editorial_kind") not in {"GUIDA", "TUTORIAL"} for x in selected),
         "guide_count": sum(x.get("editorial_kind") == "GUIDA" for x in selected),
         "tutorial_count": sum(x.get("editorial_kind") == "TUTORIAL" for x in selected),
         "items": selected,
@@ -245,7 +285,7 @@ def main() -> int:
 
     print("AI VISION - DAILY SELECTOR")
     print(f"Candidati disponibili: {len(candidates)}")
-    print(f"Articoli selezionati: {len(selected)}/{DAILY_LIMIT}")
+    print(f"Articoli selezionati: {len(selected)}/{TOTAL_DAILY_LIMIT}")
     print(f"Articoli di scorta: {len(reserves)}/{RESERVE_LIMIT}")
     print(f"Offerte selezionate: {output['offer_count']}")
     print(f"Distribuzione: {output['news_count']} notizie, {output['guide_count']} guide, {output['tutorial_count']} tutorial.")

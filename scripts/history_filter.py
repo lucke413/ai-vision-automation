@@ -19,13 +19,22 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 import zipfile
 
+if __package__:
+    from .ai_cyber import OUTPUT_FILE as CYBER_CANDIDATES, TOPIC_KEY, source_identity
+else:
+    from ai_cyber import OUTPUT_FILE as CYBER_CANDIDATES, TOPIC_KEY, source_identity
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_FILE = BASE_DIR / "data" / "ai_candidates.json"
 PUBLISHED_ARTIFACT_NAME = "ai-vision-wp-publish-report"
 RESERVE_ARTIFACT_NAME = "ai-vision-daily-articles"
 LOOKBACK_DAYS = 7
+CYBER_LOOKBACK_DAYS = 30
 RESERVE_MAX_AGE_HOURS = 48
 MAX_HISTORICAL_RESERVES = 24
+CYBER_SOURCE = "ai-cyber-source:"
+CYBER_TOPIC = "ai-cyber-topic:"
+CYBER_LAST = "ai-cyber-last:"
 API_ROOT = "https://api.github.com"
 
 
@@ -97,11 +106,14 @@ def list_artifacts(repository: str, token: str, name: str) -> list[dict]:
 
 
 def published_ids(repository: str, token: str) -> set[str]:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=LOOKBACK_DAYS)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=LOOKBACK_DAYS)
+    cyber_cutoff = now - timedelta(days=CYBER_LOOKBACK_DAYS)
     used: set[str] = set()
+    latest = None
     for artifact in list_artifacts(repository, token, PUBLISHED_ARTIFACT_NAME):
         created = parse_datetime(artifact.get("created_at"))
-        if created is None or created < cutoff:
+        if created is None or created < cyber_cutoff:
             continue
         archive = api_get(artifact["archive_download_url"], token)
         with zipfile.ZipFile(io.BytesIO(archive)) as zipped:
@@ -116,8 +128,20 @@ def published_ids(repository: str, token: str) -> set[str]:
             # diverso dall'article_id registrato nel report WordPress.
             for key in ("article_id", "cluster_id"):
                 value = str(item.get(key) or "").strip()
-                if value:
+                if value and created >= cutoff:
                     used.add(value)
+            topic = item.get(TOPIC_KEY)
+            identity = source_identity(str(item.get("source_url") or ""))
+            if identity and (topic or created >= cutoff):
+                used.add(CYBER_SOURCE + identity)
+            if topic:
+                scheduled = parse_datetime(item.get("scheduled_utc")) or created
+                if scheduled >= now - timedelta(days=4):
+                    used.add(CYBER_TOPIC + topic)
+                if latest is None or scheduled > latest[0]:
+                    latest = scheduled, topic
+    if latest:
+        used.add(CYBER_LAST + latest[1])
     return used
 
 
@@ -183,6 +207,8 @@ def main() -> int:
     items = data.get("items")
     if not isinstance(items, list):
         raise RuntimeError("Candidati AI non validi.")
+    cyber_items = json.loads(CYBER_CANDIDATES.read_text(encoding="utf-8")) if CYBER_CANDIDATES.is_file() else []
+    data["ai_cyber_candidates"] = cyber_items
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
     warnings = data.setdefault("warnings", [])
@@ -224,7 +250,7 @@ def main() -> int:
 
     # Con un lotto vuoto il controllo storico non è necessario, ma il recupero
     # delle riserve è stato comunque tentato.
-    if not data["items"]:
+    if not data["items"] and not cyber_items:
         data["status"] = "empty"
         print("Nessun candidato corrente o di riserva disponibile.")
     else:
@@ -240,6 +266,13 @@ def main() -> int:
             data["status"] = "ok_with_warnings"
             print(f"AVVISO storico: controllo pubblicati non disponibile ({type(exc).__name__}); continuo con il lotto.")
         else:
+            data["ai_cyber_candidates"] = [
+                {**item, "recent_ai_cyber_topic": CYBER_TOPIC + item[TOPIC_KEY] in used}
+                for item in cyber_items
+                if CYBER_SOURCE + source_identity(item["url"]) not in used
+                and candidate_id(item) not in used
+                and CYBER_LAST + item[TOPIC_KEY] not in used
+            ]
             data["history_check_status"] = "ok"
             before = len(data["items"])
             retained = [
