@@ -148,7 +148,8 @@ REGOLE EDITORIALI:
 - non inserire link affiliati, codici tracking o pubblicità nel testo;
 - Per le recensioni, gli articoli su prodotti e le offerte, elenca in
   amazon_products tutti i modelli trattati singolarmente, fino a dodici, includendo marca e variante quando
-  sono nella fonte. Usa una lista vuota per altri articoli e per indiscrezioni
+  sono nella fonte. Compila il campo anche per una NEWS se il suo argomento
+  principale è un modello disponibile o annunciato. Usa una lista vuota per altri articoli e per indiscrezioni
   su prodotti non ancora annunciati. Non inventare nomi o codici prodotto.
   Negli articoli di offerte e nelle guide allo shopping, per ciascun modello
   inserisci anche in amazon_product_notes il nome esatto già in amazon_products,
@@ -883,6 +884,7 @@ def normalize_draft(raw: dict, item: dict) -> dict:
                                  str(item.get("source_text") or "")))
     products = article_products({
         "title": title, "body_markdown": body, "amazon_products": raw.get("amazon_products", []),
+        "cover_subject": raw.get("cover_subject"),
     }, source=product_evidence)
     source_id = str(item.get("article_id") or "")
     draft_id = hashlib.sha256(source_id.encode("utf-8")).hexdigest()[:20]

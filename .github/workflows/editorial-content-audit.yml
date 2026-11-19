@@ -43,8 +43,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Install read-only audit dependency
-        run: python -m pip install requests
+      - name: Install audit dependencies
+        run: python -m pip install -r requirements.txt
       - name: Run full public content audit (read-only)
         run: python scripts/editorial_content_audit.py
       - name: Upload article-by-article report

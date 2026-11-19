@@ -84,9 +84,12 @@ class AmazonPromotionsTests(unittest.TestCase):
                                            "AMAZON_CREATORS_CREDENTIAL_SECRET": "test"}), \
                 patch.object(promos, "newsroom_offers", return_value=[campaign]), \
                 patch.object(promos.CreatorsAPI, "shortlist", return_value=[(promos.CATEGORIES[0], deal)]), \
+                patch.object(promos.CreatorsAPI, "verify", return_value=[deal]), \
+                patch.object(promos.PublicDeals, "shortlist", return_value=[]), \
                 patch.object(promos, "publish_edition", return_value={}) as publish:
-            promos.run(Mock(existing_post=lambda slug: None), object(), self.now)
+            report = promos.run(Mock(existing_post=lambda slug: None), object(), self.now)
         publish.assert_not_called()
+        self.assertEqual(report["status"], "partial_or_blocked")
         self.assertTrue(promos.belongs_to_campaign(deal, campaign))
         other_campaign = promos.replace(campaign, title="Prime Day")
         self.assertFalse(promos.belongs_to_campaign(deal, other_campaign))
@@ -128,9 +131,9 @@ class AmazonPromotionsTests(unittest.TestCase):
         sale = promos.replace(campaign, key="ebook-kindle", category="Lettura digitale", starts=None)
         catalog = Mock()
         def shortlist(stamp, event, categories):
-            badge = "Black Friday" if event else "Mese della Lettura"
-            return [(category, promos.replace(campaign, key=f"{category.title}-{i}", category=category.title,
-                                              title=f"{category.title}-{i}", campaign_badge=badge, starts=None))
+            badge = "Black Friday" if event else "Mese della Lettura" if categories == promos.BOOKS else "Offerta"
+            return [(category, promos.replace(campaign, key=f"{badge}-{category.title}-{i}", category=category.title,
+                                              title=f"{badge}-{category.title}-{i}", campaign_badge=badge, starts=None))
                     for category in categories for i in range(6)]
         catalog.shortlist.side_effect = shortlist
         catalog.verify.side_effect = lambda rows, *args: [offer for _, offer in rows]
@@ -144,14 +147,15 @@ class AmazonPromotionsTests(unittest.TestCase):
              patch.object(promos, "newsroom_offers", return_value=[campaign, sale]), \
              patch.object(promos, "publish_edition", side_effect=publish):
             promos.run(Mock(existing_post=lambda slug: None), None, now)
-        self.assertEqual(len(pages), 3)
+        self.assertEqual(len(pages), 4)
         import re
         items = [set(re.findall(r"<h4>(.*?)</h4>", body)) for _, body in pages]
         self.assertTrue(all(len(group) >= 20 for group in items))
         self.assertTrue(items[0].isdisjoint(items[1]))
         self.assertIn("Cucina", pages[0][1])
-        self.assertIn("Fantasy", pages[2][1])
-        self.assertNotIn("Cucina", pages[2][1])
+        self.assertTrue(pages[2][0].startswith("offerte-amazon-del-giorno"))
+        self.assertIn("Fantasy", pages[3][1])
+        self.assertNotIn("Cucina", pages[3][1])
 
 
 if __name__ == "__main__":

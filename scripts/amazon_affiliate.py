@@ -31,6 +31,15 @@ AMAZON_PRICE = re.compile(
     re.I,
 )
 PREVIEW_ONLY = re.compile(r"\b(?:rumor|indiscrezioni|concept|prototipo|trapelat\w*|leak)\b", re.I)
+VEHICLE = re.compile(r"\b(?:scooter|utilitaria|berlina|minivan|motocicletta|suv|full hybrid)\b", re.I)
+RETAIL_PRODUCT = re.compile(
+    r"\b(?:mouse|tastier\w*|cuffi\w*|auricolar\w*|smartphone|tablet|notebook|"
+    r"monitor|televisor\w*|smartwatch|controller|scheda grafica|processore|"
+    r"ssd|aspirapolvere|lavapavimenti|sed(?:ia|ie)|stampant\w*|fotocamer\w*|"
+    r"e-reader|altoparlant\w*|soundbar|proiettor\w*|console|power bank)\b", re.I,
+)
+MODEL_CODE = re.compile(r"\b(?=[a-z\d-]*[a-z])(?=[a-z\d-]*\d)[a-z\d-]{3,}\b", re.I)
+HEADLINE_WORDS = re.compile(r"\b(?:che|come|cosa|quando|quanto|gratis|con|del|della|aggiornament\w*|scadenz\w*)\b", re.I)
 
 
 def tracking_tag(value: str) -> str:
@@ -84,9 +93,9 @@ def mentions(name: str, text: str) -> bool:
 def article_products(draft: dict, source: str | None = None) -> list[str]:
     values = draft.get("amazon_products") or []
     if not isinstance(values, list):
-        return []
+        values = []
     title = str(draft.get("title") or "")
-    if PREVIEW_ONLY.search(title):
+    if PREVIEW_ONLY.search(title) or (VEHICLE.search(title) and not RETAIL_PRODUCT.search(title)):
         return []
     body = str(draft.get("body_markdown") or "")
     products = {}
@@ -101,7 +110,32 @@ def article_products(draft: dict, source: str | None = None) -> list[str]:
             products.setdefault(name, value)
         if len(products) == MAX_PRODUCTS:
             break
-    return list(products.values())
+    if products:
+        return list(products.values())
+
+    # A missing optional field need not erase a clearly named product.
+    # Require an exact title subject and a product type in the headline/opening.
+    if not RETAIL_PRODUCT.search(title + " " + body[:650]):
+        return []
+    subject = re.split(r"\s*:\s*|\s*[–—]\s*|,\s*|\s+(?i:lancia|presenta|arriva|debutta)\s+",
+                       title, maxsplit=1)[0].strip()
+    for value in (draft.get("cover_subject"), subject):
+        if not isinstance(value, str):
+            continue
+        value = " ".join(value.split())
+        name = words(value)
+        if (HEADLINE_WORDS.search(value) or not 2 <= len(name.split()) <= 8
+                or not (MODEL_CODE.search(value) or re.search(r"\b\d{1,4}\b", value))):
+            continue
+        # Allow a short brand/presentation prefix before the exact model.
+        if not re.match(rf"^(?:\S+ ){{0,2}}{re.escape(name)}(?: |$)", words(subject)):
+            continue
+        if not mentions(name, title) or not mentions(name, body):
+            continue
+        if source is not None and not mentions(name, source):
+            continue
+        return [value]
+    return []
 
 
 def matched_asin(product: str, links: list[dict]) -> str:
@@ -225,7 +259,7 @@ def affiliate_section(draft: dict, body: str, tag: str) -> tuple[str, str, list[
     tag = tracking_tag(tag)
     if not tag:
         return "", "tracking_id_missing", []
-    if MARKER in body or has_affiliate_link(body):
+    if has_affiliate_link(body):
         return "", "already_present", []
     if AMAZON_PRICE.search(str(draft.get("body_markdown") or "")) or AMAZON_PRICE.search(str(draft.get("title") or "")):
         return "", "amazon_price_in_article", []

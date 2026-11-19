@@ -1260,11 +1260,12 @@ def publish_one(
     if live_offer_html is None:
         # Only the product selector may introduce commercial links into editorial posts.
         body = ensure_article_tracking(body, configured_tag(), remove_unselected=True)
-    affiliate_html, affiliate_status, amazon_links = affiliate_section(draft, body, configured_tag())
+    affiliate_draft = {**draft, "body_markdown": raw_body}
+    affiliate_html, affiliate_status, amazon_links = affiliate_section(affiliate_draft, body, configured_tag())
     if affiliate_html:
         body += "\n" + affiliate_html
-    if affiliate_status == "tracking_id_missing":
-        print("    AFFILIAZIONE: Tracking ID Amazon Italia mancante.")
+    if live_offer_html is None:
+        print(f"    AFFILIAZIONE Amazon: {affiliate_status} ({len(amazon_links)} link).")
 
     category_name = category_for(draft)
     try:

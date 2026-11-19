@@ -121,7 +121,18 @@ BOOKS = tuple(department(name, query, ".", "books and an e-reader",
                                   ("Fantasy", "libri fantasy"), ("Bambini", "libri illustrati bambini"),
                                   ("Saggistica", "saggi divulgazione"), ("Fumetti", "fumetti graphic novel")))
 TARGET_OFFERS = 20
-MIN_NEW_EDITION = 8
+
+
+def catalog_error(error: requests.HTTPError) -> str:
+    response = error.response
+    if response is None:
+        return "errore HTTP"
+    try:
+        payload = response.json()
+        reason = payload.get("reason") if isinstance(payload, dict) else None
+    except ValueError:
+        reason = None
+    return f"HTTP {response.status_code}" + (f" ({reason})" if isinstance(reason, str) and re.fullmatch(r"[A-Za-z]{1,64}", reason) else "")
 
 
 @dataclass(frozen=True)
@@ -396,7 +407,7 @@ class PublicDeals:
 
 class CreatorsAPI:
     RESOURCES = (
-        "itemInfo.title", "offersV2.listings.price", "offersV2.listings.availability",
+            "itemInfo.title", "offersV2.listings.price", "offersV2.listings.availability",
         "offersV2.listings.condition", "offersV2.listings.dealDetails",
         "offersV2.listings.isBuyBoxWinner", "parentASIN",
     )
@@ -405,6 +416,7 @@ class CreatorsAPI:
     def __init__(self, session: requests.Session, tag: str):
         self.session, self.tag = session, tag
         self.token = ""
+        self.searches = {}
 
     def items(self, operation: str, **fields) -> list[dict]:
         if not self.token:
@@ -429,8 +441,12 @@ class CreatorsAPI:
         selected = []
         used = set()
         for category in categories:
-            items = self.items("searchItems", keywords=category.query, searchIndex=category.index, itemCount=10,
-                               condition="New", minSavingPercent=5)
+            key = (category.query, category.index)
+            if key not in self.searches:
+                self.searches[key] = self.items("searchItems", keywords=category.query, searchIndex=category.index,
+                                                itemCount=10, availability="Available", condition="New",
+                                                minSavingPercent=5)
+            items = self.searches[key]
             offers = []
             for item in items:
                 offer = product_offer(item, category, now, self.tag)
@@ -690,32 +706,6 @@ def extend_edition(client, post, offers, checked):
             "status": "updated" if additions else "already_exists"}
 
 
-def reviewed_edition(client, session, now, tag):
-    # Editorial evidence expires at midnight in the site's timezone.
-    path = ROOT / "config/amazon-reviewed-editions.json"
-    edition = json.loads(path.read_text(encoding="utf-8")).get(now.date().isoformat())
-    if not edition:
-        return None
-    if len({product_asin(row["url"]) for row in edition["products"]} - {""}) < MIN_NEW_EDITION:
-        return None
-    until = local_at(now.date() + timedelta(days=1))
-    def content():
-        checked = datetime.now(get_timezone())
-        if checked.date() != now.date():
-            return ""
-        offers = []
-        for row in edition["products"]:
-            url = row["url"]
-            if not product_asin(url) or any(o.key == product_asin(url) for o in offers):
-                continue
-            offers.append(Offer(product_asin(url), row["category"], row["title"], row["description"],
-                                row["why"], edition["terms"], affiliate_url(url, tag), until,
-                                affiliate=True, product=True))
-        return render_offers(offers, checked, heading="I prodotti segnalati")
-    return publish_edition(client, session, edition["title"], edition["slug"], edition["intro"],
-                           edition["scene"], edition["campaign"], content)
-
-
 def run(client: WordPressClient, session: requests.Session, now: datetime) -> dict:
     tag = configured_tag()
     if not tag:
@@ -730,86 +720,108 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
     active = next((offer for name in ("Cyber Monday", "Black Friday") for offer in live
                    if offer.title == name), None)
     catalog_ready = all(os.environ.get(k) for k in ("AMAZON_CREATORS_CREDENTIAL_ID", "AMAZON_CREATORS_CREDENTIAL_SECRET"))
-    report = {"catalog": "creators_api" if catalog_ready else "amazon_public", "items": [], "warnings": []}
+    api = CreatorsAPI(session, tag) if catalog_ready else None
+    api_denied = False
+    report = {"catalog": "creators_api" if api else "amazon_public", "items": [], "editions": [], "warnings": []}
 
     day = now.date().isoformat()
     stamp = italian_date(now.date())
 
+    def verified_offers(catalog, checked, campaign, categories, topic, needed):
+        rows = catalog.shortlist(checked, campaign, categories)
+        rows = [(category, offer) for category, offer in rows if offer.key not in used
+                and (not topic or any(word in offer.campaign_badge.casefold() for word in topic))
+                and (campaign is not None or topic or not any(belongs_to_campaign(offer, event) for event in live))]
+        groups = [[row for row in rows if row[0] == category] for category in categories]
+        ordered = [group[level] for level in range(max(map(len, groups), default=0))
+                   for group in groups if level < len(group)]
+        shortlist = dict((offer.key, (category, offer)) for category, offer in ordered)
+        verified = {offer.key: offer for offer in catalog.verify(list(shortlist.values())[:needed + TARGET_OFFERS],
+                                                                 checked, campaign)
+                    if offer.expires > checked and (not topic or any(
+                        word in offer.campaign_badge.casefold() for word in topic))}
+        return {asin: verified[asin] for asin in shortlist if asin in verified}
+
+    used = set()
+
     def editions(label, slug, categories, count, campaign=None, topic=None, source=None):
+        nonlocal api_denied
+        slugs = [f"{slug}-{day}" + (f"-{i + 1}" if count > 1 else "") for i in range(count)]
+        outcomes = [{"slug": key, "status": "blocked", "verified": 0, "target": TARGET_OFFERS} for key in slugs]
+        report["editions"].extend(outcomes)
         try:
-            public = PublicDeals(session, tag, source or (campaign.url if campaign else AMAZON + "/deals"), topic)
-            catalog = CreatorsAPI(session, tag) if catalog_ready else public
-            try:
-                rows = catalog.shortlist(now, campaign, categories)
-            except requests.HTTPError as exc:
-                if catalog is public or exc.response is None or exc.response.status_code != 403:
-                    raise
-                report["warnings"].append(f"{label}: catalogo API 403, controllo della pagina pubblica.")
-                catalog = public
-                rows = public.shortlist(now, campaign, categories)
-            if topic:
-                rows = [(category, offer) for category, offer in rows
-                        if any(word in offer.campaign_badge.casefold() for word in topic)]
-            # Deal in rounds across departments before splitting into distinct editions.
-            groups = [[row for row in rows if row[0] == cat] for cat in categories]
-            ordered = [group[level] for level in range(max(map(len, groups), default=0))
-                       for group in groups if level < len(group)]
-            slugs = [f"{slug}-{day}" + (f"-{i + 1}" if count > 1 else "") for i in range(count)]
             posts = [client.existing_post(key) for key in slugs]
-            known = set().union(*(edition_asins(post) for post in posts))
-            pending = {offer.key: (category, offer) for category, offer in ordered if offer.key not in known}
-            for index, post in enumerate(posts, start=1):
+            existing = [edition_asins(post) for post in posts]
+            used.update(set().union(*existing))
+            needed = sum(max(0, TARGET_OFFERS - len(keys)) for keys in existing)
+            pending = {}
+            if needed and api and not api_denied:
+                try:
+                    pending = verified_offers(api, now, campaign, categories, topic, needed)
+                except requests.HTTPError as exc:
+                    code = catalog_error(exc)
+                    report["warnings"].append(f"{label}: Creators API {code}.")
+                    if exc.response is not None and exc.response.status_code in {401, 403}:
+                        api_denied = True
+            if len(pending) < needed:
+                public = PublicDeals(session, tag, source or (campaign.url if campaign else AMAZON + "/deals"), topic)
+                try:
+                    public_rows = verified_offers(public, now, campaign, categories, topic, needed)
+                    for asin, offer in public_rows.items():
+                        pending.setdefault(asin, offer)
+                except (requests.RequestException, ValueError) as exc:
+                    report["warnings"].append(f"{label}: catalogo pubblico: {exc}.")
+            for index, (post, keys, outcome) in enumerate(zip(posts, existing, outcomes), start=1):
                 checked = datetime.now(get_timezone())
                 if checked.date() != now.date():
                     return
-                target = max(0, TARGET_OFFERS - len(edition_asins(post)))
-                minimum = 1 if post else MIN_NEW_EDITION
-                if index == count:
-                    target = max(TARGET_OFFERS, target)
-                if not target or len(pending) < minimum:
+                target = max(0, TARGET_OFFERS - len(keys))
+                if not target:
+                    outcome.update(status="already_complete", verified=len(keys))
                     continue
-                batch = list(pending.values())[:target]
-                verified = catalog.verify(batch, checked, campaign)
-                unique = {o.key: o for o in verified if o.expires > checked and o.key in pending
-                          and (not topic or any(w in o.campaign_badge.casefold() for w in topic))}
-                if len(unique) < minimum:
-                    break
-                for key in unique:
-                    pending.pop(key)
-                def content():
-                    current = datetime.now(get_timezone())
-                    valid = [o for o in unique.values() if o.expires > current]
-                    return render_offers(valid, current) if current.date() == now.date() and len(valid) >= minimum else ""
+                valid = [offer for offer in pending.values() if offer.expires > checked]
+                batch = valid[:target]
+                outcome["verified"] = len(keys) + len(batch)
+                if len(batch) < target:
+                    report["warnings"].append(f"{outcome['slug']}: {outcome['verified']}/{TARGET_OFFERS} prodotti verificati.")
+                    continue
+                departments = {offer.category for offer in batch}
+                if categories is CATEGORIES and (len(departments) < 3 or not departments & NON_TECH):
+                    report["warnings"].append(f"{outcome['slug']}: categorie verificate insufficienti.")
+                    continue
                 if post:
-                    report["items"].append(extend_edition(client, post, unique.values(), checked))
-                    if len(unique) < target:
-                        break
-                    continue
-                suffix = f" · selezione {index}" if count > 1 else ""
-                title = f"{label}{suffix} | {stamp}"
-                intro = (f"La selezione del {stamp} raccoglie le offerte di {label} su Amazon.it. "
-                         "I prodotti sono raggruppati per categoria, con prezzo e condizioni rilevati al momento della verifica.")
-                scene = ", ".join(dict.fromkeys(c.scene for c, _ in batch)) if topic else "a frying pan, a canvas backpack, a board game and wireless headphones"
-                try:
-                    result = publish_edition(client, session, title, f"{slug}-{day}" + (f"-{index}" if count > 1 else ""),
-                                             intro, scene, label.upper(), content)
-                except (requests.RequestException, ValueError, RuntimeError) as exc:
-                    report["warnings"].append(f"{title}: {exc}")
-                    break
+                    result = extend_edition(client, post, batch, checked)
+                else:
+                    suffix = f" · selezione {index}" if count > 1 else ""
+                    title = f"{label}{suffix} | {stamp}"
+                    intro = (f"La selezione del {stamp} raccoglie le offerte di {label} su Amazon.it. "
+                             "I prodotti sono raggruppati per categoria, con prezzo e condizioni rilevati al momento della verifica.")
+                    scene = ("books and an e-reader" if categories is BOOKS else
+                             "a frying pan, a canvas backpack, a board game and wireless headphones")
+
+                    def content():
+                        current = datetime.now(get_timezone())
+                        if current.date() != now.date() or any(offer.expires <= current for offer in batch):
+                            return ""
+                        return render_offers(batch, current)
+
+                    result = publish_edition(client, session, title, outcome["slug"], intro, scene, label.upper(), content)
                 report["items"].append({k: result.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
-                if len(unique) < target:
-                    break
+                outcome["status"] = result.get("status", "processed")
+                for offer in batch:
+                    used.add(offer.key)
+                    pending.pop(offer.key, None)
         except (requests.RequestException, ValueError, RuntimeError, KeyError, TypeError) as exc:
             report["warnings"].append(f"{label}: {type(exc).__name__}: {exc}")
 
     if active:
         editions(active.title + " Amazon", "amazon-" + slugify(active.title), CATEGORIES, 2, active)
-        if not report["items"]:
-            item = reviewed_edition(client, session, now, tag)
-            if item:
-                report["items"].append({k: item.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
-    else:
-        editions("Offerte Amazon del giorno", "offerte-amazon-del-giorno", CATEGORIES, 1)
+
+    daily_slug = "offerte-amazon-del-giorno"
+    daily = client.existing_post(f"{daily_slug}-{day}")
+    if daily and "Mese della Lettura" in daily["title"]["rendered"]:
+        daily_slug = "amazon-offerte-ordinarie"
+    editions("Offerte Amazon del giorno", daily_slug, CATEGORIES, 1)
 
     for event in live:
         if event.title not in {"Black Friday", "Cyber Monday"}:
@@ -822,13 +834,13 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
         if service.key != "ebook-kindle":
             editions(service.title, "amazon-promozione-" + slugify(service.title), CATEGORIES, 1,
                      topic=(service.title.casefold(),), source=service.url)
+    report["status"] = "partial_or_blocked" if any(e["status"] == "blocked" for e in report["editions"]) else "complete"
     return report
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expire", action="store_true")
-    parser.add_argument("--reviewed", action="store_true")
     args = parser.parse_args()
     dry = env_bool("WP_DRY_RUN", True)
     base, user, password = (os.environ.get(k, "") for k in ("WP_BASE_URL", "WP_USERNAME", "WP_APP_PASSWORD"))
@@ -840,13 +852,12 @@ def main():
         print(f"Articoli promozionali aggiornati: {expire_posts(client, now)}")
         return
     with requests.Session() as session:
-        if args.reviewed:
-            result = reviewed_edition(client, session, now, configured_tag())
-            print({k: result.get(k) for k in ("status", "link", "post_id")} if result else "Nessuna segnalazione datata per oggi.")
-            return
         report = run(client, session, now)
     save_json(REPORT, report)
     print(json.dumps(report, ensure_ascii=False))
+    if report["status"] == "partial_or_blocked":
+        blocked = sum(e["status"] == "blocked" for e in report["editions"])
+        print(f"::warning title=Copertura offerte Amazon::{blocked} edizioni sotto il requisito di {TARGET_OFFERS} offerte verificate.")
 
 
 if __name__ == "__main__":

@@ -85,6 +85,32 @@ class AmazonAffiliateTests(unittest.TestCase):
         variant = {"title": "Xiaomi 18 Pro Max in Italia", "amazon_products": ["Xiaomi 18 Pro"]}
         self.assertEqual(article_products(variant, source=variant["title"]), [])
 
+    def test_product_news_with_empty_metadata_gets_exact_variant_search(self):
+        model = "MX Master 4 Creator Edition"
+        draft = {
+            "title": f"{model}: estetica rinnovata per il mouse Logitech",
+            "body_markdown": f"Il mouse Logitech {model} ha una finitura diversa.",
+            "amazon_products": [],
+            "amazon_source_links": [{"label": "Logitech MX Master 4 per Mac",
+                                     "url": "https://www.amazon.it/dp/B0FHHV7BTG"}],
+        }
+        self.assertEqual(article_products(draft, source=f"Il nuovo mouse {model}"), [model])
+        self.assertEqual(article_products(draft, source="Mouse MX Master 4 per Mac"), [])
+        block, status, links = affiliate_section(draft, "<p>Testo</p>", TEST_TAG)
+        self.assertEqual(status, "inserted")
+        self.assertEqual(links[0]["type"], "search")
+        self.assertIn(f"k=MX+Master+4+Creator+Edition&amp;tag={TEST_TAG}", block)
+        self.assertNotIn("B0FHHV7BTG", block)
+
+    def test_subscription_and_vehicle_do_not_add_incidental_products(self):
+        subscription = {"title": "GTA Plus gratis con GTA 6: l'abbonamento",
+                        "cover_subject": "GTA 6", "body_markdown": "GTA 6 arriva su console."}
+        vehicle = {"title": "Kymco People R Hybrid porta l'ibrido sugli scooter",
+                   "body_markdown": "Kymco People R Hybrid è uno scooter.",
+                   "amazon_products": ["Kymco People R Hybrid"]}
+        self.assertEqual(article_products(subscription), [])
+        self.assertEqual(article_products(vehicle), [])
+
     def test_does_not_guess_canonical_links_or_use_platform_tag(self):
         self.assertEqual(product_asin("https://amazon.it.example.org/dp/B012345678"), "")
         self.assertEqual(product_asin("https://www.amazon.it/s?k=B012345678"), "")
