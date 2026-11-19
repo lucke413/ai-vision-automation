@@ -91,6 +91,21 @@ class AmazonPromotionsTests(unittest.TestCase):
         other_campaign = promos.replace(campaign, title="Prime Day")
         self.assertFalse(promos.belongs_to_campaign(deal, other_campaign))
 
+    def test_public_card_needs_a_product_price_and_matching_campaign(self):
+        source = promos.PublicDeals(None, self.tag, promos.AMAZON + "/blackfriday")
+        markup = ('<div data-asin="B0DD2HYX6L"><a href="/dp/B0DD2HYX6L"><h2>Ember QLED</h2></a>'
+                  '<span class="a-price"><span class="a-offscreen">249,99 €</span></span>'
+                  '<span class="dealBadge">Black Friday Big Deal</span></div>')
+        with patch.object(source, "page", return_value=promos.BeautifulSoup(markup, "html.parser")):
+            rows = source.shortlist(self.now, None, promos.CATEGORIES)
+            self.assertEqual(len(rows), 1)
+            offer = rows[0][1]
+            self.assertIn("tag=lavocdelweb-21", offer.url)
+            self.assertEqual(offer.category, "TV e home cinema")
+            self.assertFalse(source.shortlist(self.now, promos.replace(offer, title="Prime Day"), promos.CATEGORIES))
+        with patch.object(source, "page", return_value=promos.BeautifulSoup("", "html.parser")):
+            self.assertFalse(source.verify(rows, self.now))
+
     def test_two_distinct_multicategory_editions_and_separate_books(self):
         from datetime import datetime
         from unittest.mock import Mock

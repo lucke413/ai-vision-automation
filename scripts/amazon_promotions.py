@@ -14,6 +14,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
+from bs4 import BeautifulSoup
+from urllib.robotparser import RobotFileParser
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 if __package__:
@@ -93,6 +95,8 @@ def department(title, keywords, pattern, scene, advice, index="All"):
 
 
 CATEGORIES += (
+    department("Casa e pulizia", "lavapavimenti", "lavapavimenti|aspirapolvere|vacuum cleaner", "floor cleaner", "Controlla autonomia, peso e accessori inclusi."),
+    department("TV e home cinema", "televisore", "televisor|smart tv|qled|oled", "flat screen television", "Verifica diagonale e ingombro del televisore."),
     department("Cucina", "padella", "padell", "a frying pan", "Controlla diametro e compatibilità con il piano cottura."),
     department("Casa e arredo", "biancheria letto", "lenzuol|copripiumin", "folded bed linen", "Confronta le misure con il materasso."),
     department("Sport", "tappetino fitness", "tappet", "an exercise mat", "Scegli lo spessore in funzione degli esercizi."),
@@ -109,7 +113,7 @@ CATEGORIES += (
     department("Valigeria", "valigia trolley", "valigi|trolley", "a suitcase", "Confronta misure e peso con i limiti della compagnia."),
 )
 
-NON_TECH = {category.title for category in CATEGORIES[5:]}
+NON_TECH = {category.title for category in CATEGORIES[5:]} - {"TV e home cinema"}
 
 BOOKS = tuple(department(name, query, ".", "books and an e-reader",
                          "Verifica lingua, formato ed edizione prima di scegliere.", "Books")
@@ -317,6 +321,76 @@ def parse_utc(value: str) -> datetime:
     if timestamp.tzinfo is None:
         raise ValueError("Manca il fuso orario nella data dell'offerta.")
     return timestamp
+
+
+class PublicDeals:
+    """Read only public Amazon.it offer cards containing product-specific evidence."""
+    agent = "AIVisionOffers"
+    def __init__(self, session, tag, source, topic=None):
+        self.session, self.tag, self.source, self.topic = session, tag, source, topic
+        self.rules = None
+
+    def page(self):
+        if not valid_https(self.source, {"www.amazon.it", "amazon.it"}):
+            raise ValueError("La promozione non fornisce una pagina Amazon.it verificabile")
+        headers = {"User-Agent": self.agent, "Accept-Language": "it-IT,it;q=0.9"}
+        if self.rules is None:
+            response = self.session.get(AMAZON + "/robots.txt", headers=headers, timeout=12, allow_redirects=False)
+            if response.status_code != 404:
+                response.raise_for_status()
+                if not re.search(r"(?im)^user-agent:", response.text):
+                    raise ValueError("Regole di accesso al catalogo pubblico non disponibili")
+            self.rules = RobotFileParser()
+            self.rules.parse(response.text.splitlines() if response.status_code != 404 else [])
+        if not self.rules.can_fetch(self.agent, self.source):
+            raise ValueError("Accesso automatico non consentito per questa pagina")
+        response = self.session.get(self.source, headers=headers, timeout=18, allow_redirects=False)
+        if response.status_code != 200:
+            raise ValueError(f"Pagina offerte Amazon.it: HTTP {response.status_code}")
+        return BeautifulSoup(response.content, "html.parser")
+
+    def shortlist(self, now, campaign, categories):
+        rows = {}
+        for card in self.page().select("[data-asin], [data-testid='deal-card']"):
+            if card.select_one("[data-asin], [data-testid='deal-card']"):
+                continue
+            product_ids = {asin for a in card.select("a[href]")
+                           if (asin := product_asin(urljoin(AMAZON, a["href"])))}
+            if len(product_ids) != 1:
+                continue
+            asin = product_ids.pop()
+            if card.get("data-asin") and card["data-asin"] != asin:
+                continue
+            title_node = card.select_one("h2, h3, [data-testid='product-title'], [class*='title'] a")
+            price_node = card.select_one(".a-price:not(.a-text-price) .a-offscreen")
+            badge_nodes = card.select("[class*='dealBadge'], [class*='Badge'], [data-testid*='badge'], .a-badge")
+            badge = " ".join(b.get_text(" ", strip=True) for b in badge_nodes)
+            if not title_node or not price_node or not re.search(r"offert|deal|sconto|black friday|cyber monday|%|mese della lettura", badge, re.I):
+                continue
+            title = title_node.get_text(" ", strip=True)
+            price = price_node.get_text(" ", strip=True)
+            if not re.fullmatch(r"(?:€\s*[\d.,]+|[\d.,]+\s*€)", price) or not title:
+                continue
+            if self.topic and not any(t in badge.casefold() for t in self.topic):
+                continue
+            if categories is BOOKS:
+                category = next((c for c in categories if c.title.casefold() in card.get_text(" ", strip=True).casefold()), None)
+            else:
+                category = next((c for c in categories if re.search(c.product, title, re.I)), None)
+            if category is None:
+                continue
+            offer = Offer(asin, category.title, title, category.summary or title, category.why,
+                          "", affiliate_url(AMAZON + "/dp/" + asin, self.tag),
+                          now + timedelta(hours=1), price=price, affiliate=True, campaign_badge=badge)
+            if campaign and not belongs_to_campaign(offer, campaign):
+                continue
+            rows[asin] = (category, offer)
+        return list(rows.values())
+
+    def verify(self, selections, now, campaign=None):
+        wanted = {offer.key for _, offer in selections}
+        categories = BOOKS if selections and selections[0][0] in BOOKS else CATEGORIES
+        return [offer for _, offer in self.shortlist(now, campaign, categories) if offer.key in wanted]
 
 
 class CreatorsAPI:
@@ -602,18 +676,16 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
     live = [offer for offer in campaigns if offer.starts <= now < offer.expires]
     active = next((offer for name in ("Cyber Monday", "Black Friday") for offer in live
                    if offer.title == name), None)
-    catalog = CreatorsAPI(session, tag)
     catalog_ready = all(os.environ.get(k) for k in ("AMAZON_CREATORS_CREDENTIAL_ID", "AMAZON_CREATORS_CREDENTIAL_SECRET"))
-    report = {"catalog": "credentials_missing" if not catalog_ready else "available", "items": [], "warnings": []}
-    if not catalog_ready:
-        report["warnings"].append("Catalogo offerte indisponibile: impossibile verificare 20 prodotti per edizione.")
-        return report
+    report = {"catalog": "creators_api" if catalog_ready else "amazon_public", "items": [], "warnings": []}
 
     day = now.date().isoformat()
     stamp = italian_date(now.date())
 
-    def editions(label, slug, categories, count, campaign=None, topic=None):
+    def editions(label, slug, categories, count, campaign=None, topic=None, source=None):
         try:
+            catalog = (CreatorsAPI(session, tag) if catalog_ready else
+                       PublicDeals(session, tag, source or (campaign.url if campaign else AMAZON + "/deals"), topic))
             rows = catalog.shortlist(now, campaign, categories)
             if topic:
                 rows = [(category, offer) for category, offer in rows
@@ -670,11 +742,11 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
 
     if any(s.key == "ebook-kindle" for s in services):
         editions("Mese della Lettura su Amazon", "amazon-promozioni-lettura", BOOKS, 1,
-                 topic=("mese della lettura", "reading month"))
+                 topic=("mese della lettura", "reading month"), source=AMAZON + "/amz-books/book-deals")
     for service in services:
         if service.key != "ebook-kindle":
             editions(service.title, "amazon-promozione-" + slugify(service.title), CATEGORIES, 1,
-                     topic=(service.title.casefold(),))
+                     topic=(service.title.casefold(),), source=service.url)
     return report
 
 
