@@ -86,13 +86,44 @@ class AmazonPromotionsTests(unittest.TestCase):
                 patch.object(promos.CreatorsAPI, "shortlist", return_value=[(promos.CATEGORIES[0], deal)]), \
                 patch.object(promos, "publish_edition", return_value={}) as publish:
             promos.run(object(), object(), self.now)
-        title, _, intro, _, label = publish.call_args_list[0].args[2:7]
-        self.assertIn("Offerte Amazon del giorno · Black Friday", title)
-        self.assertIn("OFFERTE DEL GIORNO · BLACK FRIDAY", label)
-        self.assertGreater(len(intro.split()), 15)
+        publish.assert_not_called()
         self.assertTrue(promos.belongs_to_campaign(deal, campaign))
         other_campaign = promos.replace(campaign, title="Prime Day")
         self.assertFalse(promos.belongs_to_campaign(deal, other_campaign))
+
+    def test_two_distinct_multicategory_editions_and_separate_books(self):
+        from datetime import datetime
+        from unittest.mock import Mock
+        now = datetime.now(promos.get_timezone())
+        campaign = promos.Offer("bf", "Eventi", "Black Friday", "", "", "", "", now + timedelta(days=2),
+                                starts=now - timedelta(days=1))
+        sale = promos.replace(campaign, key="ebook-kindle", category="Lettura digitale", starts=None)
+        catalog = Mock()
+        def shortlist(stamp, event, categories):
+            badge = "Black Friday" if event else "Mese della Lettura"
+            return [(category, promos.replace(campaign, key=f"{category.title}-{i}", category=category.title,
+                                              title=f"{category.title}-{i}", campaign_badge=badge, starts=None))
+                    for category in categories for i in range(6)]
+        catalog.shortlist.side_effect = shortlist
+        catalog.verify.side_effect = lambda rows, *args: [offer for _, offer in rows]
+        pages = []
+        def publish(client, session, title, slug, intro, scene, label, check):
+            pages.append((slug, check()))
+            return {"status": "planned"}
+        with patch.dict(promos.os.environ, {"AMAZON_CREATORS_CREDENTIAL_ID":"test",
+                                           "AMAZON_CREATORS_CREDENTIAL_SECRET":"test"}), \
+             patch.object(promos, "CreatorsAPI", return_value=catalog), \
+             patch.object(promos, "newsroom_offers", return_value=[campaign, sale]), \
+             patch.object(promos, "publish_edition", side_effect=publish):
+            promos.run(None, None, now)
+        self.assertEqual(len(pages), 3)
+        import re
+        items = [set(re.findall(r"<h4>(.*?)</h4>", body)) for _, body in pages]
+        self.assertTrue(all(len(group) >= 20 for group in items))
+        self.assertTrue(items[0].isdisjoint(items[1]))
+        self.assertIn("Cucina", pages[0][1])
+        self.assertIn("Fantasy", pages[2][1])
+        self.assertNotIn("Cucina", pages[2][1])
 
 
 if __name__ == "__main__":

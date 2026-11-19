@@ -40,7 +40,8 @@ ARCHIVE = "<p>Questa offerta è terminata. Prezzo e disponibilità possono esser
 SAFETY_WINDOW = timedelta(minutes=75)
 
 CAMPAIGNS = (
-    ("Black Friday", r"black-friday|cyber-monday", "/blackfriday"),
+    ("Black Friday", r"black-friday", "/blackfriday"),
+    ("Cyber Monday", r"cyber-monday|black-friday", "/cybermonday"),
     ("Festa delle Offerte Prime", r"festa-(?:delle-)?offerte-prime", "/primebigdealdays"),
     ("Prime Day", r"prime-day", "/primeday"),
     ("Festa delle Offerte di Primavera", r"festa-delle-offerte-di-primavera", "/springdealdays"),
@@ -56,6 +57,7 @@ class Category:
     caveat: str
     scene: str
     summary: str
+    index: str = "All"
 
 
 CATEGORIES = (
@@ -85,6 +87,36 @@ CATEGORIES = (
              "USB-C power bank",
              "Batteria portatile per ricaricare telefono e piccoli dispositivi lontano dalla presa."),
 )
+
+def department(title, keywords, pattern, scene, advice, index="All"):
+    return Category(title, keywords, pattern, advice, "", scene, "", index)
+
+
+CATEGORIES += (
+    department("Cucina", "padella", "padell", "a frying pan", "Controlla diametro e compatibilità con il piano cottura."),
+    department("Casa e arredo", "biancheria letto", "lenzuol|copripiumin", "folded bed linen", "Confronta le misure con il materasso."),
+    department("Sport", "tappetino fitness", "tappet", "an exercise mat", "Scegli lo spessore in funzione degli esercizi."),
+    department("Giardino", "attrezzi giardinaggio", "giardin|potatur", "garden tools", "Verifica gli attrezzi inclusi e il tipo di impugnatura."),
+    department("Moda", "zaino", "zain", "a canvas backpack", "Valuta capienza e lunghezza degli spallacci."),
+    department("Bellezza", "shampoo", "shampoo", "shampoo bottles", "Confronta formato, ingredienti e costo per litro."),
+    department("Giochi e giocattoli", "gioco da tavolo", "gioc|board game", "a board game", "Controlla età consigliata e numero di giocatori."),
+    department("Animali", "accessori cani gatti", "can[ei]|gatt", "a pet bowl", "Verifica misure e idoneità per il tuo animale."),
+    department("Fai da te", "set utensili", "utensil|attrezz", "a tool kit", "Confronta le misure dei componenti inclusi."),
+    department("Alimentari", "caffè", "caff[eè]", "coffee beans", "Confronta il costo al chilo e il formato."),
+    department("Auto e moto", "accessori auto", "auto|moto", "car accessories", "Controlla la compatibilità con marca e modello."),
+    department("Prima infanzia", "pannolini", "pannolin", "baby essentials", "Verifica taglia e numero di pezzi."),
+    department("Cancelleria", "quaderni", "quadern", "notebooks", "Controlla formato e rigatura."),
+    department("Valigeria", "valigia trolley", "valigi|trolley", "a suitcase", "Confronta misure e peso con i limiti della compagnia."),
+)
+
+NON_TECH = {category.title for category in CATEGORIES[5:]}
+
+BOOKS = tuple(department(name, query, ".", "books and an e-reader",
+                         "Verifica lingua, formato ed edizione prima di scegliere.", "Books")
+              for name, query in (("Narrativa", "romanzi narrativa"), ("Gialli", "gialli thriller"),
+                                  ("Fantasy", "libri fantasy"), ("Bambini", "libri illustrati bambini"),
+                                  ("Saggistica", "saggi divulgazione"), ("Fumetti", "fumetti graphic novel")))
+MIN_OFFERS = 20
 
 
 @dataclass(frozen=True)
@@ -176,7 +208,7 @@ def newsroom_offers(session: requests.Session, now: datetime, tag: str, override
     for index in config["newsroom"] if evidence_urls is None else []:
         page = public_html(session, index)
         for path in re.findall(r'href="(/notizie/[^"?#]+)"', page):
-            if re.search(r"black-friday|prime-day|offerte-(?:prime|di-primavera)|settimana-.*tecnologia|"
+            if re.search(r"black-friday|cyber-monday|prime-day|offerte-(?:prime|di-primavera)|settimana-.*tecnologia|"
                          r"offerte-di-tecnologia|lettura|audible|kindle|music-unlimited|prime-video", path):
                 urls[urljoin(index, path)] = None
     for url in list(urls)[:16]:
@@ -318,11 +350,11 @@ class CreatorsAPI:
         result = payload.get("searchResult" if operation == "searchItems" else "itemsResult") or {}
         return result.get("items") or []
 
-    def shortlist(self, now: datetime, campaign: Offer | None = None) -> list[tuple[Category, Offer]]:
+    def shortlist(self, now: datetime, campaign: Offer | None = None, categories=CATEGORIES) -> list[tuple[Category, Offer]]:
         selected = []
         used = set()
-        for category in CATEGORIES:
-            items = self.items("searchItems", keywords=category.query, itemCount=10,
+        for category in categories:
+            items = self.items("searchItems", keywords=category.query, searchIndex=category.index, itemCount=10,
                                condition="New", minSavingPercent=5)
             offers = []
             for item in items:
@@ -330,7 +362,7 @@ class CreatorsAPI:
                 if offer and (campaign is None or belongs_to_campaign(offer, campaign)):
                     offers.append((item.get("parentASIN") or offer.key, offer))
             for family, offer in sorted(offers, key=lambda pair: pair[1].savings, reverse=True):
-                if family in used or sum(c == category for c, _ in selected) >= 2:
+                if family in used:
                     continue
                 selected.append((category, offer))
                 used.add(family)
@@ -341,7 +373,10 @@ class CreatorsAPI:
         if not selections:
             return []
         selected = {offer.key: category for category, offer in selections}
-        items = self.items("getItems", itemIds=list(selected), itemIdType="ASIN")
+        keys = list(selected)
+        items = []
+        for offset in range(0, len(keys), 10):
+            items.extend(self.items("getItems", itemIds=keys[offset:offset + 10], itemIdType="ASIN"))
         return [
             offer for item in items
             if (category := selected.get(item.get("asin"))) and (offer := product_offer(item, category, now, self.tag))
@@ -352,7 +387,7 @@ class CreatorsAPI:
 def product_offer(item: dict, category: Category, now: datetime, tag: str) -> Offer | None:
     asin = str(item.get("asin") or "")
     url = str(item.get("detailPageURL") or "")
-    if not asin or product_asin(url) != asin or tracking_tag(url) != tag:
+    if not valid_https(url, {"www.amazon.it", "amazon.it"}) or not asin or product_asin(url) != asin or tracking_tag(url) != tag:
         return None
     title = ((item.get("itemInfo") or {}).get("title") or {}).get("displayValue", "")
     if not title or not re.search(category.product, title, re.I):
@@ -381,7 +416,7 @@ def product_offer(item: dict, category: Category, now: datetime, tag: str) -> Of
         display = f"{amount:,.2f}".translate(str.maketrans(",.", ".,")) + " €"
         terms = "Offerta riservata ai clienti Prime." if access == "PRIME_EXCLUSIVE" else ""
         return Offer(asin, category.title, " ".join(title.split())[:180],
-                     f"{category.summary} {category.caveat}", category.why,
+                     category.summary or title, category.why + (" " + category.caveat if category.caveat else ""),
                      terms, url, min(now + timedelta(hours=3), end - SAFETY_WINDOW), display, savings,
                      affiliate=True, campaign_badge=str(deal.get("badge") or ""))
     return None
@@ -389,7 +424,7 @@ def product_offer(item: dict, category: Category, now: datetime, tag: str) -> Of
 
 def belongs_to_campaign(offer: Offer, campaign: Offer) -> bool:
     badge = offer.campaign_badge.casefold()
-    return campaign.title.casefold() in badge or (campaign.title == "Black Friday" and "cyber monday" in badge)
+    return campaign.title.casefold() in badge
 
 
 def render_offers(offers: list[Offer], now: datetime, *, disclosure: bool = True,
@@ -564,94 +599,82 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
     events = newsroom_offers(session, now, tag, overrides)
     services = [offer for offer in events if not offer.starts]
     campaigns = [offer for offer in events if offer.starts]
-    active = next((offer for offer in campaigns if offer.starts <= now), None)
+    live = [offer for offer in campaigns if offer.starts <= now < offer.expires]
+    active = next((offer for name in ("Cyber Monday", "Black Friday") for offer in live
+                   if offer.title == name), None)
     catalog = CreatorsAPI(session, tag)
     catalog_ready = all(os.environ.get(k) for k in ("AMAZON_CREATORS_CREDENTIAL_ID", "AMAZON_CREATORS_CREDENTIAL_SECRET"))
     report = {"catalog": "credentials_missing" if not catalog_ready else "available", "items": [], "warnings": []}
-    selections = []
     if not catalog_ready:
-        report["warnings"].append("Credenziali Creators API mancanti: selezione da promozioni pubbliche confermate.")
-    if catalog_ready:
-        try:
-            selections = catalog.shortlist(now, active)
-        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-            report["catalog"] = "unavailable"
-            report["warnings"].append(f"Ricerca Creators API: {type(exc).__name__}")
+        report["warnings"].append("Catalogo offerte indisponibile: impossibile verificare 20 prodotti per edizione.")
+        return report
 
-    def publish(title, slug, intro, scene, label, bundles=(), first=(), event_only=None):
-        def recheck():
-            refreshed_at = datetime.now(get_timezone())
-            if refreshed_at.date() != now.date():
-                return ""
-            try:
-                verified = catalog.verify(list(bundles), refreshed_at, event_only)
-            except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-                verified = []
-                report["warnings"].append(f"Verifica prezzi Creators API: {type(exc).__name__}")
-            keys = {offer.key for offer in first}
-            sources = list(dict.fromkeys(offer.evidence_url for offer in first if offer.evidence_url))
-            confirmed = [offer for offer in newsroom_offers(session, refreshed_at, tag, overrides, sources)
-                         if offer.key in keys] if sources else []
-            now_verified = datetime.now(get_timezone())
-            fallback = []
-            keys = {row.key for row in confirmed}
-            if "ebook-kindle" in keys and not verified:
-                fallback.extend(editorial_picks("reading-2026-11", now_verified, tag))
-            if "black-friday-2026-11-19" in keys and not verified:
-                fallback.extend(editorial_picks("black-friday-2026", now_verified, tag))
-            return render_offers([*verified, *fallback, *confirmed], now_verified)
-        try:
-            result = publish_edition(client, session, title, slug, intro, scene, label, recheck)
-            report["items"].append({k: result.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
-        except (requests.RequestException, ValueError, RuntimeError) as exc:
-            report["warnings"].append(f"{slug}: {type(exc).__name__}: {exc}")
-
+    day = now.date().isoformat()
     stamp = italian_date(now.date())
-    daily = []
-    spotlight = []
-    for category in CATEGORIES:
-        same_category = [row for row in selections if row[0] == category]
-        if active:
-            same_category = [row for row in same_category if belongs_to_campaign(row[1], active)]
-        daily.extend(same_category[:1 if active else 2])
-        if active:
-            spotlight.extend(same_category[1:])
-    if daily or services or active:
-        suffix = f" · {active.title}" if active else ("" if daily else " · libri e abbonamenti")
-        title = f"Offerte Amazon del giorno{suffix} | {stamp}"
-        scene = (", ".join(category.scene for category, _ in daily[:3]) if daily else
-                 "a thin e-reader, sculptural wireless headphones and two cloth hardbacks")
-        intro = ("La selezione di oggi raccoglie le promozioni confermate e le organizza per categoria. "
-                 "Per ogni proposta trovi a chi può servire e cosa controllare prima di acquistarla.")
-        if active:
-            intro += f" La sezione Eventi Amazon è dedicata al {active.title}. Gli abbonamenti elencati sono promozioni distinte."
-        editorial = ([active] if active else []) + services
-        publish(title, "offerte-amazon-del-giorno-" + now.date().isoformat(), intro, scene,
-                "OFFERTE DEL GIORNO" if not active else f"OFFERTE DEL GIORNO · {active.title.upper()}",
-                daily, editorial, event_only=active)
 
-    for campaign in campaigns:
-        title = f"{campaign.title} Amazon {campaign.starts.year} | calendario e consigli per gli acquisti"
-        intro = ("Segna l'inizio della campagna e prepara una lista con il modello preciso dei prodotti che ti interessano. "
-                 "Confronta il prezzo per la stessa variante e valuta garanzia e resi se cambi venditore. "
-                 "Per gli accessori, controlla prima la compatibilità con quello che possiedi già.")
-        publish(title, "amazon-" + campaign.key, intro,
-                "a graphite streaming remote, a thin color e-reader and a compact smart speaker",
-                campaign.title.upper(), selections[:5] if active == campaign else (), [campaign],
-                event_only=campaign)
+    def editions(label, slug, categories, count, campaign=None, topic=None):
+        try:
+            rows = catalog.shortlist(now, campaign, categories)
+            if topic:
+                rows = [(category, offer) for category, offer in rows
+                        if any(word in offer.campaign_badge.casefold() for word in topic)]
+            # Deal in rounds across departments before splitting into distinct editions.
+            groups = [[row for row in rows if row[0] == cat] for cat in categories]
+            ordered = [group[level] for level in range(max(map(len, groups), default=0))
+                       for group in groups if level < len(group)]
+            # Alternate rounds between the editions so both cover the same departments.
+            batches = [[] for _ in range(count)]
+            for row in ordered:
+                dest = min(batches, key=lambda batch: (sum(c == row[0] for c, _ in batch), len(batch)))
+                dest.append(row)
+            for index, batch in enumerate(batches, start=1):
+                def content():
+                    checked = datetime.now(get_timezone())
+                    if checked.date() != now.date():
+                        return ""
+                    verified = catalog.verify(batch[:32], checked, campaign)
+                    if topic:
+                        verified = [o for o in verified if any(w in o.campaign_badge.casefold() for w in topic)]
+                    unique = {o.key: o for o in verified if o.expires > checked}
+                    if len(unique) < MIN_OFFERS or len({o.category for o in unique.values()}) < 2:
+                        return ""
+                    if categories is CATEGORIES and not topic and len({o.category for o in unique.values()} & NON_TECH) < 3:
+                        return ""
+                    return render_offers(list(unique.values()), checked)
+                if len(batch) < MIN_OFFERS:
+                    report["warnings"].append(f"{label}, edizione {index}: solo {len(batch)} prodotti idonei.")
+                    continue
+                suffix = f" · selezione {index}" if count > 1 else ""
+                title = f"{label}{suffix} | {stamp}"
+                intro = (f"La selezione del {stamp} raccoglie le offerte di {label} su Amazon.it. "
+                         "I prodotti sono raggruppati per categoria, con prezzo e condizioni rilevati al momento della verifica.")
+                scene = ", ".join(dict.fromkeys(c.scene for c, _ in batch)) if topic else "a frying pan, a canvas backpack, a board game and wireless headphones"
+                try:
+                    result = publish_edition(client, session, title, f"{slug}-{day}" + (f"-{index}" if count > 1 else ""),
+                                             intro, scene, label.upper(), content)
+                except (requests.RequestException, ValueError, RuntimeError) as exc:
+                    report["warnings"].append(f"{title}: {exc}")
+                    continue
+                report["items"].append({k: result.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
+        except (requests.RequestException, ValueError, RuntimeError, KeyError, TypeError) as exc:
+            report["warnings"].append(f"{label}: {type(exc).__name__}: {exc}")
 
-    if active and spotlight:
-        category, _ = spotlight[now.day % len(spotlight)]
-        picks = [row for row in spotlight if row[0] == category]
-        title = f"Offerte Amazon del giorno · {active.title} {category.title} | {stamp}"
-        intro = ("Questa selezione aggiuntiva è dedicata a chi sta già valutando un acquisto in questa categoria. "
-                 "Confronta le specifiche del modello e quello che ti serve prima di decidere.")
-        publish(title, f"amazon-{slugify(active.title)}-{slugify(category.title)}-{now.date().isoformat()}",
-                intro, category.scene,
-                f"{active.title.upper()} · {category.title.upper()}", picks, event_only=active)
+    if active:
+        editions(active.title + " Amazon", "amazon-" + slugify(active.title), CATEGORIES, 2, active)
+    else:
+        editions("Offerte Amazon del giorno", "offerte-amazon-del-giorno", CATEGORIES, 1)
 
-    if not any(row["status"] in {"published", "already_exists", "planned"} for row in report["items"]):
-        report["warnings"].append("Nessun articolo promozionale verificato o pubblicabile oggi.")
+    for event in live:
+        if event.title not in {"Black Friday", "Cyber Monday"}:
+            editions(event.title, "amazon-" + slugify(event.title), CATEGORIES, 1, event)
+
+    if any(s.key == "ebook-kindle" for s in services):
+        editions("Mese della Lettura su Amazon", "amazon-promozioni-lettura", BOOKS, 1,
+                 topic=("mese della lettura", "reading month"))
+    for service in services:
+        if service.key != "ebook-kindle":
+            editions(service.title, "amazon-promozione-" + slugify(service.title), CATEGORIES, 1,
+                     topic=(service.title.casefold(),))
     return report
 
 
