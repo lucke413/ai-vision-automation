@@ -90,6 +90,16 @@ def mentions(name: str, text: str) -> bool:
     return bool(re.search(rf"(?<!\S){re.escape(name)}(?!\S| (?:{variant})\b)", words(text)))
 
 
+def product_in_article(name: str, body: str, excerpt: str) -> bool:
+    if mentions(name, body):
+        return True
+    # Copy often mentions the numbered series and its edition separately.
+    # The excerpt must use the exact full name to establish the connection.
+    edition = re.fullmatch(r"(.+\b\d+) (.+)", name)
+    return bool(edition and mentions(name, excerpt)
+                and mentions(edition[1], body) and mentions(edition[2], body))
+
+
 def article_products(draft: dict, source: str | None = None) -> list[str]:
     values = draft.get("amazon_products") or []
     if not isinstance(values, list):
@@ -98,6 +108,7 @@ def article_products(draft: dict, source: str | None = None) -> list[str]:
     if PREVIEW_ONLY.search(title) or (VEHICLE.search(title) and not RETAIL_PRODUCT.search(title)):
         return []
     body = str(draft.get("body_markdown") or "")
+    excerpt = str(draft.get("excerpt") or "")
     products = {}
     for value in values:
         if not isinstance(value, str):
@@ -130,7 +141,7 @@ def article_products(draft: dict, source: str | None = None) -> list[str]:
         # Allow a short brand/presentation prefix before the exact model.
         if not re.match(rf"^(?:\S+ ){{0,2}}{re.escape(name)}(?: |$)", words(subject)):
             continue
-        if not mentions(name, title) or not mentions(name, body):
+        if not mentions(name, title) or not product_in_article(name, body, excerpt):
             continue
         if source is not None and not mentions(name, source):
             continue

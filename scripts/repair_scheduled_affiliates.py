@@ -16,7 +16,8 @@ def plan_link(post: dict, tag: str) -> tuple[str, str, list[dict]]:
         return "", "already_present", []
     title = BeautifulSoup(post["title"]["raw"], "html.parser").get_text(" ", strip=True)
     text = BeautifulSoup(body, "html.parser").get_text("\n", strip=True)
-    return affiliate_section({"title": title, "body_markdown": text}, body, tag)
+    excerpt = BeautifulSoup(post.get("excerpt", {}).get("raw", ""), "html.parser").get_text(" ", strip=True)
+    return affiliate_section({"title": title, "body_markdown": text, "excerpt": excerpt}, body, tag)
 
 
 def scheduled_posts(client: WordPressClient) -> list[dict]:
@@ -25,7 +26,7 @@ def scheduled_posts(client: WordPressClient) -> list[dict]:
     while True:
         response = client.session.get(client._url("posts"), timeout=REQUEST_TIMEOUT,
                                       params={"context": "edit", "status": "future", "page": page,
-                                              "per_page": 50, "_fields": "id,title,status,slug,date_gmt,content"})
+                                              "per_page": 50, "_fields": "id,title,status,slug,date_gmt,content,excerpt"})
         response.raise_for_status()
         posts.extend(response.json())
         if page >= int(response.headers.get("X-WP-TotalPages", "1")):
@@ -47,7 +48,8 @@ def repair(client: WordPressClient, tag: str, apply: bool) -> list[dict]:
         current = response.json()
         if (current["status"] != "future" or current["date_gmt"] != post["date_gmt"]
                 or current["slug"] != post["slug"] or current["content"]["raw"] != post["content"]["raw"]
-                or current["title"]["raw"] != post["title"]["raw"]):
+                or current["title"]["raw"] != post["title"]["raw"]
+                or current["excerpt"]["raw"] != post["excerpt"]["raw"]):
             entry["status"] = "changed_since_scan"
             continue
         content = current["content"]["raw"] + "\n" + block

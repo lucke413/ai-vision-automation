@@ -354,12 +354,17 @@ class PublicDeals:
                     raise ValueError("Regole di accesso al catalogo pubblico non disponibili")
             self.rules = RobotFileParser()
             self.rules.parse(response.text.splitlines() if response.status_code != 404 else [])
-        if not self.rules.can_fetch(self.agent, self.source):
-            raise ValueError("Accesso automatico non consentito per questa pagina")
-        response = self.session.get(self.source, headers=headers, timeout=18, allow_redirects=False)
-        if response.status_code != 200:
-            raise ValueError(f"Pagina offerte Amazon.it: HTTP {response.status_code}")
-        return BeautifulSoup(response.content, "html.parser")
+        url = self.source
+        for _ in range(4):
+            if not valid_https(url, SITE_HOSTS) or not self.rules.can_fetch(self.agent, url):
+                raise ValueError("Accesso automatico non consentito per questa pagina Amazon.it")
+            response = self.session.get(url, headers=headers, timeout=18, allow_redirects=False)
+            if response.status_code == 200:
+                return BeautifulSoup(response.content, "html.parser")
+            if response.status_code not in {301, 302, 303, 307, 308} or not response.headers.get("Location"):
+                raise ValueError(f"Pagina offerte Amazon.it: HTTP {response.status_code}")
+            url = urljoin(url, response.headers["Location"])
+        raise ValueError("Reindirizzamenti eccessivi nella pagina offerte Amazon.it")
 
     def shortlist(self, now, campaign, categories):
         rows = {}

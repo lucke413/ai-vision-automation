@@ -102,6 +102,15 @@ class AmazonAffiliateTests(unittest.TestCase):
         self.assertIn(f"k=MX+Master+4+Creator+Edition&amp;tag={TEST_TAG}", block)
         self.assertNotIn("B0FHHV7BTG", block)
 
+    def test_variant_in_title_and_excerpt_recovers_separate_mentions_in_saved_article(self):
+        draft = {
+            "title": "MX Master 4 Creator Edition: il mouse Logitech",
+            "excerpt": "Scopriamo la MX Master 4 Creator Edition di Logitech.",
+            "body_markdown": "Il mouse MX Master 4 è la base. La Creator Edition cambia i colori.",
+        }
+        self.assertEqual(article_products(draft, draft["title"]), ["MX Master 4 Creator Edition"])
+        self.assertEqual(article_products({**draft, "excerpt": ""}), [])
+
     def test_subscription_and_vehicle_do_not_add_incidental_products(self):
         subscription = {"title": "GTA Plus gratis con GTA 6: l'abbonamento",
                         "cover_subject": "GTA 6", "body_markdown": "GTA 6 arriva su console."}
