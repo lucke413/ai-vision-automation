@@ -2,7 +2,7 @@ import sys
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -85,11 +85,24 @@ class AmazonPromotionsTests(unittest.TestCase):
                 patch.object(promos, "newsroom_offers", return_value=[campaign]), \
                 patch.object(promos.CreatorsAPI, "shortlist", return_value=[(promos.CATEGORIES[0], deal)]), \
                 patch.object(promos, "publish_edition", return_value={}) as publish:
-            promos.run(object(), object(), self.now)
-        publish.assert_called_once()
+            promos.run(Mock(existing_post=lambda slug: None), object(), self.now)
+        publish.assert_not_called()
         self.assertTrue(promos.belongs_to_campaign(deal, campaign))
         other_campaign = promos.replace(campaign, title="Prime Day")
         self.assertFalse(promos.belongs_to_campaign(deal, other_campaign))
+
+    def test_append_new_asins_only(self):
+        offer = promos.product_offer(self.product, promos.CATEGORIES[0], self.now, self.tag)
+        body = promos.render_offers([offer], self.now)
+        post = {"id": 12, "status": "publish", "slug": "black-friday", "link": "example", "content": {"raw": body}}
+        client = Mock()
+        client.session.get.return_value.json.return_value = post
+        extra = promos.replace(offer, key="B012345679", url=offer.url.replace(offer.key, "B012345679"))
+        self.assertEqual(promos.extend_edition(client, post, [offer, extra], self.now)["status"], "updated")
+        saved = client.session.post.call_args.kwargs["json"]["content"]
+        self.assertTrue(saved.startswith(body))
+        self.assertEqual(saved.count(offer.key), 1)
+        self.assertEqual(saved.count(extra.key), 1)
 
     def test_public_card_needs_a_product_price_and_matching_campaign(self):
         source = promos.PublicDeals(None, self.tag, promos.AMAZON + "/blackfriday")
@@ -130,7 +143,7 @@ class AmazonPromotionsTests(unittest.TestCase):
              patch.object(promos, "CreatorsAPI", return_value=catalog), \
              patch.object(promos, "newsroom_offers", return_value=[campaign, sale]), \
              patch.object(promos, "publish_edition", side_effect=publish):
-            promos.run(None, None, now)
+            promos.run(Mock(existing_post=lambda slug: None), None, now)
         self.assertEqual(len(pages), 3)
         import re
         items = [set(re.findall(r"<h4>(.*?)</h4>", body)) for _, body in pages]

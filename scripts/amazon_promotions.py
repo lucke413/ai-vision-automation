@@ -121,6 +121,7 @@ BOOKS = tuple(department(name, query, ".", "books and an e-reader",
                                   ("Fantasy", "libri fantasy"), ("Bambini", "libri illustrati bambini"),
                                   ("Saggistica", "saggi divulgazione"), ("Fumetti", "fumetti graphic novel")))
 TARGET_OFFERS = 20
+MIN_NEW_EDITION = 8
 
 
 @dataclass(frozen=True)
@@ -663,11 +664,39 @@ def publish_edition(client, session, title, slug, intro, scene, label, check):
                        offer_cover=lambda image: cover_label(image, label))
 
 
+def edition_asins(post):
+    if not post:
+        return set()
+    parsed = BeautifulSoup(post["content"]["raw"], "html.parser")
+    return {asin for link in parsed.select(f".{MARKER} a[href]") if (asin := product_asin(link["href"]))}
+
+
+def extend_edition(client, post, offers, checked):
+    endpoint = client._url(f"posts/{post['id']}")
+    fresh = client.session.get(endpoint, params={"context": "edit"}, timeout=20)
+    fresh.raise_for_status()
+    current = fresh.json()
+    body = current["content"]["raw"]
+    if current["status"] != "publish" or MARKER not in body or current["slug"] != post["slug"]:
+        raise ValueError("Edizione modificata o non pubblicata")
+    known = edition_asins(current)
+    additions = [o for o in offers if o.key not in known and o.expires > checked]
+    if additions:
+        section = render_offers(additions, checked, disclosure=False,
+                                heading=f"Aggiornamento delle {checked:%H:%M}")
+        response = client.session.post(endpoint, json={"content": body + "\n" + section}, timeout=20)
+        response.raise_for_status()
+    return {"post_id": post["id"], "link": current["link"], "wp_status": "publish",
+            "status": "updated" if additions else "already_exists"}
+
+
 def reviewed_edition(client, session, now, tag):
     # Editorial evidence expires at midnight in the site's timezone.
     path = ROOT / "config/amazon-reviewed-editions.json"
     edition = json.loads(path.read_text(encoding="utf-8")).get(now.date().isoformat())
     if not edition:
+        return None
+    if len({product_asin(row["url"]) for row in edition["products"]} - {""}) < MIN_NEW_EDITION:
         return None
     until = local_at(now.date() + timedelta(days=1))
     def content():
@@ -725,23 +754,36 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
             groups = [[row for row in rows if row[0] == cat] for cat in categories]
             ordered = [group[level] for level in range(max(map(len, groups), default=0))
                        for group in groups if level < len(group)]
-            # Alternate rounds between the editions so both cover the same departments.
-            batches = [[] for _ in range(count)]
-            for row in ordered:
-                dest = min(batches, key=lambda batch: (sum(c == row[0] for c, _ in batch), len(batch)))
-                dest.append(row)
-            for index, batch in enumerate(batches, start=1):
+            slugs = [f"{slug}-{day}" + (f"-{i + 1}" if count > 1 else "") for i in range(count)]
+            posts = [client.existing_post(key) for key in slugs]
+            known = set().union(*(edition_asins(post) for post in posts))
+            pending = {offer.key: (category, offer) for category, offer in ordered if offer.key not in known}
+            for index, post in enumerate(posts, start=1):
+                checked = datetime.now(get_timezone())
+                if checked.date() != now.date():
+                    return
+                target = max(0, TARGET_OFFERS - len(edition_asins(post)))
+                minimum = 1 if post else MIN_NEW_EDITION
+                if index == count:
+                    target = max(TARGET_OFFERS, target)
+                if not target or len(pending) < minimum:
+                    continue
+                batch = list(pending.values())[:target]
+                verified = catalog.verify(batch, checked, campaign)
+                unique = {o.key: o for o in verified if o.expires > checked and o.key in pending
+                          and (not topic or any(w in o.campaign_badge.casefold() for w in topic))}
+                if len(unique) < minimum:
+                    break
+                for key in unique:
+                    pending.pop(key)
                 def content():
-                    checked = datetime.now(get_timezone())
-                    if checked.date() != now.date():
-                        return ""
-                    verified = catalog.verify(batch[:TARGET_OFFERS + 12], checked, campaign)
-                    if topic:
-                        verified = [o for o in verified if any(w in o.campaign_badge.casefold() for w in topic)]
-                    unique = {o.key: o for o in verified if o.expires > checked}
-                    return render_offers(list(unique.values()), checked)
-                if not batch:
-                    report["warnings"].append(f"{label}, edizione {index}: solo {len(batch)} prodotti idonei.")
+                    current = datetime.now(get_timezone())
+                    valid = [o for o in unique.values() if o.expires > current]
+                    return render_offers(valid, current) if current.date() == now.date() and len(valid) >= minimum else ""
+                if post:
+                    report["items"].append(extend_edition(client, post, unique.values(), checked))
+                    if len(unique) < target:
+                        break
                     continue
                 suffix = f" · selezione {index}" if count > 1 else ""
                 title = f"{label}{suffix} | {stamp}"
@@ -753,8 +795,10 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                                              intro, scene, label.upper(), content)
                 except (requests.RequestException, ValueError, RuntimeError) as exc:
                     report["warnings"].append(f"{title}: {exc}")
-                    continue
+                    break
                 report["items"].append({k: result.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
+                if len(unique) < target:
+                    break
         except (requests.RequestException, ValueError, RuntimeError, KeyError, TypeError) as exc:
             report["warnings"].append(f"{label}: {type(exc).__name__}: {exc}")
 
