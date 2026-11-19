@@ -35,12 +35,12 @@ from PIL import Image
 
 if __package__:
     from .public_source_links import clean_source_links
-    from .amazon_affiliate import affiliate_section, configured_tag
+    from .amazon_affiliate import affiliate_section, configured_tag, ensure_article_tracking
     from .ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
     from .cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 else:
     from public_source_links import clean_source_links
-    from amazon_affiliate import affiliate_section, configured_tag
+    from amazon_affiliate import affiliate_section, configured_tag, ensure_article_tracking
     from ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
     from cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 
@@ -1320,6 +1320,7 @@ def publish_one(
         affiliate_status = "offer_links_checked"
         planned_time = datetime.now(get_timezone())
 
+    body = ensure_article_tracking(body, configured_tag())
     local_date = planned_time.strftime("%Y-%m-%dT%H:%M:%S")
     utc_date = planned_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     payload = {

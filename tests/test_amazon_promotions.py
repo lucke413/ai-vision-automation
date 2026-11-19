@@ -86,7 +86,7 @@ class AmazonPromotionsTests(unittest.TestCase):
                 patch.object(promos.CreatorsAPI, "shortlist", return_value=[(promos.CATEGORIES[0], deal)]), \
                 patch.object(promos, "publish_edition", return_value={}) as publish:
             promos.run(object(), object(), self.now)
-        publish.assert_not_called()
+        publish.assert_called_once()
         self.assertTrue(promos.belongs_to_campaign(deal, campaign))
         other_campaign = promos.replace(campaign, title="Prime Day")
         self.assertFalse(promos.belongs_to_campaign(deal, other_campaign))

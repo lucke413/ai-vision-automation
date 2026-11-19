@@ -9,13 +9,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import article_generator as generator
 import wp_publisher as publisher
 
-from scripts.amazon_affiliate import DISCLOSURE, affiliate_section, article_products, product_asin, tracking_tag
+from scripts.amazon_affiliate import DISCLOSURE, affiliate_section, ensure_article_tracking, article_products, product_asin, tracking_tag
 
 
 TEST_TAG = "aivision-test-21"
 
 
 class AmazonAffiliateTests(unittest.TestCase):
+    def test_final_tracking_for_every_article(self):
+        source = '<!-- wp:paragraph --><p>News</p><!-- /wp:paragraph -->'
+        result = ensure_article_tracking(source, TEST_TAG)
+        self.assertIn(source, result)
+        self.assertIn("deals?tag=" + TEST_TAG, result)
+        wrong = '<a href="https://www.amazon.it/dp/B0DD2HYX6L?tag=other-21&amp;th=1">TV</a>'
+        result = ensure_article_tracking(wrong, TEST_TAG)
+        self.assertNotIn("other-21", result)
+        self.assertIn("tag=" + TEST_TAG, result)
+        self.assertNotIn("/deals", result)
+        self.assertIn("th=1", result)
+
     def setUp(self):
         self.draft = {
             "title": "Sony WH-CH730N: cosa sapere sulle cuffie",

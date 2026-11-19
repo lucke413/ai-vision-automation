@@ -9,7 +9,9 @@ import unicodedata
 from html.parser import HTMLParser
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlsplit, urlunsplit
+
+from bs4 import BeautifulSoup
 
 SITE_HOSTS = {"amazon.it", "www.amazon.it"}
 TAG_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,47}-[0-9]{2}", re.IGNORECASE)
@@ -133,6 +135,53 @@ def has_affiliate_link(body: str) -> bool:
     parser = ExistingAmazonLinks()
     parser.feed(body)
     return any(tracking_tag(url) for url in parser.links)
+
+
+def ensure_article_tracking(body: str, tag: str) -> str:
+    """Finalize affiliate destinations after every source of article HTML has run."""
+    if not tracking_tag(tag):
+        raise ValueError("Tracking ID Amazon Italia mancante")
+    edits = []
+    tracked = False
+    lines = body.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line))
+
+    class Anchors(HTMLParser):
+        def handle_starttag(self, name, attrs):
+            nonlocal tracked
+            if name != "a":
+                return
+            url = dict(attrs).get("href") or ""
+            parts = urlsplit(url)
+            host = (parts.hostname or "").lower()
+            if host not in SITE_HOSTS and host not in {"amzn.to", "amzn.eu", "a.co", "amzn.asia"} and not re.fullmatch(
+                    r"(?:www\.)?amazon\.(?:com(?:\.[a-z]{2})?|co\.[a-z]{2}|[a-z]{2,3})", host):
+                return
+            markup = self.get_starttag_text()
+            anchor = BeautifulSoup(markup, "html.parser").a
+            if host in SITE_HOSTS and parts.scheme in {"http", "https", ""}:
+                params = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "tag"]
+                anchor["href"] = urlunsplit(("https", "www.amazon.it", parts.path,
+                                            urlencode([*params, ("tag", tag)]), parts.fragment))
+                anchor["rel"] = list(dict.fromkeys([*anchor.get("rel", []), "sponsored", "nofollow"]))
+                tracked = True
+            else:
+                del anchor["href"]
+            line, column = self.getpos()
+            start = offsets[line - 1] + column
+            edits.append((start, start + len(markup), str(anchor).split("</a>")[0]))
+
+    Anchors().feed(body)
+    for start, end, replacement in reversed(edits):
+        body = body[:start] + replacement + body[end:]
+    if not tracked:
+        href = "https://www.amazon.it/deals?" + urlencode({"tag": tag})
+        body += f'\n<p><a href="{href}" rel="sponsored nofollow">Consulta le offerte del giorno su Amazon.it</a></p>'
+    if DISCLOSURE not in body:
+        body += f"\n<p>{DISCLOSURE}</p>"
+    return body
 
 
 @dataclass(frozen=True)

@@ -120,7 +120,7 @@ BOOKS = tuple(department(name, query, ".", "books and an e-reader",
               for name, query in (("Narrativa", "romanzi narrativa"), ("Gialli", "gialli thriller"),
                                   ("Fantasy", "libri fantasy"), ("Bambini", "libri illustrati bambini"),
                                   ("Saggistica", "saggi divulgazione"), ("Fumetti", "fumetti graphic novel")))
-MIN_OFFERS = 20
+TARGET_OFFERS = 20
 
 
 @dataclass(frozen=True)
@@ -684,9 +684,16 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
 
     def editions(label, slug, categories, count, campaign=None, topic=None, source=None):
         try:
-            catalog = (CreatorsAPI(session, tag) if catalog_ready else
-                       PublicDeals(session, tag, source or (campaign.url if campaign else AMAZON + "/deals"), topic))
-            rows = catalog.shortlist(now, campaign, categories)
+            public = PublicDeals(session, tag, source or (campaign.url if campaign else AMAZON + "/deals"), topic)
+            catalog = CreatorsAPI(session, tag) if catalog_ready else public
+            try:
+                rows = catalog.shortlist(now, campaign, categories)
+            except requests.HTTPError as exc:
+                if catalog is public or exc.response is None or exc.response.status_code != 403:
+                    raise
+                report["warnings"].append(f"{label}: catalogo API 403, controllo della pagina pubblica.")
+                catalog = public
+                rows = public.shortlist(now, campaign, categories)
             if topic:
                 rows = [(category, offer) for category, offer in rows
                         if any(word in offer.campaign_badge.casefold() for word in topic)]
@@ -704,16 +711,12 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                     checked = datetime.now(get_timezone())
                     if checked.date() != now.date():
                         return ""
-                    verified = catalog.verify(batch[:32], checked, campaign)
+                    verified = catalog.verify(batch[:TARGET_OFFERS + 12], checked, campaign)
                     if topic:
                         verified = [o for o in verified if any(w in o.campaign_badge.casefold() for w in topic)]
                     unique = {o.key: o for o in verified if o.expires > checked}
-                    if len(unique) < MIN_OFFERS or len({o.category for o in unique.values()}) < 2:
-                        return ""
-                    if categories is CATEGORIES and not topic and len({o.category for o in unique.values()} & NON_TECH) < 3:
-                        return ""
                     return render_offers(list(unique.values()), checked)
-                if len(batch) < MIN_OFFERS:
+                if not batch:
                     report["warnings"].append(f"{label}, edizione {index}: solo {len(batch)} prodotti idonei.")
                     continue
                 suffix = f" · selezione {index}" if count > 1 else ""
