@@ -1,4 +1,6 @@
 import sys
+import json
+import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
@@ -156,6 +158,59 @@ class AmazonPromotionsTests(unittest.TestCase):
         self.assertTrue(pages[2][0].startswith("offerte-amazon-del-giorno"))
         self.assertIn("Fantasy", pages[3][1])
         self.assertNotIn("Cucina", pages[3][1])
+
+    def test_editorial_feed_can_publish_three_editions_without_a_catalog(self):
+        from datetime import datetime
+
+        now = datetime.now(promos.get_timezone())
+        expiry = (now + timedelta(hours=4)).isoformat()
+        categories = ("Casa e pulizia", "Cucina", "Audio", "Bellezza")
+
+        def group(kind, start, length):
+            products = [{"url": f"https://www.amazon.it/dp/B{i:09d}?tag=diverso-21",
+                         "category": categories[i % len(categories)], "title": f"Modello {i}",
+                         "description": f"Caratteristiche del modello {i}", "why": "Controlla le misure"}
+                        for i in range(start, start + length)]
+            return {"kind": kind, "checked_at": now.isoformat(), "expires_at": expiry,
+                    "products": [*products, products[0]]}
+
+        def publish(client, session, title, slug, intro, scene, label, content):
+            bodies.append(content())
+            return {"status": "planned"}
+
+        bodies = []
+        with tempfile.TemporaryDirectory() as folder:
+            feed = Path(folder) / "offers.json"
+            feed.write_text(json.dumps([group("black-friday", 1, 40), group("daily", 41, 20)]), encoding="utf-8")
+            with patch.object(promos, "EDITORIAL_FEED", feed), \
+                    patch.object(promos, "newsroom_offers", return_value=[]), \
+                    patch.object(promos, "PublicDeals") as public, \
+                    patch.object(promos, "CreatorsAPI") as creators, \
+                    patch.object(promos, "publish_edition", side_effect=publish):
+                report = promos.run(Mock(existing_post=lambda slug: None), None, now)
+        self.assertEqual(report["status"], "complete")
+        self.assertEqual(report["editorial_candidates"], {"black-friday": 40, "daily": 20})
+        self.assertEqual([x["editorial_products"] for x in report["editions"]], [20, 20, 20])
+        self.assertEqual([body.count("tag=lavocdelweb-21") for body in bodies], [20, 20, 20])
+        self.assertFalse(any("diverso-21" in body or "€" in body for body in bodies))
+        public.assert_not_called()
+        creators.return_value.shortlist.assert_not_called()
+
+    def test_editorial_feed_filters_expired_entries_and_inappropriate_urls(self):
+        now = self.now
+        group = {"kind": "daily", "checked_at": (now - timedelta(hours=1)).isoformat(),
+                 "expires_at": (now + timedelta(hours=4)).isoformat(),
+                 "products": [{"url": "https://www.amazon.it/deals", "category": "Cucina",
+                               "title": "Prodotto", "description": "Descrizione", "why": "Utilità"}]}
+        expired = {**group, "expires_at": now.isoformat()}
+        warnings = []
+        with tempfile.TemporaryDirectory() as folder:
+            feed = Path(folder) / "offers.json"
+            feed.write_text(json.dumps([expired, group]), encoding="utf-8")
+            with patch.object(promos, "EDITORIAL_FEED", feed):
+                offers = promos.editorial_offers(now, self.tag, warnings)
+        self.assertEqual(offers, {"daily": {}})
+        self.assertEqual(len(warnings), 1)
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ else:
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config/amazon-promotions.json"
+EDITORIAL_FEED = ROOT / "config/amazon-editorial-offers.json"
 REPORT = ROOT / "data/amazon_promotions_report.json"
 AMAZON = "https://www.amazon.it"
 NEWS_HOST = "www.aboutamazon.it"
@@ -40,6 +41,7 @@ DATE_PATTERN = rf"\b([0-3]?\d)(?:°)?\s+({MONTH_PATTERN})(?:\s+(20\d{{2}}))?\b"
 BLOCK = re.compile(r"<!-- aivision-amazon-promo ([^ <>]+) -->.*?<!-- /aivision-amazon-promo -->", re.S)
 ARCHIVE = "<p>Questa offerta è terminata. Prezzo e disponibilità possono essere diversi da quelli della pubblicazione.</p>"
 SAFETY_WINDOW = timedelta(minutes=75)
+EDITORIAL_CAMPAIGNS = {"black-friday": "Black Friday", "cyber-monday": "Cyber Monday"}
 
 CAMPAIGNS = (
     ("Black Friday", r"black-friday", "/blackfriday"),
@@ -335,6 +337,60 @@ def parse_utc(value: str) -> datetime:
     return timestamp
 
 
+def editorial_offers(now: datetime, tag: str, warnings: list[str]) -> dict[str, dict[str, Offer]]:
+    """Load today's dated, human-checked offers independently of Creators API."""
+    sources = {}
+    categories = {category.title for category in CATEGORIES}
+    try:
+        editions = json.loads(EDITORIAL_FEED.read_text(encoding="utf-8"))
+        if not isinstance(editions, list):
+            raise ValueError("la lista redazionale deve essere un array JSON")
+    except (OSError, ValueError) as exc:
+        warnings.append(f"Lista redazionale: {exc}.")
+        return sources
+    for index, edition in enumerate(editions, 1):
+        try:
+            kind = edition["kind"]
+            checked = parse_utc(edition["checked_at"])
+            end = parse_utc(edition["expires_at"])
+            if kind not in {"daily", *EDITORIAL_CAMPAIGNS} or not isinstance(edition["products"], list):
+                raise ValueError("tipo o lista prodotti non validi")
+            if checked.astimezone(now.tzinfo).date() != now.date() or not checked <= now < end - SAFETY_WINDOW:
+                continue
+        except (KeyError, TypeError, ValueError) as exc:
+            warnings.append(f"Lista redazionale, gruppo {index}: {exc}.")
+            continue
+        selected = sources.setdefault(kind, {})
+        for number, row in enumerate(edition["products"], 1):
+            try:
+                asin = product_asin(row["url"])
+                expiry = min(end, parse_utc(row.get("expires_at", edition["expires_at"]))) - SAFETY_WINDOW
+                title, description, why = (row[name].strip() for name in ("title", "description", "why"))
+                if not asin or row["category"] not in categories or not all((title, description, why)):
+                    raise ValueError("scheda Amazon.it, categoria e testo specifico richiesti")
+                if re.search(r"€|\beuro\b|\d\s*%", " ".join((title, description, why)), re.I):
+                    raise ValueError("prezzi e percentuali da consultare sulla scheda Amazon")
+                if expiry <= now:
+                    continue
+                selected.setdefault(asin, Offer(
+                    asin, row["category"], title, description, why,
+                    "Controlla prezzo e condizioni sulla scheda Amazon.",
+                    affiliate_url(f"{AMAZON}/dp/{asin}", tag), expiry, affiliate=True,
+                    campaign_badge=EDITORIAL_CAMPAIGNS.get(kind, ""),
+                ))
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
+                warnings.append(f"Lista redazionale, gruppo {index}, prodotto {number}: {exc}.")
+    return sources
+
+
+def spread_by_category(offers):
+    groups = {}
+    for offer in offers:
+        groups.setdefault(offer.category, []).append(offer)
+    return [group[index] for index in range(max(map(len, groups.values()), default=0))
+            for group in groups.values() if index < len(group)]
+
+
 class PublicDeals:
     """Read only public Amazon.it offer cards containing product-specific evidence."""
     agent = "AIVisionOffers"
@@ -398,7 +454,7 @@ class PublicDeals:
                 continue
             offer = Offer(asin, category.title, title, category.summary or title, category.why,
                           "", affiliate_url(AMAZON + "/dp/" + asin, self.tag),
-                          now + timedelta(hours=1), price=price, affiliate=True, campaign_badge=badge)
+                          now + timedelta(hours=1), affiliate=True, campaign_badge=badge)
             if campaign and not belongs_to_campaign(offer, campaign):
                 continue
             rows[asin] = (category, offer)
@@ -728,6 +784,16 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
     api = CreatorsAPI(session, tag) if catalog_ready else None
     api_denied = False
     report = {"catalog": "creators_api" if api else "amazon_public", "items": [], "editions": [], "warnings": []}
+    editorial = editorial_offers(now, tag, report["warnings"])
+    report["editorial_candidates"] = {kind: len(offers) for kind, offers in editorial.items()}
+    if active is None:
+        for kind in ("cyber-monday", "black-friday"):
+            if offers := editorial.get(kind):
+                url = AMAZON + "/" + kind.replace("-", "")
+                active = Offer(kind, "Eventi Amazon", EDITORIAL_CAMPAIGNS[kind], "", "", "", url,
+                               max(offer.expires for offer in offers.values()))
+                live.append(active)
+                break
 
     day = now.date().isoformat()
     stamp = italian_date(now.date())
@@ -749,7 +815,7 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
 
     used = set()
 
-    def editions(label, slug, categories, count, campaign=None, topic=None, source=None):
+    def editions(label, slug, categories, count, campaign=None, topic=None, source=None, editorial_kind=None):
         nonlocal api_denied
         slugs = [f"{slug}-{day}" + (f"-{i + 1}" if count > 1 else "") for i in range(count)]
         outcomes = [{"slug": key, "status": "blocked", "verified": 0, "target": TARGET_OFFERS} for key in slugs]
@@ -759,10 +825,12 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
             existing = [edition_asins(post) for post in posts]
             used.update(set().union(*existing))
             needed = sum(max(0, TARGET_OFFERS - len(keys)) for keys in existing)
-            pending = {}
-            if needed and api and not api_denied:
+            manual = editorial.get(editorial_kind, {})
+            pending = {asin: offer for asin, offer in manual.items() if asin not in used}
+            if len(pending) < needed and api and not api_denied:
                 try:
-                    pending = verified_offers(api, now, campaign, categories, topic, needed)
+                    for asin, offer in verified_offers(api, now, campaign, categories, topic, needed).items():
+                        pending.setdefault(asin, offer)
                 except requests.HTTPError as exc:
                     code = catalog_error(exc)
                     report["warnings"].append(f"{label}: Creators API {code}.")
@@ -784,7 +852,7 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                 if not target:
                     outcome.update(status="already_complete", verified=len(keys))
                     continue
-                valid = [offer for offer in pending.values() if offer.expires > checked]
+                valid = spread_by_category(offer for offer in pending.values() if offer.expires > checked)
                 batch = valid[:target]
                 outcome["verified"] = len(keys) + len(batch)
                 if len(batch) < target:
@@ -799,8 +867,9 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                 else:
                     suffix = f" · selezione {index}" if count > 1 else ""
                     title = f"{label}{suffix} | {stamp}"
-                    intro = (f"La selezione del {stamp} raccoglie le offerte di {label} su Amazon.it. "
-                             "I prodotti sono raggruppati per categoria, con prezzo e condizioni rilevati al momento della verifica.")
+                    event = f" della campagna {campaign.title}" if campaign else ""
+                    intro = (f"La selezione del {stamp} raccoglie le offerte{event} su Amazon.it. "
+                             "I prodotti sono raggruppati per categoria. Le schede Amazon mostrano prezzo e condizioni aggiornati.")
                     scene = ("books and an e-reader" if categories is BOOKS else
                              "a frying pan, a canvas backpack, a board game and wireless headphones")
 
@@ -813,6 +882,7 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                     result = publish_edition(client, session, title, outcome["slug"], intro, scene, label.upper(), content)
                 report["items"].append({k: result.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
                 outcome["status"] = result.get("status", "processed")
+                outcome["editorial_products"] = sum(offer.key in manual for offer in batch)
                 for offer in batch:
                     used.add(offer.key)
                     pending.pop(offer.key, None)
@@ -820,13 +890,14 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
             report["warnings"].append(f"{label}: {type(exc).__name__}: {exc}")
 
     if active:
-        editions(active.title + " Amazon", "amazon-" + slugify(active.title), CATEGORIES, 2, active)
+        kind = slugify(active.title)
+        editions(active.title + " Amazon", "amazon-" + kind, CATEGORIES, 2, active, editorial_kind=kind)
 
     daily_slug = "offerte-amazon-del-giorno"
     daily = client.existing_post(f"{daily_slug}-{day}")
     if daily and "Mese della Lettura" in daily["title"]["rendered"]:
         daily_slug = "amazon-offerte-ordinarie"
-    editions("Offerte Amazon del giorno", daily_slug, CATEGORIES, 1)
+    editions("Offerte Amazon del giorno", daily_slug, CATEGORIES, 1, editorial_kind="daily")
 
     for event in live:
         if event.title not in {"Black Friday", "Cyber Monday"}:

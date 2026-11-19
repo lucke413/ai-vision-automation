@@ -8,6 +8,10 @@ on:
         required: false
         type: boolean
         default: true
+      offers_only:
+        description: 'Esegui soltanto le offerte Amazon'
+        type: boolean
+        default: false
   pull_request:
     branches: [main]
     paths:
@@ -25,6 +29,7 @@ on:
       - 'requirements-cover.txt'
       - 'config/amazon-affiliate.json'
       - 'config/amazon-promotions.json'
+      - 'config/amazon-editorial-offers.json'
       - '.github/workflows/ai-vision.yml'
       - '.github/workflows/legacy-content-repair.yml'
   schedule:
@@ -139,7 +144,7 @@ jobs:
           retention-days: 7
 
   ai-pipeline:
-    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '17 11 * * *') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) }}
+    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '17 11 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.offers_only) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:

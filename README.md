@@ -45,6 +45,12 @@ Per recensioni, articoli di prodotto e offerte il generatore identifica fino a d
 
 Le offerte vengono controllate alle 11:17, 15:47 e 20:47 (Europe/Rome). Ogni giorno il flusso tenta un'edizione ordinaria. Durante Black Friday o Cyber Monday tenta anche due edizioni dell'evento e prevede un'edizione per le altre campagne attive. Ogni edizione richiede 20 offerte distinte e verificate. Le edizioni generali coprono più categorie, comprese categorie non tecnologiche. Il report `ai-vision-amazon-promotions` indica il conteggio di ogni edizione e gli errori di accesso al catalogo. Se l'API non dà abbastanza risultati, il flusso verifica anche le pagine pubbliche Amazon.it accessibili.
 
+### Offerte verificate dalla redazione
+
+In `config/amazon-editorial-offers.json` puoi inserire i prodotti verificati lo stesso giorno su Amazon.it. Ogni gruppo contiene `kind` (`daily`, `black-friday` o `cyber-monday`), `checked_at`, `expires_at` e `products`. Gli orari sono in formato ISO 8601 con fuso, per esempio `2026-11-20T11:00:00+01:00`. Ogni prodotto ha `url` (scheda Amazon.it), `category` (una categoria prevista dal publisher, per esempio `Cucina`, `Bellezza`, `Casa e pulizia` o `Audio`), `title`, `description` e `why`. Se termina prima del gruppo, può avere il proprio `expires_at`. Prezzi, disponibilità e condizioni aggiornate si consultano sulla scheda Amazon. Il publisher applica il Tracking ID del sito, elimina i duplicati e segnala quante offerte redazionali ha usato.
+
+Lo stesso workflow usa la lista agli orari programmati. Per eseguirlo subito su GitHub Actions, seleziona **Esegui soltanto le offerte Amazon**. Disattiva **Pubblica automaticamente su WordPress** per controllare il report in simulazione.
+
 ## Originalità editoriale e blocco di pubblicazione
 
 Il generatore 5.0 esegue un controllo locale prima di inserire una bozza nel lotto pubblicabile:
@@ -120,13 +126,14 @@ La generazione automatica gira sulla CPU di GitHub Actions con i pesi pubblici d
 del giorno nella categoria Offerte. Durante una campagna confermata, il nome dell'evento
 compare nel titolo e nella copertina. Il primo annuncio ha uno slug stabile e un approfondimento
 per categoria è disponibile quando il catalogo restituisce abbastanza prodotti distinti.
-I prezzi verificati vengono mostrati con data e ora di pubblicazione. Un controllo orario
-rimuove prezzi e link delle offerte scadute.
+I prezzi ottenuti da Creators API vengono mostrati con data e ora della verifica. Per le
+selezioni redazionali e le pagine pubbliche, il lettore consulta il prezzo sulla scheda Amazon.
+Un controllo orario rimuove prezzi e link delle offerte scadute.
 
 - Il catalogo dei singoli prodotti richiede i secret Actions `AMAZON_CREATORS_CREDENTIAL_ID`
   e `AMAZON_CREATORS_CREDENTIAL_SECRET` per Creators API EU 3.2. Il publisher usa il Tracking ID
-  Amazon Italia già configurato. Se il catalogo non è disponibile usa soltanto le campagne e
-  le promozioni pubbliche verificabili, senza stimare prezzi per singoli prodotti.
+  Amazon Italia già configurato. Le selezioni redazionali del giorno possono fornire le offerte
+  anche quando il catalogo non è disponibile.
 - Per usare i link di campagna già creati per un servizio, imposta la variabile Actions
   `AMAZON_PROMOTION_LINKS_JSON` come oggetto con chiavi `audible`, `kindle`, `music` e `prime-video`.
   Inserisci il link specifico della promozione, incluso il suo codice campagna quando previsto.
