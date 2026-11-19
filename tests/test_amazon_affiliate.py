@@ -19,8 +19,7 @@ class AmazonAffiliateTests(unittest.TestCase):
     def test_final_tracking_for_every_article(self):
         source = '<!-- wp:paragraph --><p>News</p><!-- /wp:paragraph -->'
         result = ensure_article_tracking(source, TEST_TAG)
-        self.assertIn(source, result)
-        self.assertIn("deals?tag=" + TEST_TAG, result)
+        self.assertEqual(result, source)
         wrong = '<a href="https://www.amazon.it/dp/B0DD2HYX6L?tag=other-21&amp;th=1">TV</a>'
         result = ensure_article_tracking(wrong, TEST_TAG)
         self.assertNotIn("other-21", result)

@@ -1257,6 +1257,9 @@ def publish_one(
         body = guide_place_figures(body, figures)
         body += guide_prompt_blocks(draft)
     body += guide_resources(draft)
+    if live_offer_html is None:
+        # Only the product selector may introduce commercial links into editorial posts.
+        body = ensure_article_tracking(body, configured_tag(), remove_unselected=True)
     affiliate_html, affiliate_status, amazon_links = affiliate_section(draft, body, configured_tag())
     if affiliate_html:
         body += "\n" + affiliate_html

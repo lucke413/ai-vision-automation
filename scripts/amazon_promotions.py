@@ -663,6 +663,30 @@ def publish_edition(client, session, title, slug, intro, scene, label, check):
                        offer_cover=lambda image: cover_label(image, label))
 
 
+def reviewed_edition(client, session, now, tag):
+    # Editorial evidence expires at midnight in the site's timezone.
+    path = ROOT / "config/amazon-reviewed-editions.json"
+    edition = json.loads(path.read_text(encoding="utf-8")).get(now.date().isoformat())
+    if not edition:
+        return None
+    until = local_at(now.date() + timedelta(days=1))
+    def content():
+        checked = datetime.now(get_timezone())
+        if checked.date() != now.date():
+            return ""
+        offers = []
+        for row in edition["products"]:
+            url = row["url"]
+            if not product_asin(url) or any(o.key == product_asin(url) for o in offers):
+                continue
+            offers.append(Offer(product_asin(url), row["category"], row["title"], row["description"],
+                                row["why"], edition["terms"], affiliate_url(url, tag), until,
+                                affiliate=True, product=True))
+        return render_offers(offers, checked, heading="I prodotti segnalati")
+    return publish_edition(client, session, edition["title"], edition["slug"], edition["intro"],
+                           edition["scene"], edition["campaign"], content)
+
+
 def run(client: WordPressClient, session: requests.Session, now: datetime) -> dict:
     tag = configured_tag()
     if not tag:
@@ -736,6 +760,10 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
 
     if active:
         editions(active.title + " Amazon", "amazon-" + slugify(active.title), CATEGORIES, 2, active)
+        if not report["items"]:
+            item = reviewed_edition(client, session, now, tag)
+            if item:
+                report["items"].append({k: item.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
     else:
         editions("Offerte Amazon del giorno", "offerte-amazon-del-giorno", CATEGORIES, 1)
 
@@ -756,6 +784,7 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expire", action="store_true")
+    parser.add_argument("--reviewed", action="store_true")
     args = parser.parse_args()
     dry = env_bool("WP_DRY_RUN", True)
     base, user, password = (os.environ.get(k, "") for k in ("WP_BASE_URL", "WP_USERNAME", "WP_APP_PASSWORD"))
@@ -767,6 +796,10 @@ def main():
         print(f"Articoli promozionali aggiornati: {expire_posts(client, now)}")
         return
     with requests.Session() as session:
+        if args.reviewed:
+            result = reviewed_edition(client, session, now, configured_tag())
+            print({k: result.get(k) for k in ("status", "link", "post_id")} if result else "Nessuna segnalazione datata per oggi.")
+            return
         report = run(client, session, now)
     save_json(REPORT, report)
     print(json.dumps(report, ensure_ascii=False))

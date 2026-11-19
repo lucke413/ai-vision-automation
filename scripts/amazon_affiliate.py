@@ -137,7 +137,7 @@ def has_affiliate_link(body: str) -> bool:
     return any(tracking_tag(url) for url in parser.links)
 
 
-def ensure_article_tracking(body: str, tag: str) -> str:
+def ensure_article_tracking(body: str, tag: str, *, remove_unselected=False) -> str:
     """Finalize affiliate destinations after every source of article HTML has run."""
     if not tracking_tag(tag):
         raise ValueError("Tracking ID Amazon Italia mancante")
@@ -161,7 +161,7 @@ def ensure_article_tracking(body: str, tag: str) -> str:
                 return
             markup = self.get_starttag_text()
             anchor = BeautifulSoup(markup, "html.parser").a
-            if host in SITE_HOSTS and parts.scheme in {"http", "https", ""}:
+            if not remove_unselected and host in SITE_HOSTS and parts.scheme in {"http", "https", ""}:
                 params = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "tag"]
                 anchor["href"] = urlunsplit(("https", "www.amazon.it", parts.path,
                                             urlencode([*params, ("tag", tag)]), parts.fragment))
@@ -176,10 +176,7 @@ def ensure_article_tracking(body: str, tag: str) -> str:
     Anchors().feed(body)
     for start, end, replacement in reversed(edits):
         body = body[:start] + replacement + body[end:]
-    if not tracked:
-        href = "https://www.amazon.it/deals?" + urlencode({"tag": tag})
-        body += f'\n<p><a href="{href}" rel="sponsored nofollow">Consulta le offerte del giorno su Amazon.it</a></p>'
-    if DISCLOSURE not in body:
+    if tracked and DISCLOSURE not in body:
         body += f"\n<p>{DISCLOSURE}</p>"
     return body
 
