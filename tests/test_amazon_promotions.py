@@ -85,6 +85,7 @@ class AmazonPromotionsTests(unittest.TestCase):
         with patch.dict(promos.os.environ, {"AMAZON_CREATORS_CREDENTIAL_ID": "test",
                                            "AMAZON_CREATORS_CREDENTIAL_SECRET": "test"}), \
                 patch.object(promos, "newsroom_offers", return_value=[campaign]), \
+                patch.object(promos, "editorial_offers", return_value={}), \
                 patch.object(promos.CreatorsAPI, "shortlist", return_value=[(promos.CATEGORIES[0], deal)]), \
                 patch.object(promos.CreatorsAPI, "verify", return_value=[deal]), \
                 patch.object(promos.PublicDeals, "shortlist", return_value=[]), \
@@ -147,6 +148,7 @@ class AmazonPromotionsTests(unittest.TestCase):
                                            "AMAZON_CREATORS_CREDENTIAL_SECRET":"test"}), \
              patch.object(promos, "CreatorsAPI", return_value=catalog), \
              patch.object(promos, "newsroom_offers", return_value=[campaign, sale]), \
+             patch.object(promos, "editorial_offers", return_value={}), \
              patch.object(promos, "publish_edition", side_effect=publish):
             promos.run(Mock(existing_post=lambda slug: None), None, now)
         self.assertEqual(len(pages), 4)

@@ -51,6 +51,8 @@ In `config/amazon-editorial-offers.json` puoi inserire i prodotti verificati lo 
 
 Lo stesso workflow usa la lista agli orari programmati. Per eseguirlo subito su GitHub Actions, seleziona **Esegui soltanto le offerte Amazon**. Disattiva **Pubblica automaticamente su WordPress** per controllare il report in simulazione.
 
+Per i flussi redazionali già autorizzati, un commit su `main` con `[AI-VISION-AMAZON-EDITORIAL-LIVE]` esegue i test e avvia la pubblicazione delle offerte secondo `WP_PUBLISH_MODE`. Per una promozione aggiuntiva, usa come `kind` il prefisso dello slug generato dal workflow (per esempio `amazon-promozioni-lettura`). Puoi registrare la fonte in `evidence_url` sul gruppo o sul prodotto. Quando la fonte riporta una rilevazione e non una scadenza, usa `expires_at` per indicare fino a quando la redazione ritiene utilizzabile quella rilevazione.
+
 ## Originalità editoriale e blocco di pubblicazione
 
 Il generatore 5.0 esegue un controllo locale prima di inserire una bozza nel lotto pubblicabile:

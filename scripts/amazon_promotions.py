@@ -338,9 +338,9 @@ def parse_utc(value: str) -> datetime:
 
 
 def editorial_offers(now: datetime, tag: str, warnings: list[str]) -> dict[str, dict[str, Offer]]:
-    """Load today's dated, human-checked offers independently of Creators API."""
+    """Load today's dated and reviewed offers independently of Creators API."""
     sources = {}
-    categories = {category.title for category in CATEGORIES}
+    categories = {category.title for category in CATEGORIES + BOOKS}
     try:
         editions = json.loads(EDITORIAL_FEED.read_text(encoding="utf-8"))
         if not isinstance(editions, list):
@@ -353,7 +353,10 @@ def editorial_offers(now: datetime, tag: str, warnings: list[str]) -> dict[str, 
             kind = edition["kind"]
             checked = parse_utc(edition["checked_at"])
             end = parse_utc(edition["expires_at"])
-            if kind not in {"daily", *EDITORIAL_CAMPAIGNS} or not isinstance(edition["products"], list):
+            if (kind not in {"daily", *EDITORIAL_CAMPAIGNS}
+                    and not re.fullmatch(r"amazon-[a-z0-9]+(?:-[a-z0-9]+)*", kind)):
+                raise ValueError("tipo di edizione non valido")
+            if not isinstance(edition["products"], list):
                 raise ValueError("tipo o lista prodotti non validi")
             if checked.astimezone(now.tzinfo).date() != now.date() or not checked <= now < end - SAFETY_WINDOW:
                 continue
@@ -374,9 +377,10 @@ def editorial_offers(now: datetime, tag: str, warnings: list[str]) -> dict[str, 
                     continue
                 selected.setdefault(asin, Offer(
                     asin, row["category"], title, description, why,
-                    "Controlla prezzo e condizioni sulla scheda Amazon.",
+                    "Segnalazione redazionale. Controlla prezzo, disponibilità e condizioni sulla scheda Amazon.",
                     affiliate_url(f"{AMAZON}/dp/{asin}", tag), expiry, affiliate=True,
                     campaign_badge=EDITORIAL_CAMPAIGNS.get(kind, ""),
+                    evidence_url=str(row.get("evidence_url") or edition.get("evidence_url") or ""),
                 ))
             except (AttributeError, KeyError, TypeError, ValueError) as exc:
                 warnings.append(f"Lista redazionale, gruppo {index}, prodotto {number}: {exc}.")
@@ -825,8 +829,11 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
             existing = [edition_asins(post) for post in posts]
             used.update(set().union(*existing))
             needed = sum(max(0, TARGET_OFFERS - len(keys)) for keys in existing)
-            manual = editorial.get(editorial_kind, {})
-            pending = {asin: offer for asin, offer in manual.items() if asin not in used}
+            manual = editorial.get(editorial_kind or slug, {})
+            allowed_categories = CATEGORIES + BOOKS if categories is CATEGORIES else categories
+            departments = {category.title for category in allowed_categories}
+            pending = {asin: offer for asin, offer in manual.items()
+                       if asin not in used and offer.category in departments}
             if len(pending) < needed and api and not api_denied:
                 try:
                     for asin, offer in verified_offers(api, now, campaign, categories, topic, needed).items():

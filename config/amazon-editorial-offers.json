@@ -1,1 +1,496 @@
-[]
+[
+  {
+    "kind": "daily",
+    "checked_at": "2026-11-19T22:53:07+01:00",
+    "expires_at": "2026-11-20T00:50:00+01:00",
+    "products": [
+      {
+        "url": "https://www.amazon.it/dp/B073QSXXCH",
+        "category": "Casa e arredo",
+        "title": "Osram LED Base Classic A E27, 3 lampadine",
+        "description": "Lampadine a luce neutra con attacco a vite.",
+        "why": "Controlla il portalampada e prendi questa confezione se devi sostituire più lampadine insieme.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/8863114404",
+        "category": "Narrativa",
+        "title": "Le notti bianche, edizione integrale",
+        "description": "Il racconto di Dostoevskij segue l'incontro fra due sconosciuti a Pietroburgo.",
+        "why": "È una lettura breve per chi vuole avvicinarsi all'autore.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B07NLKYPPW",
+        "category": "PC e archiviazione",
+        "title": "Adobe Acrobat Pro, licenza annuale",
+        "description": "Abbonamento digitale per lavorare con documenti PDF su PC o Mac.",
+        "why": "Valutalo se ti serve modificare o organizzare PDF con regolarità.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0FTST1GY5",
+        "category": "Casa smart",
+        "title": "Blink Outdoor 4 con Blink Mini 2K+",
+        "description": "Abbinamento di una videocamera da esterno e una da interno.",
+        "why": "Controlla quali funzioni richiedono un piano e dove puoi installare le due unità.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H6FFLYPN",
+        "category": "Sport",
+        "title": "Calze antiscivolo per pilates",
+        "description": "Calze con presa sulla pianta, pensate per attività sul tappetino.",
+        "why": "Controlla taglia e numero di paia nel pacco prima di scegliere la variante.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0GTM5QMWR",
+        "category": "Casa e pulizia",
+        "title": "Dzaki aspirapolvere senza fili con batteria rimovibile",
+        "description": "Scopa elettrica con display e batteria estraibile.",
+        "why": "Ha senso per una pulizia rapida se puoi ricaricare la batteria vicino a una presa.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B07T5SHQDD",
+        "category": "Moda",
+        "title": "Jack & Jones Jachuey Trunks, 7 boxer XL",
+        "description": "Confezione di intimo nero da uomo in taglia XL.",
+        "why": "Confronta la tabella misure se è il primo acquisto di questo modello.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0HG9NGGLN",
+        "category": "Casa e arredo",
+        "title": "DONAMA cuscino cervicale in memory foam",
+        "description": "Cuscino sagomato con due altezze e fodera removibile.",
+        "why": "Confronta le altezze con il tuo cuscino abituale, soprattutto se dormi sul fianco.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B005625TSK",
+        "category": "Cancelleria",
+        "title": "Pigna Monocromo, 5 quaderni A4 a spirale",
+        "description": "Quaderni a quadretti con pagine microperforate.",
+        "why": "Utili per appunti e calcoli da staccare e archiviare al bisogno.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0FYRJRPNH",
+        "category": "Moda",
+        "title": "Swarovski Clarica, orologio con bracciale in metallo",
+        "description": "Orologio in acciaio con finitura argentata.",
+        "why": "Misura il polso e considera l'eventuale regolazione del bracciale.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0CLW42484",
+        "category": "Sport",
+        "title": "Columbia Crestwood Waterproof",
+        "description": "Scarpe basse da trekking con tomaia impermeabile.",
+        "why": "Sono da valutare per sentieri umidi, controllando calzata e spazio per le calze da trekking.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0GZ87YWMT",
+        "category": "Bellezza",
+        "title": "Bopcal 891, asciugacapelli da viaggio",
+        "description": "Asciugacapelli con diffusore e alimentazione a doppia tensione.",
+        "why": "Se lo porti all'estero, verifica anche il tipo di spina richiesto.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B09BW2XYMR",
+        "category": "Giochi e giocattoli",
+        "title": "Mattel Disney Pixar Cars, Mack trasformabile",
+        "description": "Camion giocattolo che si apre in una stazione da gioco.",
+        "why": "Controlla le macchinine incluse e se è compatibile con quelle che hai già.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B077L3RV2B",
+        "category": "Giochi e giocattoli",
+        "title": "Asmodee Exploding Kittens",
+        "description": "Gioco di carte rapido per piccoli gruppi.",
+        "why": "Prima di ordinare, controlla la lingua e il numero di giocatori della confezione.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B09W714VSG",
+        "category": "Alimentari",
+        "title": "Armando Il Fusillo, 12 confezioni da 500 g",
+        "description": "Pasta di semola trafilata al bronzo in formato scorta.",
+        "why": "Valutala se consumi questo formato spesso e hai spazio in dispensa.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H29GNJC9",
+        "category": "Animali",
+        "title": "APAUK fontanella per gatti, 3,2 L",
+        "description": "Distributore d'acqua in acciaio con pompa e filtri.",
+        "why": "Prima dell'acquisto verifica come si smonta per sciacquare la pompa.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B082WV8TCZ",
+        "category": "Giochi e giocattoli",
+        "title": "Hasbro Twister, edizione italiana",
+        "description": "Gioco di movimento con tappeto colorato e ruota.",
+        "why": "Serve una superficie piana dove il gruppo possa muoversi senza ostacoli.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B01M67WLIB",
+        "category": "Prima infanzia",
+        "title": "Suavinex detersivo per biberon e tettarelle, 500 ml",
+        "description": "Detergente liquido specifico per gli accessori della pappa.",
+        "why": "Segui le istruzioni di dosaggio e risciacquo della confezione.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0757Q314Q",
+        "category": "Cancelleria",
+        "title": "Stabilo Boss Original, set da 15",
+        "description": "Evidenziatori in colori neon e pastello con supporto da scrivania.",
+        "why": "I colori chiari aiutano a distinguere priorità e argomenti nello stesso quaderno.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0GX2F4CX3",
+        "category": "Bellezza",
+        "title": "Borotalco, kit deodoranti vapo e salviette",
+        "description": "Confezione con quattro deodoranti e salviette.",
+        "why": "Confronta fragranza e formato prima di scegliere una confezione multipla.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      }
+    ]
+  },
+  {
+    "kind": "black-friday",
+    "checked_at": "2026-11-19T22:53:07+01:00",
+    "expires_at": "2026-11-20T00:50:00+01:00",
+    "products": [
+      {
+        "url": "https://www.amazon.it/dp/B0C9LRPT93",
+        "category": "Casa e arredo",
+        "title": "CHOSHOME tappeto grigio 200 × 290 cm",
+        "description": "Tappeto di grande formato con fondo antiscivolo.",
+        "why": "Segna l'ingombro a terra prima di acquistare per verificare passaggi e apertura delle porte.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0HNNRBCHV",
+        "category": "Casa e arredo",
+        "title": "Moonlight Manor albero di Natale da 120 cm",
+        "description": "Albero artificiale compatto in PVC.",
+        "why": "Valuta lo spazio disponibile per la base e l'altezza con il puntale.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B07RVQ1B51",
+        "category": "Casa e arredo",
+        "title": "Americanflat set da 10 cornici bianche",
+        "description": "Set per disporre fotografie su parete o tavolo.",
+        "why": "Misura le stampe già fatte e confrontale con i formati interni, passepartout incluso.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0078L97CG",
+        "category": "Casa e arredo",
+        "title": "Gardinia veneziana in alluminio",
+        "description": "Tenda a lamelle orientabili per modulare luce e privacy.",
+        "why": "Controlla misure del vano e modalità di fissaggio prima dell'ordine.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B07P7Q5Q52",
+        "category": "Valigeria",
+        "title": "American Tourister Soundbox, trolley rigido da 67 cm",
+        "description": "Trolley da stiva nella finitura verde giada.",
+        "why": "Confronta ingombro, peso a vuoto e franchigia del tuo volo.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DWT3B48Z",
+        "category": "Moda",
+        "title": "Michael Kors 32S5GJ6C8L-367, borsa a tracolla",
+        "description": "Borsa verde Safari con chiusura a patta.",
+        "why": "Controlla le misure interne se vuoi riporvi telefono e portafoglio insieme.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0FLF7SH3M",
+        "category": "Moda",
+        "title": "DKNY Lacombe Lace Up, bianco 36 EU",
+        "description": "Sneaker stringata da donna in taglia 36.",
+        "why": "Misura il piede e verifica la calzata indicata per questo modello.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0C1HCFMF1",
+        "category": "Bellezza",
+        "title": "FOREO Supercharged, maschera viso notte",
+        "description": "Trattamento idratante da applicare durante la routine serale.",
+        "why": "Controlla l'elenco ingredienti se sai di essere sensibile a certi componenti.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H6FRJ756",
+        "category": "Bellezza",
+        "title": "Estée Lauder Double Wear Stay-in-Place SPF 10",
+        "description": "Fondotinta a finitura opaca della linea Double Wear.",
+        "why": "Verifica il codice colore della scheda, poiché lo stesso nome comprende molte tonalità.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0HLDLH4X2",
+        "category": "Bellezza",
+        "title": "Dekuri piastra 2 in 1 con piastre da 25 mm",
+        "description": "Styler con regolazione della temperatura e piastre in titanio.",
+        "why": "Valuta la larghezza in base a lunghezza e spessore dei capelli.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0F2SYP93M",
+        "category": "Giardino",
+        "title": "Meross MST100 centralina di irrigazione Wi-Fi",
+        "description": "Centralina per programmare i cicli di irrigazione da app.",
+        "why": "Confronta raccordo del rubinetto e copertura Wi-Fi vicino al punto di montaggio.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DPP6C5YP",
+        "category": "Casa e pulizia",
+        "title": "Tineco Floor One S9 Artist",
+        "description": "Lavapavimenti con aspirazione integrata per le superfici dure.",
+        "why": "Controlla peso, altezza sotto i mobili e tipo di pavimento compatibile.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0F8QPWPL7",
+        "category": "Casa e pulizia",
+        "title": "Tineco Floor One i6 Stretch",
+        "description": "Lavapavimenti reclinabile per arrivare sotto gli arredi.",
+        "why": "Prima di scegliere misura lo spazio libero sotto mobili e letto.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0FSL99WNW",
+        "category": "Casa e pulizia",
+        "title": "Lefant M213s",
+        "description": "Robot che combina aspirazione e passaggio del panno.",
+        "why": "Verifica se la modalità moci è adatta alle superfici della tua casa.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0BGLTYW59",
+        "category": "Giochi e giocattoli",
+        "title": "Set di piastrelle magnetiche da costruzione",
+        "description": "Costruzioni con pezzi piatti da assemblare in figure o strutture.",
+        "why": "Controlla età consigliata e dimensioni delle tessere, soprattutto per i fratelli più piccoli.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DFQXB6JC",
+        "category": "Cancelleria",
+        "title": "Parker Jotter Originals Trio",
+        "description": "Set da regalo con penna a sfera, penna gel e portamine.",
+        "why": "Consente di provare tre strumenti diversi per scrittura e appunti.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0FQNWDYMS",
+        "category": "Accessori smartphone",
+        "title": "Insta360 X4 Air Starter Pack",
+        "description": "Videocamera a 360 gradi in confezione iniziale.",
+        "why": "Verifica se il kit include i supporti che ti servono per il tuo tipo di ripresa.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0CK5W8BL5",
+        "category": "Accessori smartphone",
+        "title": "SBS alimentatore USB-C GaN da 65 W",
+        "description": "Caricatore con Power Delivery e corpo sottile.",
+        "why": "Controlla la potenza richiesta dal dispositivo e la portata del cavo USB-C.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0CRYBRTM4",
+        "category": "Casa smart",
+        "title": "Meross sensore di presenza Matter 3 in 1",
+        "description": "Sensore Wi-Fi per attivare automazioni domestiche in base alla presenza.",
+        "why": "Verifica requisiti Matter e alimentazione prima di decidere dove posizionarlo.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0D2KKVZN2",
+        "category": "PC e archiviazione",
+        "title": "UGREEN NASync DXP4800 Plus",
+        "description": "NAS a quattro vani venduto senza dischi.",
+        "why": "Calcola il costo dei dischi e definisci come farai una copia separata dei dati più importanti.",
+        "evidence_url": "https://tracciaprezzo.it/black-friday"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0CFW29DZX",
+        "category": "Giochi e giocattoli",
+        "title": "LEGO Star Wars Millennium Falcon 75375",
+        "description": "Modello da esposizione del Millennium Falcon con basetta.",
+        "why": "Controlla la profondità della mensola prima di comprare un set da esporre.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/black-friday-lego-amazon.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DHSDBCHF",
+        "category": "Giochi e giocattoli",
+        "title": "LEGO Star Wars ARC-170 75402",
+        "description": "Set del caccia ARC-170 della saga Star Wars.",
+        "why": "È un'opzione per chi cerca un veicolo da costruire con cui poter anche giocare.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/black-friday-lego-amazon.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DHSDY156",
+        "category": "Giochi e giocattoli",
+        "title": "LEGO Harry Potter Negozi di magia di Diagon Alley 76444",
+        "description": "Ricostruzione in mattoncini della via commerciale di Diagon Alley.",
+        "why": "Valuta se la scala è compatibile con i set Harry Potter che hai già.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/black-friday-lego-amazon.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DWDTRG1P",
+        "category": "Giochi e giocattoli",
+        "title": "LEGO Technic Lamborghini Revuelto 42214",
+        "description": "Riproduzione Technic della supersportiva italiana.",
+        "why": "Ideale se ti interessa l'assemblaggio di un'auto con componenti meccanici.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/black-friday-lego-amazon.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DHSBBV6R",
+        "category": "Giochi e giocattoli",
+        "title": "LEGO Speed Champions Ferrari SF-24 77242",
+        "description": "Set compatto del monoposto Ferrari di Formula 1.",
+        "why": "Richiede meno spazio di un modello Technic di grande formato.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/black-friday-lego-amazon.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DWDGVHM6",
+        "category": "Giochi e giocattoli",
+        "title": "LEGO Super Mario Game Boy 72046",
+        "description": "Ricostruzione in mattoncini della console portatile Nintendo.",
+        "why": "È pensato per chi cerca un oggetto da esposizione legato al gaming rétro.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/black-friday-lego-amazon.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DWDQYB87",
+        "category": "Giochi e giocattoli",
+        "title": "LEGO One Piece Going Merry 75639",
+        "description": "Set della nave Going Merry di One Piece.",
+        "why": "Verifica che abbia una collocazione adatta una volta montato.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/black-friday-lego-amazon.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0FPXDDTDB",
+        "category": "Giochi e giocattoli",
+        "title": "LEGO Ideas Peanuts, cuccia di Snoopy 21368",
+        "description": "Set da esposizione della cuccia di Snoopy.",
+        "why": "Adatto come regalo a chi riconosce i personaggi dei Peanuts e ama costruire.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/black-friday-lego-amazon.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0G62SN141",
+        "category": "Giardino",
+        "title": "ECOVACS GOAT A1600 LiDAR PRO",
+        "description": "Robot tagliaerba con navigazione LiDAR e installazione senza filo perimetrale.",
+        "why": "Controlla pendenze, larghezze dei passaggi e forma del prato.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H94XNCT3",
+        "category": "Casa e pulizia",
+        "title": "ECOVACS DEEBOT T90 MAX PRO OMNI",
+        "description": "Robot lavapavimenti con rullo e stazione di manutenzione.",
+        "why": "Misura l'ingombro della stazione e lo spazio di manovra davanti alla base.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DCW1L7XY",
+        "category": "Casa e pulizia",
+        "title": "Dreame H14 Pro",
+        "description": "Lavapavimenti a mano che può distendersi per passare sotto i mobili.",
+        "why": "Ha senso se preferisci dirigere tu il lavaggio anziché programmare un robot.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DPB7RN2L",
+        "category": "Casa e pulizia",
+        "title": "Dreame X50 Ultra Complete",
+        "description": "Robot per aspirazione e lavaggio della gamma X50.",
+        "why": "Prima di valutare questa versione controlla altezza delle soglie e ingombro della stazione.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0HCZ1ZZM6",
+        "category": "PC e archiviazione",
+        "title": "Samsung P7 SSD portatile da 1 TB",
+        "description": "Unità esterna USB4 per trasferire e conservare file.",
+        "why": "Per sfruttarne la velocità verifica che computer e cavo supportino USB4.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H871QBWJ",
+        "category": "PC e archiviazione",
+        "title": "Samsung ViewFinity S7 S70H, 27 pollici",
+        "description": "Monitor 4K da scrivania.",
+        "why": "Verifica le uscite video disponibili e valuta se la risoluzione è utile alla distanza da cui lavori.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0D8LHH8CX",
+        "category": "Audio",
+        "title": "Google Pixel Buds Pro 2",
+        "description": "Auricolari Bluetooth con cancellazione attiva del rumore.",
+        "why": "Controlla quali funzioni sono integrate nel tuo telefono prima di scegliere.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0B6WNPDJK",
+        "category": "Sport",
+        "title": "Fitbit Sense 2",
+        "description": "Smartwatch orientato al fitness con GPS integrato.",
+        "why": "Valuta se i dati che usi sono disponibili senza un abbonamento aggiuntivo.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DZCQB1F7",
+        "category": "Casa smart",
+        "title": "TP-Link Tapo C460",
+        "description": "Telecamera a batteria per ambienti interni o esterni con risoluzione 4K.",
+        "why": "Controlla copertura Wi-Fi e posizione di ricarica prima di fissarla.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0CD23BMN4",
+        "category": "Casa smart",
+        "title": "Govee striscia LED Neon da esterno, 10 m",
+        "description": "Striscia luminosa da esterno con controllo via app.",
+        "why": "Misura il percorso e verifica dove si trova la presa protetta.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0FD9VF12V",
+        "category": "TV e home cinema",
+        "title": "TCL 50Q6C, 50 pollici",
+        "description": "TV 4K QD-Mini LED con Google TV.",
+        "why": "Prima dell'acquisto misura base, mobile e distanza di visione.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0DHY5DF51",
+        "category": "Casa e arredo",
+        "title": "Razer Iskur V2 X",
+        "description": "Sedia da postazione con supporto lombare integrato.",
+        "why": "Confronta altezza della seduta e larghezza della base con la tua scrivania.",
+        "evidence_url": "https://www.tuttotech.net/news/2026/11/19/amazon-black-friday-2026-selezione-offerte-tech.html"
+      }
+    ]
+  }
+]

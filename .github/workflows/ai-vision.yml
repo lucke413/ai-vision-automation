@@ -19,7 +19,7 @@ on:
       - 'tests/**'
       - '.github/workflows/ai-vision.yml'
       - '.github/workflows/legacy-content-repair.yml'
-  # Push runs isolated regression checks only; the full editorial pipeline runs on schedule or explicit manual dispatch.
+  # Ordinary pushes run isolated regression checks. The editorial marker starts the Amazon job only.
   push:
     branches: [main]
     paths:
@@ -102,7 +102,7 @@ jobs:
 
   amazon-editorial:
     needs: editorial-preflight
-    if: ${{ always() && !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.editorial-preflight.result == 'success' && contains(github.event.head_commit.message, '[AI-VISION-AMAZON-QA]'))) }}
+    if: ${{ always() && !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.editorial-preflight.result == 'success' && (contains(github.event.head_commit.message, '[AI-VISION-AMAZON-QA]') || contains(github.event.head_commit.message, '[AI-VISION-AMAZON-EDITORIAL-LIVE]')))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     concurrency:
@@ -112,7 +112,7 @@ jobs:
       WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
       WP_USERNAME: ${{ secrets.WP_USERNAME }}
       WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-      WP_DRY_RUN: ${{ ((github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && !inputs.publish_live) || (github.event_name == 'schedule' && vars.WP_PUBLISH_MODE == 'dry-run')) && 'true' || 'false' }}
+      WP_DRY_RUN: ${{ ((github.event_name == 'push' && (!contains(github.event.head_commit.message, '[AI-VISION-AMAZON-EDITORIAL-LIVE]') || vars.WP_PUBLISH_MODE == 'dry-run')) || (github.event_name == 'workflow_dispatch' && !inputs.publish_live) || (github.event_name == 'schedule' && vars.WP_PUBLISH_MODE == 'dry-run')) && 'true' || 'false' }}
       AMAZON_ASSOCIATE_TAG: ${{ vars.AMAZON_ASSOCIATE_TAG }}
       AMAZON_PROMOTION_LINKS_JSON: ${{ vars.AMAZON_PROMOTION_LINKS_JSON }}
       AMAZON_CREATORS_CREDENTIAL_ID: ${{ secrets.AMAZON_CREATORS_CREDENTIAL_ID }}
