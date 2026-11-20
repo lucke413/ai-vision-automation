@@ -122,12 +122,15 @@ function aivision_reading_language() {
         'ro' => 'Română',
     );
     ?>
-    <details class="aiv-language">
+    <details class="aiv-language notranslate" translate="no">
         <summary>
             <i class="fas fa-globe" aria-hidden="true"></i>
             <span>Lingua <span class="aiv-language-alt" lang="en">/ Language</span></span>
         </summary>
         <ul>
+            <li><a href="<?php echo esc_url( $page_url ); ?>" lang="it" hreflang="it"
+                   data-original="<?php echo esc_url( $page_url ); ?>"
+                   onclick="if (this.origin !== location.origin || this.href !== this.dataset.original) { location.assign(this.dataset.original); return false; }">Italiano</a></li>
             <?php foreach ( $languages as $code => $language ) :
                 $translate_url = 'https://translate.google.com/translate?' . http_build_query(
                     array( 'sl' => 'it', 'tl' => $code, 'u' => $page_url ), '', '&', PHP_QUERY_RFC3986

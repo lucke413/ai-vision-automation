@@ -20,7 +20,7 @@ RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
 RELATED_SOURCE = SOURCE.with_name("related-cards.php")
 READING_NAME = "AI Vision: articoli di tendenza e più letti"
 READING_SOURCE = SOURCE.with_name("reading-widget.php")
-PREVIOUS_READING_HASH = "cc1ebffa41f2f38a2b63d3d02c350b42283f2592886070acbb99bebd71ec6c52"
+PREVIOUS_READING_HASH = "5c92ea29b9bef225e51d1f1b7f8bf1f3a0825aa68d80ca7a06cc60fd0bd06170"
 ARTICLES = (
     "/migliori-sedie-gaming-modelli-fasce-prezzo/",
     "/amazon-black-friday-2026-11-19-2/",
@@ -106,19 +106,23 @@ def verify_reading_widget(session):
         if not language or language.name != "details" or "aiv-language" not in language.get("class", []):
             raise RuntimeError(f"Selettore della lingua mancante su {path}")
         links = language.select("a[lang][href]")
+        original = SITE + path
+        if (not links or links[0]["lang"] != "it" or links[0]["href"] != original
+                or links[0].get("data-original") != original):
+            raise RuntimeError(f"Collegamento alla versione italiana mancante su {path}")
         languages = set()
-        for link in links:
+        for link in links[1:]:
             url = urlsplit(link["href"])
             params = parse_qs(url.query)
             if (url.scheme, url.netloc, url.path) != ("https", "translate.google.com", "/translate") or params != {
-                "sl": ["it"], "tl": [link["lang"]], "u": [SITE + path]
+                "sl": ["it"], "tl": [link["lang"]], "u": [original]
             }:
                 raise RuntimeError(f"Destinazione di traduzione inattesa su {path}")
             languages.add(link["lang"])
-        if len(links) != 8 or len(languages) != 8:
+        if len(links) != 9 or len(languages) != 8 or "it" in languages:
             raise RuntimeError(f"Elenco delle lingue incompleto su {path}")
         labels = [label.get_text(strip=True) for label in widget[0].select(".aiv-reading-labels label")]
-        print(f"Widget verificato su {path} — {', '.join(labels)}, {len(languages)} lingue")
+        print(f"Widget verificato su {path} — {', '.join(labels)}, italiano e {len(languages)} traduzioni")
 
 
 def ensure_snippets_plugin(session):
