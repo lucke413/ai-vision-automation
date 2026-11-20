@@ -19,6 +19,8 @@ jobs:
   repair:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      LINK_REPAIR_BATCH: ${{ contains(github.event.head_commit.message, '[AI-VISION-GAMING-GUIDE-LINK]') && 'gaming-guide' || 'legacy' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -33,7 +35,7 @@ jobs:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        run: python scripts/internal_link_repair.py prepare
+        run: python scripts/internal_link_repair.py prepare --batch "$LINK_REPAIR_BATCH"
       - name: Persist full backup BEFORE WordPress writes
         uses: actions/upload-artifact@v4
         with:
@@ -48,7 +50,7 @@ jobs:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        run: python scripts/internal_link_repair.py apply
+        run: python scripts/internal_link_repair.py apply --batch "$LINK_REPAIR_BATCH"
       - name: Upload verification report
         if: ${{ always() && hashFiles('data/internal_link_repair_result.json') != '' }}
         uses: actions/upload-artifact@v4

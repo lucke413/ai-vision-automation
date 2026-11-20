@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Aggiunge link interni contestuali a quattro articoli, con piano e backup preventivi."""
+"""Aggiunge link interni contestuali, con piano e backup preventivi."""
 from __future__ import annotations
 import argparse, datetime as dt, json, os
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 import requests
 
 BASE = "https://aivision.altervista.org"
@@ -17,7 +17,7 @@ REPAIRS = {
       ("Sony WH-CH730N: cuffie wireless", "https://aivision.altervista.org/sony-wh-ch730n-recensione-caratteristiche/"),
       ("guida alle migliori cuffie Bluetooth senza fili", "https://aivision.altervista.org/migliori-cuffie-bluetooth-senza-fili/"),
     ],
-    "intro": "Per confrontare altri modelli e orientarti tra le alternative",
+    "intro": "Per confrontare altri modelli e orientarti tra le alternative:",
   },
   1423: {
     "slug": "gta-6-sondaggio-record-previsioni-vendita",
@@ -25,7 +25,7 @@ REPAIRS = {
       ("le prestazioni di GTA 6 su console", "https://aivision.altervista.org/gta-6-girera-a-30-fps-su-console-rockstar-conferma/"),
       ("il pre-download di GTA 6 su PS5", "https://aivision.altervista.org/grand-theft-auto-vi-pre-download-ps5-10-novembre/"),
     ],
-    "intro": "Per seguire gli altri aggiornamenti in vista del lancio",
+    "intro": "Per seguire gli altri aggiornamenti in vista del lancio:",
   },
   1650: {
     "slug": "zelda-ocarina-of-time-remake-code-negozi-fisico",
@@ -33,7 +33,7 @@ REPAIRS = {
       ("l'analisi della nuova edizione di Ocarina of Time", "https://aivision.altervista.org/the-legend-of-zelda-ocarina-of-time-switch-2-analisi/"),
       ("i risultati del lancio di Zelda su Switch 2", "https://aivision.altervista.org/nintendo-switch-2-vendite-zelda-ocarina-of-time/"),
     ],
-    "intro": "Per approfondire il ritorno di Zelda su Switch 2",
+    "intro": "Per approfondire il ritorno di Zelda su Switch 2:",
   },
   1644: {
     "slug": "oppo-find-x10-e-pro-max-sconto-store-ufficiale",
@@ -41,14 +41,27 @@ REPAIRS = {
       ("POCO X8s, lo smartphone compatto appena arrivato in Italia", "https://aivision.altervista.org/poco-x8s-italia-prezzo-specifiche-promo-lancio/"),
       ("Google Pixel 11 da 512 GB", "https://aivision.altervista.org/google-pixel-11-offerta-729-euro-amazon/"),
     ],
-    "intro": "Se stai confrontando smartphone di fascia alta e alternative",
+    "intro": "Se stai confrontando smartphone di fascia alta e alternative:",
   },
 }
+GAMING_GUIDE_REPAIRS = {
+    2957: {
+        "slug": "migliori-sedie-gaming-modelli-fasce-prezzo",
+        "links": [
+            ("selezione Black Friday del 19 novembre 2026",
+             "https://aivision.altervista.org/amazon-black-friday-2026-11-19-2/"),
+        ],
+        "intro": "Se cerchi una sedia con supporto lombare integrato, trovi la Razer Iskur V2 X nella nostra",
+    },
+}
+BATCHES = {"legacy": REPAIRS, "gaming-guide": GAMING_GUIDE_REPAIRS}
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["prepare", "apply"])
+    ap.add_argument("--batch", choices=BATCHES, default="legacy")
     args = ap.parse_args()
+    repairs = BATCHES[args.batch]
     base = os.getenv("WP_BASE_URL", "").rstrip("/").removesuffix("/wp-json")
     user, password = os.getenv("WP_USERNAME", ""), os.getenv("WP_APP_PASSWORD", "")
     if base != BASE or not user or not password:
@@ -69,7 +82,7 @@ def main():
         return r.url
     if args.mode=="prepare":
         rows=[]
-        for pid, spec in REPAIRS.items():
+        for pid, spec in repairs.items():
             p=get_post(pid)
             if p.get("status")!="publish" or p.get("slug")!=spec["slug"]:
                 raise RuntimeError(f"Post {pid}: stato o slug inatteso; stop.")
@@ -84,25 +97,30 @@ def main():
             if not missing_links:
                 print(f"Post {pid}: link interni già presenti; nessuna modifica necessaria.")
                 continue
-            paragraph = "<p>" + spec["intro"] + ": " + " e ".join(
+            paragraph = "<p>" + spec["intro"] + " " + " e ".join(
                 f'<a href="{url}">{label}</a>' for label,url in missing_links
             ) + ".</p>"
             after=raw.rstrip()+"\n\n"+paragraph
             rows.append({"id":pid,"slug":spec["slug"],"modified":p.get("modified"),
                          "before":raw,"after":after,"links":[{"label":l,"url":u} for l,u in missing_links]})
-        payload={"site":BASE,"created_at":dt.datetime.now(dt.timezone.utc).isoformat(),"changes":rows}
+        payload={"site":BASE,"batch":args.batch,
+                 "created_at":dt.datetime.now(dt.timezone.utc).isoformat(),"changes":rows}
         PLAN.parent.mkdir(parents=True,exist_ok=True)
         PLAN.write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding="utf-8")
         BACKUP.write_text(json.dumps({"site":BASE,"created_at":payload["created_at"],
             "posts":[{"id":r["id"],"slug":r["slug"],"modified":r["modified"],"content_raw":r["before"]}
                      for r in rows]},ensure_ascii=False,indent=2),encoding="utf-8")
-        print("Piano pronto. Quattro post, otto destinazioni verificate HTTP 200. Nessuna modifica ancora eseguita.")
+        print(f"Piano pronto per {args.batch}: {len(rows)} articoli da aggiornare.")
         return
     plan=json.loads(PLAN.read_text(encoding="utf-8"))
-    if plan.get("site")!=BASE or not (1 <= len(plan.get("changes",[])) <= 4):
+    changes = plan.get("changes")
+    if (plan.get("site") != BASE or plan.get("batch") != args.batch
+            or not isinstance(changes, list) or len(changes) > len(repairs)):
         raise RuntimeError("Piano mancante o non valido.")
+    if any(row["id"] not in repairs or row["slug"] != repairs[row["id"]]["slug"] for row in changes):
+        raise RuntimeError("Il piano contiene articoli fuori dal gruppo richiesto.")
     results=[]
-    for row in plan["changes"]:
+    for row in changes:
         live=get_post(row["id"])
         raw=(live.get("content") or {}).get("raw")
         if (live.get("status")!="publish" or live.get("slug")!=row["slug"]
