@@ -37,7 +37,10 @@ class DailyAICyberTests(unittest.TestCase):
         self.assertEqual(ai_cyber.topic_for("AI voice cloning used in phishing"), "impersonificazione")
 
     def test_extra_slot_preserves_six_ordinary_stories_and_rotates_topic(self):
-        ordinary = [item(index) for index in range(8)]
+        categories = ("Tecnologia", "AI", "Gaming", "Software & App")
+        ordinary = [{**item(index), "category": categories[index % len(categories)]} for index in range(8)]
+        ordinary.extend(({**item(50), "category": "Sicurezza"},
+                         {**item(51), "title": "Come proteggere il NAS dal ransomware"}))
         recent = {**item(0, "identita-e-permessi"), "recent_ai_cyber_topic": True, "published": "2026-11-18"}
         fresh_topic = {**item(20, "protezione-dei-dati"), "published": "2026-11-17"}
         references = {**item(21, "istruzioni-e-input"), "ai_cyber_reference": True}
@@ -47,6 +50,7 @@ class DailyAICyberTests(unittest.TestCase):
         self.assertEqual(sum(bool(candidate.get(ai_cyber.TOPIC_KEY)) for candidate in chosen), 1)
         self.assertIn("identita-e-permessi", {candidate.get(ai_cyber.TOPIC_KEY) for candidate in reserves})
         self.assertNotIn(recent["url"], {candidate["url"] for candidate in chosen})
+        self.assertFalse({"item-50", "item-51"} & {candidate["article_id"] for candidate in [*chosen, *reserves]})
 
     def test_ordinary_candidate_cannot_take_a_missing_cyber_slot(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -100,13 +104,24 @@ class DailyAICyberTests(unittest.TestCase):
 
     def test_wordpress_checks_public_and_future_cyber_posts(self):
         client = publisher.WordPressClient("https://example.com", "", "", False)
-        client.get_or_create_term = MagicMock(return_value={"id": 12})
+        client.get_or_create_term = MagicMock(side_effect=[{"id": 12}, {"id": 26}])
         client.session.get = MagicMock()
-        client.session.get.return_value.json.return_value = [{"date_gmt": "2026-11-18T23:30:00"}]
-        self.assertEqual(client.ai_cyber_dates(datetime(2026, 11, 18, tzinfo=timezone.utc)), {date(2026, 11, 19)})
+        published, scheduled = MagicMock(), MagicMock()
+        published.json.return_value = [
+            {"date_gmt": "2026-11-18T23:30:00", "title": {"raw": "Una notizia"}, "categories": [], "tags": [12]},
+            {"date_gmt": "2026-11-18T21:00:00", "title": {"raw": "Protezione ransomware"}, "categories": [], "tags": []},
+        ]
+        scheduled.json.return_value = [
+            {"date_gmt": "2026-11-20T08:00:00", "title": {"raw": "Una notizia"}, "categories": [26], "tags": []},
+            {"date_gmt": "2026-11-21T08:00:00", "title": {"raw": "Un telefono"}, "categories": [], "tags": []},
+        ]
+        client.session.get.side_effect = [published, scheduled]
+        self.assertEqual(client.ai_cyber_dates(datetime(2026, 11, 18, tzinfo=timezone.utc)),
+                         {date(2026, 11, number) for number in (18, 19, 20)})
         self.assertEqual([call.kwargs["params"]["status"] for call in client.session.get.call_args_list],
                          ["publish", "future"])
-        client.get_or_create_term.assert_called_once_with("tags", "IA e cybersicurezza")
+        self.assertEqual([call.args for call in client.get_or_create_term.call_args_list],
+                         [("tags", "IA e cybersicurezza"), ("categories", "Sicurezza")])
 
 
 if __name__ == "__main__":

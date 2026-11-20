@@ -255,7 +255,7 @@ class EditorialExpansionTests(unittest.TestCase):
 
     def test_selector_keeps_twelve_reserves_for_slot_recovery(self):
         candidates = [
-            {**item(i, "Gaming"), "final_score": 100-i,
+            {**item(i, ("Gaming", "AI", "Tecnologia")[i % 3]), "final_score": 100-i,
              "url": f"https://example.com/story-{i}"}
             for i in range(30)
         ]
@@ -268,7 +268,7 @@ class EditorialExpansionTests(unittest.TestCase):
 
     def test_new_topics_cannot_displace_daily_mix(self):
         candidates = [item(i, cat) for i, cat in enumerate(
-            ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
+            ['Casa smart']*4 + ['Accessori e postazioni']*4 + ['AI','Sicurezza','Gaming','Software & App','Tecnologia','PC & Hardware'])]
         chosen, reserves = selector.select_daily(candidates)
         self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(x['category'] in selector.EXPANSION_CATEGORIES for x in chosen), 1)
@@ -285,7 +285,7 @@ class EditorialExpansionTests(unittest.TestCase):
 
     def test_no_forced_new_topic_and_one_offer(self):
         candidates = [item(i, cat, 'OFFERTA' if i < 2 else 'NEWS') for i, cat in enumerate(
-            ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App','Tecnologia'])]
+            ['Offerte & Prezzi','Offerte & Prezzi','AI','Sicurezza','Gaming','Software & App','Tecnologia','PC & Hardware'])]
         chosen, _ = selector.select_daily(candidates)
         self.assertEqual(len(chosen), 6)
         self.assertEqual(sum(selector.is_offer(x) for x in chosen), 1)
@@ -294,16 +294,16 @@ class EditorialExpansionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             inp=Path(directory)/'in.json';out=Path(directory)/'out.json'
             inp.write_text(json.dumps({'items':[item(0,'Casa smart'),item(1,'AI')],
-                                      'reserve_items':[item(2,'Accessori e postazioni'),item(3,'Sicurezza')]}))
+                                      'reserve_items':[item(2,'Accessori e postazioni'),item(3,'Sicurezza'),item(4,'Software & App')]}))
             def draft(source, key):
                 if source['article_id']=='1':
                     raise generator.GeneratorFatalError('Simulated rejection')
-                return {**source, 'title': {'0': 'Dispositivi intelligenti per abitazioni moderne', '2': 'Accessori USB per postazioni di lavoro', '3': 'Protezione informatica contro minacce recenti'}[source['article_id']], 'quality_warnings':[], 'body_word_count':650}
+                return {**source, 'title': {'0': 'Dispositivi intelligenti per abitazioni moderne', '2': 'Accessori USB per postazioni di lavoro', '3': 'Protezione informatica contro minacce recenti', '4': 'Pacchetto di programmi per la produttività'}[source['article_id']], 'quality_warnings':[], 'body_word_count':650}
             with patch.object(generator,'INPUT_FILE',inp), patch.object(generator,'OUTPUT_FILE',out), patch.dict('os.environ',{'GEMINI_API_KEY':'test-not-a-real-key'}), patch.object(generator,'generate_valid_draft',side_effect=draft), patch.object(generator.time,'sleep'), contextlib.redirect_stdout(io.StringIO()):
                 generator.main()
             result=json.loads(out.read_text())
             daily=[x for x in result['items'] if x['publication_slot']=='today']
-            self.assertEqual({x['category'] for x in daily}, {'Casa smart','Sicurezza'})
+            self.assertEqual({x['category'] for x in daily}, {'Casa smart','Software & App'})
 
     def test_generator_stops_daily_and_reserve_queue_after_rate_limit(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -580,7 +580,7 @@ class EditorialExpansionTests(unittest.TestCase):
             inp = Path(directory) / "daily.json"
             out = Path(directory) / "drafts.json"
             inp.write_text(json.dumps({
-                "items": [item(0, "Sicurezza"), item(1, "Gaming")],
+                "items": [item(0, "Tecnologia"), item(1, "Gaming")],
                 "reserve_items": [item(2, "Software & App")],
             }), encoding="utf-8")
 
@@ -645,7 +645,7 @@ class EditorialExpansionTests(unittest.TestCase):
             for i in range(8)
         )
         candidates.extend(
-            {**item(30+i, "Sicurezza", "NEWS"), "final_score": 70-i}
+            {**item(30+i, "Tecnologia", "NEWS"), "final_score": 70-i}
             for i in range(8)
         )
         chosen, reserves = selector.select_daily(candidates)

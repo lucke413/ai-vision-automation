@@ -36,12 +36,12 @@ from PIL import Image
 if __package__:
     from .public_source_links import clean_source_links
     from .amazon_affiliate import affiliate_section, configured_tag, ensure_article_tracking
-    from .ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
+    from .ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY, is_cybersecurity
     from .cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 else:
     from public_source_links import clean_source_links
     from amazon_affiliate import affiliate_section, configured_tag, ensure_article_tracking
-    from ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY
+    from ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY, is_cybersecurity
     from cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
 
 
@@ -969,26 +969,40 @@ class WordPressClient:
         return values[0] if values else None
 
     def ai_cyber_dates(self, now: datetime) -> set[date]:
+        return set(self.ai_cyber_publication_days(now))
+
+    def ai_cyber_publication_days(self, now: datetime) -> list[date]:
         if self.dry_run:
-            return set()
+            return []
         tag_id = self.get_or_create_term("tags", AI_CYBER_TAG).get("id")
-        if not tag_id:
-            raise PublisherError("Impossibile assegnare l'etichetta IA e cybersicurezza.")
+        category_id = self.get_or_create_term("categories", "Sicurezza").get("id")
+        if not tag_id or not category_id:
+            raise PublisherError("Impossibile verificare la tassonomia di cybersicurezza.")
         current = now.astimezone(get_timezone())
-        days: set[date] = set()
+        days = []
         for status in ("publish", "future"):
-            response = self.session.get(
-                self._url("posts"),
-                params={"tags": tag_id, "status": status, "per_page": 100, "context": "edit",
-                        "after": (current.date() - timedelta(days=1)).isoformat() + "T00:00:00",
-                        "_fields": "date_gmt"},
-                timeout=REQUEST_TIMEOUT,
-            )
-            response.raise_for_status()
-            for post in response.json():
-                timestamp = datetime.fromisoformat(post["date_gmt"])
-                timestamp = timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=timezone.utc)
-                days.add(timestamp.astimezone(current.tzinfo).date())
+            page = 1
+            while True:
+                response = self.session.get(
+                    self._url("posts"),
+                    params={"status": status, "per_page": 100, "page": page, "context": "edit",
+                            "after": (current.date() - timedelta(days=1)).isoformat() + "T00:00:00",
+                            "before": (current.date() + timedelta(days=14)).isoformat() + "T00:00:00",
+                            "_fields": "date_gmt,title,categories,tags"},
+                    timeout=REQUEST_TIMEOUT,
+                )
+                response.raise_for_status()
+                for post in response.json():
+                    title = post["title"].get("raw") or post["title"].get("rendered")
+                    if (tag_id not in post["tags"] and category_id not in post["categories"]
+                            and not is_cybersecurity({"title": title})):
+                        continue
+                    timestamp = datetime.fromisoformat(post["date_gmt"])
+                    timestamp = timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=timezone.utc)
+                    days.append(timestamp.astimezone(current.tzinfo).date())
+                if page >= int(response.headers.get("X-WP-TotalPages", "1")):
+                    break
+                page += 1
         return days
 
     def upload_media(self, content: bytes, filename: str, mime_type: str, alt_text: str, caption: str) -> dict:
@@ -1411,6 +1425,8 @@ def main() -> int:
     image_session = requests.Session()
     for draft in drafts:
         try:
+            if is_cybersecurity(draft) and not draft.get(TOPIC_KEY):
+                raise PublisherError("Cybersicurezza riservata all’articolo dedicato.")
             planned_time = (
                 next_ai_cyber_time(client.ai_cyber_dates(now), now) if draft.get(TOPIC_KEY)
                 else next(regular_schedule)

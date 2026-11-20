@@ -2,6 +2,7 @@
 """Raccoglie fonti per l'approfondimento quotidiano su IA e cybersicurezza."""
 from __future__ import annotations
 
+import html
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -54,6 +55,12 @@ SOURCE_HOSTS = frozenset({host for _, host in FEEDS.values()} | {
     "www.ncsc.gov.uk", "www.microsoft.com", "bleepingcomputer.com",
 })
 TOPIC_KEY = "ai_cyber_topic"
+CYBER_TITLE = re.compile(
+    r"\b(?:cyber\w*|sicurezza informatica|ransomware|malware|phishing|infostealer|"
+    r"attacc[oi] informatic[oi]|vulnerabilit[àa]|cve-\d{4}-\d+|data breach|prompt injection|"
+    r"violazion[ei] dei dati|furto di credenziali|truff\w*\s+(?:online|digital\w*|con deepfake))\b",
+    re.I,
+)
 EDITORIAL_BRIEF = (
     "Approfondimento di IA e cybersicurezza per lettori non specialisti. "
     "Apri con un caso concreto e spiega perché conta. Illustra un meccanismo tecnico, "
@@ -62,6 +69,12 @@ EDITORIAL_BRIEF = (
     "verificabili. Ometti payload, istruzioni di sfruttamento e catene d'attacco riproducibili. "
     "Per i documenti di riferimento scrivi un pezzo di contesto e mantieni le date reali della fonte."
 )
+
+
+def is_cybersecurity(item: dict) -> bool:
+    title = html.unescape(str(item.get("title") or ""))
+    return bool(item.get(TOPIC_KEY) or item.get("category") == "Sicurezza"
+                or item.get("story_type") == "SICUREZZA" or CYBER_TITLE.search(title))
 
 
 def topic_for(text: str) -> str:

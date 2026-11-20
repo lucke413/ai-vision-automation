@@ -17,9 +17,9 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 if __package__:
-    from .ai_cyber import TOPIC_KEY, source_identity
+    from .ai_cyber import TOPIC_KEY, is_cybersecurity, source_identity
 else:
-    from ai_cyber import TOPIC_KEY, source_identity
+    from ai_cyber import TOPIC_KEY, is_cybersecurity, source_identity
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -36,6 +36,7 @@ MAX_NEWS_PER_DAY = 3
 MAX_GUIDES_PER_DAY = 2
 MAX_TUTORIALS_PER_DAY = 1
 MAX_PRACTICAL_PER_DAY = 3
+MAX_REGULAR_PER_CATEGORY = 2
 # Mix editoriale: massimo tre notizie, due guide e un tutorial.
 # Le quote sono tetti indipendenti, non obiettivi di pubblicazione obbligatori.
 # Espansione graduale: al massimo un articolo di categoria nuova, mai obbligatorio.
@@ -119,6 +120,9 @@ def valid_candidates(data: dict) -> list[dict]:
 
 def editorial_room(selected: list[dict], candidate: dict, allow_news_overflow: bool = False) -> bool:
     """Rispetta i tetti indipendenti: fino a 3 notizie, 2 guide e 1 tutorial."""
+    category = candidate.get("category") or "Tecnologia"
+    if sum((item.get("category") or "Tecnologia") == category for item in selected) >= MAX_REGULAR_PER_CATEGORY:
+        return False
     kind = candidate.get("editorial_kind")
     limits = {"GUIDA": MAX_GUIDES_PER_DAY, "TUTORIAL": MAX_TUTORIALS_PER_DAY}
     if kind not in limits:
@@ -141,6 +145,7 @@ def select_daily(items: list[dict]) -> tuple[list[dict], list[dict]]:
     Quando le guide o i tutorial mancano, altre notizie valide riempiono gli
     slot residui, senza abbassare i controlli anti-duplicato e sulle offerte.
     """
+    items = [item for item in items if not is_cybersecurity(item)]
     if not items:
         return [], []
 

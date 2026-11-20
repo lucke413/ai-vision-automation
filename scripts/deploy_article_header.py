@@ -1,6 +1,8 @@
 """Publish AI Vision article layout snippets and verify live HTML."""
 import argparse
 import os
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from time import time
 from urllib.parse import urlsplit
@@ -15,6 +17,8 @@ NAME = "AI Vision: Top Tags e notizie negli articoli"
 SOURCE = Path(__file__).resolve().parents[1] / "wordpress/article-header.php"
 RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
 RELATED_SOURCE = SOURCE.with_name("related-cards.php")
+READING_NAME = "AI Vision: articoli di tendenza e più letti"
+READING_SOURCE = SOURCE.with_name("reading-widget.php")
 ARTICLES = (
     "/migliori-sedie-gaming-modelli-fasce-prezzo/",
     "/amazon-black-friday-2026-11-19-2/",
@@ -88,6 +92,18 @@ def verify_related_cards(session):
         raise RuntimeError("Lo stile per gli articoli correlati compare fuori dagli articoli.")
 
 
+def verify_reading_widget(session):
+    for path in ("/", *ARTICLES):
+        page = get_page(session, path)
+        widget = page.select(".aiv-reading")
+        container = ".top-right-area .aiv-reading" if path == "/" else "#sidebar-right .aiv-reading"
+        if (len(widget) != 1 or not page.select_one(container) or not page.select_one("#aivision-reading-widget-inline-css")
+                or len(widget[0].select(".aiv-reading-panel li a[href]")) < 2):
+            raise RuntimeError(f"Widget letture mancante o incompleto su {path}")
+        labels = [label.get_text(strip=True) for label in widget[0].select(".aiv-reading-labels label")]
+        print(f"Widget verificato su {path} — {', '.join(labels)}")
+
+
 def ensure_snippets_plugin(session):
     plugins = wp(session, "GET", "/wp/v2/plugins", params={"context": "edit", "_fields": "plugin,status"})
     installed = next((item for item in plugins if item["plugin"] == PLUGIN), None)
@@ -133,7 +149,9 @@ def deploy(admin, public, name, source, check):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--related-cards", action="store_true")
+    variants = parser.add_mutually_exclusive_group()
+    variants.add_argument("--related-cards", action="store_true")
+    variants.add_argument("--reading-widget", action="store_true")
     args = parser.parse_args()
     base = os.environ.get("WP_BASE_URL", "").rstrip("/").removesuffix("/wp-json")
     user, password = (os.environ.get(key, "") for key in ("WP_USERNAME", "WP_APP_PASSWORD"))
@@ -141,7 +159,14 @@ def main():
         raise SystemExit("Configurazione WordPress AI Vision mancante.")
     with requests.Session() as admin, requests.Session() as public:
         admin.auth = (user, password)
-        if args.related_cards:
+        if args.reading_widget:
+            deploy(admin, public, READING_NAME, READING_SOURCE, verify_reading_widget)
+            from wp_publisher import WordPressClient, get_timezone
+            now = datetime.now(get_timezone())
+            days = Counter(WordPressClient(base, user, password, False).ai_cyber_publication_days(now))
+            print("Calendario cybersicurezza dal giorno corrente:",
+                  {day.isoformat(): total for day, total in sorted(days.items()) if day >= now.date()})
+        elif args.related_cards:
             deploy(admin, public, RELATED_NAME, RELATED_SOURCE, verify_related_cards)
         else:
             deploy(admin, public, NAME, SOURCE, verify)

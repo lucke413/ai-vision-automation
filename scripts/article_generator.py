@@ -20,7 +20,7 @@ from html.parser import HTMLParser
 
 import requests
 
-from ai_cyber import EDITORIAL_BRIEF, SOURCE_HOSTS, TOPIC_KEY, TOPICS
+from ai_cyber import EDITORIAL_BRIEF, SOURCE_HOSTS, TOPIC_KEY, TOPICS, is_cybersecurity
 from amazon_affiliate import article_products, product_asin
 from daily_selector import (
     DAILY_LIMIT, TOTAL_DAILY_LIMIT, RESERVE_LIMIT, editorial_room, expansion_room,
@@ -1143,6 +1143,8 @@ def main() -> int:
     rejected_drafts = []
     for draft in drafts:
         reason = editorial_distinctiveness(draft, accepted)
+        if is_cybersecurity(draft) and not draft.get(TOPIC_KEY):
+            reason = "cybersicurezza riservata all’articolo dedicato"
         if reason:
             errors.append({"article_id": draft.get("article_id"), "error": "Quality gate: " + reason})
             rejected_drafts.append({**draft, "publication_blocked": True, "rejection_reason": reason})
@@ -1202,6 +1204,7 @@ def main() -> int:
                 )
                 allowed = (
                     reason is None
+                    and (cyber_reserve or not is_cybersecurity(candidate))
                     and expansion_room(daily_drafts, candidate)
                     and (cyber_reserve or editorial_room(daily_drafts, candidate, allow_news_overflow=True))
                     and (not is_offer or current_offers < MAX_DAILY_OFFERS)
