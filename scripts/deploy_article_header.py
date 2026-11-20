@@ -6,7 +6,7 @@ from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 from time import time
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -20,12 +20,15 @@ RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
 RELATED_SOURCE = SOURCE.with_name("related-cards.php")
 READING_NAME = "AI Vision: articoli di tendenza e più letti"
 READING_SOURCE = SOURCE.with_name("reading-widget.php")
-PREVIOUS_READING_HASH = "5c92ea29b9bef225e51d1f1b7f8bf1f3a0825aa68d80ca7a06cc60fd0bd06170"
+PREVIOUS_READING_HASH = "3b305cbb621a19d813295b840b2af42c8847d95f36e77a1707451a2eba036cc4"
+NAVIGATION_NAME = "AI Vision: navigazione offerte e indice articoli"
+NAVIGATION_SOURCE = SOURCE.with_name("editorial-navigation.php")
 ARTICLES = (
     "/migliori-sedie-gaming-modelli-fasce-prezzo/",
     "/amazon-black-friday-2026-11-19-2/",
 )
 ARCHIVE = "/category/offerte-2/"
+CATEGORIES = (ARCHIVE, "/category/guide/", "/category/ai-pratica/")
 SELECTORS = (".mg-tpt-tag-area", ".mg-latest-news-sec")
 
 
@@ -95,14 +98,18 @@ def verify_related_cards(session):
 
 
 def verify_reading_widget(session):
-    for path in ("/", *ARTICLES):
+    for path in ("/", *ARTICLES, *CATEGORIES):
         page = get_page(session, path)
         widget = page.select(".aiv-reading")
         container = ".top-right-area .aiv-reading" if path == "/" else "#sidebar-right .aiv-reading"
-        if (len(widget) != 1 or not page.select_one(container) or not page.select_one("#aivision-reading-widget-inline-css")
-                or len(widget[0].select(".aiv-reading-panel li a[href]")) < 2):
+        if not page.select_one("#aivision-reading-widget-inline-css"):
+            raise RuntimeError(f"Stile del menu lingua mancante su {path}")
+        if path in CATEGORIES:
+            language = page.select_one("#sidebar-right .aiv-language")
+        elif len(widget) == 1 and page.select_one(container) and len(widget[0].select(".aiv-reading-panel li a[href]")) >= 2:
+            language = widget[0].find_previous_sibling()
+        else:
             raise RuntimeError(f"Widget letture mancante o incompleto su {path}")
-        language = widget[0].find_previous_sibling()
         if not language or language.name != "details" or "aiv-language" not in language.get("class", []):
             raise RuntimeError(f"Selettore della lingua mancante su {path}")
         links = language.select("a[lang][href]")
@@ -121,8 +128,24 @@ def verify_reading_widget(session):
             languages.add(link["lang"])
         if len(links) != 9 or len(languages) != 8 or "it" in languages:
             raise RuntimeError(f"Elenco delle lingue incompleto su {path}")
-        labels = [label.get_text(strip=True) for label in widget[0].select(".aiv-reading-labels label")]
-        print(f"Widget verificato su {path} — {', '.join(labels)}, italiano e {len(languages)} traduzioni")
+        print(f"Menu lingua verificato su {path} — italiano e {len(languages)} traduzioni")
+
+
+def verify_editorial_navigation(session):
+    archive = get_page(session, ARCHIVE)
+    overview = archive.select(".aiv-offers-overview")
+    headings = {heading.get_text(" ", strip=True) for panel in overview for heading in panel.select("h2")}
+    if (len(overview) != 1 or not {"Ultime selezioni", "Black Friday e campagne"} <= headings
+            or not archive.select_one("#aiv-offers-archive")):
+        raise RuntimeError("La navigazione delle offerte non è presente o completa.")
+    print("Verificate le sezioni della pagina Offerte.")
+    for path in ARTICLES:
+        page = get_page(session, path)
+        outline = page.select("main .aiv-article-outline")
+        links = outline[0].select('a[href^="#"]') if len(outline) == 1 else []
+        if len(links) < 3 or any(not page.find(id=unquote(link["href"][1:])) for link in links):
+            raise RuntimeError(f"Indice mancante o collegamenti incompleti su {path}")
+        print(f"Indice verificato su {path} — {len(links)} sezioni")
 
 
 def ensure_snippets_plugin(session):
@@ -182,6 +205,7 @@ def main():
     variants = parser.add_mutually_exclusive_group()
     variants.add_argument("--related-cards", action="store_true")
     variants.add_argument("--reading-widget", action="store_true")
+    variants.add_argument("--editorial-navigation", action="store_true")
     args = parser.parse_args()
     base = os.environ.get("WP_BASE_URL", "").rstrip("/").removesuffix("/wp-json")
     user, password = (os.environ.get(key, "") for key in ("WP_USERNAME", "WP_APP_PASSWORD"))
@@ -189,7 +213,9 @@ def main():
         raise SystemExit("Configurazione WordPress AI Vision mancante.")
     with requests.Session() as admin, requests.Session() as public:
         admin.auth = (user, password)
-        if args.reading_widget:
+        if args.editorial_navigation:
+            deploy(admin, public, NAVIGATION_NAME, NAVIGATION_SOURCE, verify_editorial_navigation)
+        elif args.reading_widget:
             deploy(admin, public, READING_NAME, READING_SOURCE, verify_reading_widget,
                    previous_hash=PREVIOUS_READING_HASH)
             from wp_publisher import WordPressClient, get_timezone

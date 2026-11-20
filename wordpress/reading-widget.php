@@ -110,7 +110,12 @@ function aivision_render_reading_widget() {
 }
 
 function aivision_reading_language() {
-    $page_url = is_singular( 'post' ) ? get_permalink( get_queried_object_id() ) : home_url( '/' );
+    if ( is_category() ) {
+        $page_url = is_paged() ? get_pagenum_link( (int) get_query_var( 'paged' ), false )
+            : get_category_link( get_queried_object_id() );
+    } else {
+        $page_url = is_singular( 'post' ) ? get_permalink( get_queried_object_id() ) : home_url( '/' );
+    }
     $languages = array(
         'en' => 'English',
         'fr' => 'Français',
@@ -155,7 +160,9 @@ function aivision_reading_home() {
 function aivision_reading_sidebar( $sidebar ) {
     if ( 'sidebar-1' === $sidebar ) {
         aivision_reading_language();
-        aivision_render_reading_widget();
+        if ( is_singular( 'post' ) ) {
+            aivision_render_reading_widget();
+        }
     }
 }
 
@@ -311,7 +318,7 @@ function aivision_mount_reading_widget() {
     if ( is_front_page() && ! is_paged() ) {
         remove_action( 'newsup_action_banner_tabbed_posts', 'newsup_banner_tabbed_posts', 10 );
         add_action( 'newsup_action_banner_tabbed_posts', 'aivision_reading_home', 10 );
-    } elseif ( is_singular( 'post' ) ) {
+    } elseif ( is_singular( 'post' ) || is_category( array( 'offerte-2', 'guide', 'ai-pratica' ) ) ) {
         add_action( 'dynamic_sidebar_before', 'aivision_reading_sidebar', 9 );
     } else {
         return;

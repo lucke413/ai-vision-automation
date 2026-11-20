@@ -13,7 +13,7 @@ import os
 import random
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urljoin
 from html.parser import HTMLParser
@@ -1088,6 +1088,55 @@ def editorial_distinctiveness(draft: dict, accepted: list[dict]) -> str | None:
     return None
 
 
+def recent_wordpress_titles() -> list[str]:
+    base, username, password = (os.environ.get(key, "").strip()
+                                for key in ("WP_BASE_URL", "WP_USERNAME", "WP_APP_PASSWORD"))
+    if not base or not username or not password:
+        return []
+    root = base.rstrip("/").removesuffix("/wp-json")
+    titles = []
+    for status in ("publish", "future"):
+        params = {"status": status, "context": "edit", "per_page": 100, "_fields": "title"}
+        if status == "publish":
+            params["after"] = (datetime.now(timezone.utc) - timedelta(days=10)).date().isoformat() + "T00:00:00"
+        try:
+            with requests.Session() as session:
+                page = 1
+                while True:
+                    response = session.get(f"{root}/wp-json/wp/v2/posts", params={**params, "page": page},
+                                           auth=(username, password), allow_redirects=False, timeout=(10, 20))
+                    response.raise_for_status()
+                    titles.extend(str(post["title"]["raw"]) for post in response.json() if post.get("title", {}).get("raw"))
+                    if page >= int(response.headers.get("X-WP-TotalPages", "1")):
+                        break
+                    page += 1
+        except (requests.RequestException, TypeError, ValueError, KeyError) as exc:
+            print(f"AVVISO storico WordPress ({status}): {type(exc).__name__}.")
+    print(f"Confronto titoli WordPress: {len(titles)} articoli pubblicati o programmati.")
+    return titles
+
+
+def wordpress_title_duplicate(draft: dict, existing: list[str]) -> bool:
+    title = str(draft.get("title") or "")
+    words = _editorial_tokens(title)
+    if len(words) < 3:
+        return False
+    guide = re.compile(r"\b(?:guida|tutorial|confronto|recensione|migliori|come scegliere)\b", re.I)
+    is_guide = draft.get("editorial_kind") in {"GUIDA", "TUTORIAL"} or bool(guide.search(title))
+    numbers = set(re.findall(r"\b\d+\b", title))
+    for published in existing:
+        if title.casefold().strip() == published.casefold().strip():
+            return True
+        if bool(guide.search(published)) != is_guide:
+            continue
+        if numbers != set(re.findall(r"\b\d+\b", published)):
+            continue
+        other = _editorial_tokens(published)
+        if len(words & other) >= 4 and len(words & other) / len(words | other) >= 0.76:
+            return True
+    return False
+
+
 def main() -> int:
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not INPUT_FILE.is_file():
@@ -1111,6 +1160,7 @@ def main() -> int:
     if items and not api_key:
         raise RuntimeError("Variabile GEMINI_API_KEY non presente.")
     items.sort(key=lambda item: not item.get(TOPIC_KEY))
+    site_titles = recent_wordpress_titles() if items else []
 
     drafts = []
     errors = []
@@ -1143,6 +1193,8 @@ def main() -> int:
     rejected_drafts = []
     for draft in drafts:
         reason = editorial_distinctiveness(draft, accepted)
+        if not reason and wordpress_title_duplicate(draft, site_titles):
+            reason = "titolo di una notizia già pubblicata o programmata"
         if is_cybersecurity(draft) and not draft.get(TOPIC_KEY):
             reason = "cybersicurezza riservata all’articolo dedicato"
         if reason:
@@ -1198,6 +1250,8 @@ def main() -> int:
 
             if candidate is not None:
                 reason = editorial_distinctiveness(candidate, drafts)
+                if not reason and wordpress_title_duplicate(candidate, site_titles):
+                    reason = "titolo di una notizia già pubblicata o programmata"
                 is_offer = (
                     candidate.get("category") == "Offerte & Prezzi"
                     or candidate.get("story_type") == "OFFERTA"

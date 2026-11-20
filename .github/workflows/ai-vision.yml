@@ -377,6 +377,9 @@ jobs:
       - name: Genera bozze articoli
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
         run: python scripts/article_generator.py
 
       - name: Controlla bozze articoli
