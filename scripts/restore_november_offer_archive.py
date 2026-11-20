@@ -1,4 +1,4 @@
-"""Restore the original editorial product descriptions in two archived editions."""
+"""Restore editorial descriptions and direct product links in two archived editions."""
 import argparse
 import html
 import json
@@ -11,8 +11,8 @@ from time import time
 import requests
 from bs4 import BeautifulSoup
 
-from amazon_affiliate import DISCLOSURE, MARKER, product_asin
-from amazon_promotions import Offer, parse_utc, render_offers, spread_by_category
+from amazon_affiliate import DISCLOSURE, MARKER, configured_tag, product_asin
+from amazon_promotions import AMAZON, Offer, affiliate_url, parse_utc, render_offers, spread_by_category
 from wp_publisher import WordPressClient
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,7 +28,21 @@ NOTE = ('<p class="aivision-offer-archive"><strong>Selezione d’archivio del 19
         'Per le promozioni attuali, consulta la <a href="/category/offerte-2/">sezione Offerte</a>.</p>')
 
 
-def original_sections():
+def render_archive(offers, tag=""):
+    sections = [f'<div class="{MARKER}">', f"<p>{DISCLOSURE}</p>", NOTE, "<h2>Scelte da AI Vision per voi</h2>"]
+    for category in dict.fromkeys(offer.category for offer in offers):
+        sections.append(f"<h3>{html.escape(category)}</h3>")
+        for offer in (item for item in offers if item.category == category):
+            sections.extend((f"<h4>{html.escape(offer.title)}</h4>",
+                             f"<p>{html.escape(offer.description)}</p>",
+                             f"<p><strong>Cosa controllare.</strong> {html.escape(offer.why)}</p>"))
+            if tag:
+                url = html.escape(affiliate_url(f"{AMAZON}/dp/{offer.key}", tag), quote=True)
+                sections.append(f'<p><a href="{url}" rel="sponsored nofollow">Vedi il prodotto su Amazon</a></p>')
+    return "\n".join([*sections, "</div>"])
+
+
+def original_sections(tag):
     raw = subprocess.check_output(
         ["git", "show", f"{SOURCE}:config/amazon-editorial-offers.json"], cwd=ROOT
     )
@@ -42,17 +56,11 @@ def original_sections():
             first = {offer.key for offer in spread_by_category(offers)[:18]}
             offers = [offer for offer in offers if offer.key not in first]
         offers = spread_by_category(offers)[:20]
-        if len({offer.key for offer in offers if offer.key}) != 20:
+        product_ids = {offer.key for offer in offers if offer.key}
+        if len(product_ids) != 20:
             raise ValueError("La selezione originale non contiene 20 prodotti distinti.")
         expected = LEGACY_MARKER.sub(LEGACY_NOTICE, render_offers(offers, checked))
-        sections = [f'<div class="{MARKER}">', f"<p>{DISCLOSURE}</p>", NOTE, "<h2>Scelte da AI Vision per voi</h2>"]
-        for category in dict.fromkeys(offer.category for offer in offers):
-            sections.append(f"<h3>{html.escape(category)}</h3>")
-            for offer in (item for item in offers if item.category == category):
-                sections.extend((f"<h4>{html.escape(offer.title)}</h4>",
-                                 f"<p>{html.escape(offer.description)}</p>",
-                                 f"<p><strong>Cosa controllare.</strong> {html.escape(offer.why)}</p>"))
-        yield edition["kind"], (expected, "\n".join([*sections, "</div>"]))
+        yield edition["kind"], (expected, render_archive(offers), render_archive(offers, tag), product_ids)
 
 
 def read_post(client, post_id, slug):
@@ -64,15 +72,16 @@ def read_post(client, post_id, slug):
     return post
 
 
-def planned_content(body, old, new):
+def planned_content(body, legacy, archived, new):
     if body.count(new) == 1:
         return body
-    if body.count(old) != 1:
-        raise ValueError("La struttura archiviata su WordPress è diversa dalla selezione originale.")
-    return body.replace(old, new, 1)
+    for old in (archived, legacy):
+        if body.count(old) == 1:
+            return body.replace(old, new, 1)
+    raise ValueError("La struttura archiviata su WordPress è diversa dalla selezione originale.")
 
 
-def verify_public(slug):
+def verify_public(slug, product_ids):
     response = requests.get(f"{SITE}/{slug}/", params={"aivision_archive_check": int(time())}, timeout=45)
     response.raise_for_status()
     page = BeautifulSoup(response.content, "html.parser")
@@ -80,7 +89,9 @@ def verify_public(slug):
     if not note:
         raise RuntimeError(f"Nota di archivio assente su {slug}.")
     section = note.parent
+    linked = [asin for link in section.select("a[href]") if (asin := product_asin(link["href"]))]
     if (len(section.select("h4")) != 20 or section.select(".aivision-amazon-price, img")
+            or len(linked) != 20 or set(linked) != product_ids
             or "Questa offerta è terminata" in section.get_text()):
         raise RuntimeError(f"Selezione incompleta su {slug}.")
 
@@ -92,20 +103,24 @@ def main():
     base, user, password = (os.environ.get(k, "") for k in ("WP_BASE_URL", "WP_USERNAME", "WP_APP_PASSWORD"))
     if base.rstrip("/").removesuffix("/wp-json") != SITE or not user or not password:
         raise ValueError("Configurazione WordPress AI Vision mancante.")
+    tag = configured_tag()
+    if not tag:
+        raise ValueError("Tracking ID Amazon Italia mancante.")
     client = WordPressClient(base, user, password, not args.apply)
-    sources = dict(original_sections())
+    sources = dict(original_sections(tag))
     plans = []
     for post_id, slug, kind in TARGETS:
         post = read_post(client, post_id, slug)
+        legacy, archived, new, product_ids = sources[kind]
         try:
-            body = planned_content(post["content"]["raw"], *sources[kind])
+            body = planned_content(post["content"]["raw"], legacy, archived, new)
         except ValueError as exc:
             raise ValueError(f"{slug}: {exc}") from exc
-        plans.append((post, body))
+        plans.append((post, body, product_ids))
         print(f"{slug}: struttura verificata per 20 schede originali.")
     if not args.apply:
         return
-    for post, body in plans:
+    for post, body, product_ids in plans:
         post_id, slug = post["id"], post["slug"]
         if body != post["content"]["raw"]:
             fresh = read_post(client, post_id, slug)
@@ -118,8 +133,8 @@ def main():
         if (saved["content"]["raw"] != body
                 or any(saved[key] != post[key] for key in ("title", "featured_media", "date_gmt"))):
             raise RuntimeError(f"{slug}: modifica WordPress da verificare.")
-        verify_public(slug)
-        print(f"{slug}: archivio pubblico verificato, 20 schede e una nota unica.")
+        verify_public(slug, product_ids)
+        print(f"{slug}: archivio pubblico verificato, 20 schede con link prodotto e una nota unica.")
 
 
 if __name__ == "__main__":
