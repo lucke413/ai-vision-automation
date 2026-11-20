@@ -6,7 +6,7 @@
     "products": [
       {
         "url": "https://www.amazon.it/dp/B0DCJZV1R5",
-        "category": "PC e accessori",
+        "category": "PC e archiviazione",
         "title": "HP Everyday 14 Odyssey, borsa per notebook",
         "description": "HP Everyday 14 Odyssey, borsa per notebook",
         "why": "Verifica che il tuo portatile non superi 14 pollici.",
@@ -62,7 +62,7 @@
       },
       {
         "url": "https://www.amazon.it/dp/B0FW442XYW",
-        "category": "Sport e moda",
+        "category": "Sport",
         "title": "Adidas Response 2, scarpe running",
         "description": "Adidas Response 2, scarpe running",
         "why": "Controlla la taglia specifica e la calzata della versione in promozione.",
@@ -102,7 +102,7 @@
       },
       {
         "url": "https://www.amazon.it/dp/B0H1H1MDWN",
-        "category": "Decorazioni",
+        "category": "Casa e arredo",
         "title": "BESCOST luci natalizie da esterno, 50 metri",
         "description": "BESCOST luci natalizie da esterno, 50 metri",
         "why": "Verifica protezione degli elementi elettrici e lunghezza utile.",
@@ -134,7 +134,7 @@
       },
       {
         "url": "https://www.amazon.it/dp/3989293273",
-        "category": "Libri",
+        "category": "Saggistica",
         "title": "Calendario dell'Avvento Origami, 24 modelli",
         "description": "Calendario dell'Avvento Origami, 24 modelli",
         "why": "Una proposta creativa: verifica lingua e livello dei progetti.",
@@ -142,7 +142,7 @@
       },
       {
         "url": "https://www.amazon.it/dp/B0H7R33KFJ",
-        "category": "Decorazioni",
+        "category": "Casa e arredo",
         "title": "Adesivi natalizi per finestre, 133 pezzi",
         "description": "Adesivi natalizi per finestre, 133 pezzi",
         "why": "Controlla la superficie di applicazione e la rimozione.",
@@ -150,7 +150,7 @@
       },
       {
         "url": "https://www.amazon.it/dp/B0GJ7DT532",
-        "category": "Informatica",
+        "category": "PC e archiviazione",
         "title": "Acer Aspire Lite 15 Ryzen 3, 8 GB e 256 GB",
         "description": "Acer Aspire Lite 15 Ryzen 3, 8 GB e 256 GB",
         "why": "Valuta memoria e spazio SSD rispetto ai programmi che usi.",
@@ -158,7 +158,7 @@
       },
       {
         "url": "https://www.amazon.it/dp/B0H87BHJYG",
-        "category": "Casa e cucina",
+        "category": "Casa e pulizia",
         "title": "SONGMICS pattumiera a pedale da 50 litri",
         "description": "SONGMICS pattumiera a pedale da 50 litri",
         "why": "Misura larghezza e profondità dello spazio in cucina.",
