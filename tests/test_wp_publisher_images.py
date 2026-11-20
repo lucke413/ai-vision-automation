@@ -4,9 +4,10 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image, ImageDraw
 
-from scripts.cover_media import CoverCredit, commons_photo, is_interim_card, is_striped_cover
+from scripts.cover_media import (COVER_SIZE, CoverCredit, commons_photos, cover_exposure, grade_ai_cover,
+                                 is_interim_card, is_striped_cover)
 
-from scripts.wp_publisher import PublisherError, download_image, featured_image_block, select_cover
+from scripts.wp_publisher import PublisherError, download_cover_photo, download_image, featured_image_block, select_cover
 
 
 class FeaturedImageBlockTests(unittest.TestCase):
@@ -71,6 +72,11 @@ class EditorialCoverTests(unittest.TestCase):
         response.iter_content.return_value = [output.getvalue()]
         self.assertEqual(download_image("https://example.com/image.jpg", session)[1], ".png")
 
+    def test_lifts_a_dark_scene_and_rejects_flat_pixels(self):
+        scene = Image.linear_gradient("L").resize(COVER_SIZE).point(lambda level: 18 + level * 65 // 255)
+        self.assertTrue(cover_exposure(scene).dark)
+        self.assertTrue(cover_exposure(grade_ai_cover(scene)).usable)
+        self.assertFalse(cover_exposure(Image.new("RGB", COVER_SIZE, "gray")).usable)
 
 class CoverSelectionTests(unittest.TestCase):
     def setUp(self):
@@ -90,7 +96,7 @@ class CoverSelectionTests(unittest.TestCase):
         generate.assert_called_once_with(self.draft)
 
     @patch("scripts.wp_publisher.generate_ai_cover")
-    @patch("scripts.wp_publisher.download_image", return_value=(b"photo", ".jpg"))
+    @patch("scripts.wp_publisher.download_cover_photo", return_value=b"photo")
     def test_approved_source_precedes_generation(self, download, generate):
         self.draft.update(image_rights_status="owned", image_license="Copyright AI Vision")
         self.assertEqual(select_cover(self.draft, self.session)[:4],
@@ -111,14 +117,32 @@ class CoverSelectionTests(unittest.TestCase):
         photo = {"title": "File:Robert Pattinson in Berlin.jpg", "imageinfo": [image]}
         self.session.get.return_value.json.return_value = {"query": {"pages": [photo]}}
         args = ("", "Robert Pattinson", self.draft["title"], self.session)
-        self.assertIsNone(commons_photo(*args))
+        self.assertEqual(list(commons_photos(*args)), [])
         metadata["LicenseUrl"]["value"] = "https://creativecommons.org/licenses/by/4.0/"
-        url, credit = commons_photo(*args)
+        url, credit = next(commons_photos(*args))
         self.assertEqual(url, image["thumburl"])
         self.assertIn("Harald Krichel", credit.markup())
         self.assertIn("https://creativecommons.org/licenses/by/4.0/", credit.markup())
         photo["title"] = "File:Another person.jpg"
-        self.assertIsNone(commons_photo(*args))
+        self.assertEqual(list(commons_photos(*args)), [])
+
+    @patch("scripts.wp_publisher.download_cover_photo", side_effect=[None, b"second photo"])
+    @patch("scripts.wp_publisher.commons_photos")
+    def test_tries_the_next_verified_photo_when_one_is_unusable(self, candidates, download):
+        credit = CoverCredit("Foto: autore")
+        candidates.return_value = iter([("https://example.com/one.jpg", credit),
+                                        ("https://example.com/two.jpg", credit)])
+        selected = select_cover(self.draft, self.session)
+        self.assertEqual(selected, (b"second photo", ".jpg", "wikimedia_commons", "https://example.com/two.jpg", credit))
+        self.assertEqual(download.call_count, 2)
+
+    @patch("scripts.wp_publisher.download_image")
+    def test_rejects_small_or_transparent_pictures_as_cover_photos(self, download):
+        for image in (Image.new("RGB", (640, 360)), Image.new("RGBA", COVER_SIZE, (220, 150, 140, 0))):
+            stream = io.BytesIO()
+            image.save(stream, "PNG")
+            download.return_value = (stream.getvalue(), ".png")
+            self.assertIsNone(download_cover_photo("https://example.com/photo.png", self.session))
 
     def test_non_https_credit_url_cannot_be_injected(self):
         markup = CoverCredit("<credit>", "javascript:alert(1)").markup()

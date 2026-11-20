@@ -86,9 +86,9 @@ def raw_title(post: dict) -> str:
     return html.unescape(str(title or ""))
 
 
-def fetch_all_posts(client: WordPressClient) -> list[dict]:
+def fetch_all_posts(client: WordPressClient, statuses: tuple[str, ...] = ("publish", "future")) -> list[dict]:
     posts: list[dict] = []
-    for status in ("publish", "future"):
+    for status in statuses:
         page = 1
         while True:
             response = request_with_retry(

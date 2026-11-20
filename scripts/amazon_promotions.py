@@ -20,10 +20,12 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 if __package__:
     from .amazon_affiliate import DISCLOSURE, MARKER, SITE_HOSTS, configured_tag, product_asin, tracking_tag
+    from .cover_media import COVER_SIZE, encode_cover_jpeg
     from article_generator import SourceArticleParser
     from .wp_publisher import WordPressClient, env_bool, get_timezone, publish_one, save_json, slugify
 else:
     from amazon_affiliate import DISCLOSURE, MARKER, SITE_HOSTS, configured_tag, product_asin, tracking_tag
+    from cover_media import COVER_SIZE, encode_cover_jpeg
     from article_generator import SourceArticleParser
     from wp_publisher import WordPressClient, env_bool, get_timezone, publish_one, save_json, slugify
 
@@ -694,15 +696,9 @@ def render_offers(offers: list[Offer], now: datetime, *, disclosure: bool = True
 
 def cover_label(content: bytes, label: str) -> bytes:
     with Image.open(io.BytesIO(content)) as source:
-        photo = ImageOps.fit(source.convert("RGB"), (1200, 675), Image.Resampling.LANCZOS)
-    width, height = photo.size
-    fade = Image.new("RGBA", photo.size)
-    shade = ImageDraw.Draw(fade)
-    for x in range(width):
-        strength = max(0.0, 1 - x / 760)
-        shade.line((x, 0, x, height), fill=(15, 14, 29, round(227 * strength)))
-    cover = Image.alpha_composite(photo.convert("RGBA"), fade)
-    draw = ImageDraw.Draw(cover)
+        cover = ImageOps.fit(source.convert("RGB"), COVER_SIZE, Image.Resampling.LANCZOS)
+    _, height = cover.size
+    draw = ImageDraw.Draw(cover, "RGBA")
     x = 92
     brand = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
     font = ImageFont.truetype("DejaVuSans-Bold.ttf", 75)
@@ -721,23 +717,23 @@ def cover_label(content: bytes, label: str) -> bytes:
         if line:
             lines.append(line)
     title = "\n".join(lines)
-    box = draw.multiline_textbbox((0, 0), title, font=font, spacing=5)
+    box = draw.multiline_textbbox((0, 0), title, font=font, spacing=5, stroke_width=2)
     title_top = max(112, (height - (box[3] - box[1])) // 2 - 22)
+    panel_right = x + max(box[2], int(draw.textlength("Scelte da AI Vision per voi", font=brand))) + 26
+    draw.rounded_rectangle((x - 25, title_top - 63, panel_right, title_top + box[3] + 66),
+                           radius=18, fill=(15, 25, 40, 157))
     draw.text((x, title_top - 49), "AI VISION", font=brand, fill="#dbfa76")
     draw.multiline_text((x, title_top), title, font=font, spacing=5, fill="#fbf8f3",
-                        stroke_width=1, stroke_fill="#202030")
+                        stroke_width=2, stroke_fill="#202030")
     draw.text((x, title_top + box[3] + 30), "Scelte da AI Vision per voi", font=brand, fill="#fbf8f3",
               stroke_width=1, stroke_fill="#202030")
-    buffer = io.BytesIO()
-    cover.convert("RGB").save(buffer, "JPEG", quality=88, optimize=True)
-    return buffer.getvalue()
+    return encode_cover_jpeg(cover)
 
 
 def cover_scene(subject: str) -> str:
-    return ("Contemporary high-end technology and culture magazine editorial photography. On the right "
-            + subject + ". Sculptural translucent acrylic on graphite pedestal, cool lilac rim light, "
-            "subtle acid-lime accent, physically realistic materials. Empty dark left side, "
-            "sharp uncluttered typography space. No glyphs, gift boxes or logos.")
+    return ("Photograph for a technology magazine. On the right, "
+            + subject + ". Window daylight, natural fabrics and light surfaces. "
+            "Keep space on the left for a caption. Clean photograph without any text or logos.")
 
 
 def editorial_picks(group: str, now: datetime, tag: str) -> list[Offer]:

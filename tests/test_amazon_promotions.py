@@ -1,10 +1,12 @@
 import sys
+import io
 import json
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -33,6 +35,14 @@ class AmazonPromotionsTests(unittest.TestCase):
                           "savings": {"percentage": 20}},
             }]},
         }
+
+    def test_offer_title_does_not_alter_the_surrounding_photo(self):
+        photos = io.BytesIO()
+        Image.new("RGB", promos.COVER_SIZE, (188, 200, 216)).save(photos, "JPEG")
+        with Image.open(io.BytesIO(promos.cover_label(photos.getvalue(), "OFFERTE DEL GIORNO"))) as out:
+            luma = out.convert("L")
+            self.assertGreater(luma.getpixel((24, 24)), 190)
+            self.assertLess(luma.getpixel((86, 325)), 140)
 
     def test_black_friday_times_and_local_label(self):
         window = promos.dated_campaign(

@@ -31,18 +31,20 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from requests.auth import HTTPBasicAuth
-from PIL import Image
+from PIL import Image, ImageOps
 
 if __package__:
     from .public_source_links import clean_source_links
     from .amazon_affiliate import affiliate_section, configured_tag, ensure_article_tracking
     from .ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY, is_cybersecurity
-    from .cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
+    from .cover_media import (AI_CREDIT, COVER_SIZE, CoverCredit, commons_photos, cover_exposure,
+                              encode_cover_jpeg, generate_ai_cover, is_retired_cover, safe_https_url)
 else:
     from public_source_links import clean_source_links
     from amazon_affiliate import affiliate_section, configured_tag, ensure_article_tracking
     from ai_cyber import TAG as AI_CYBER_TAG, TOPIC_KEY, is_cybersecurity
-    from cover_media import CoverCredit, commons_photo, generate_ai_cover, is_retired_cover, safe_https_url
+    from cover_media import (AI_CREDIT, COVER_SIZE, CoverCredit, commons_photos, cover_exposure,
+                             encode_cover_jpeg, generate_ai_cover, is_retired_cover, safe_https_url)
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -866,7 +868,7 @@ def download_image(url: str, session: requests.Session) -> tuple[bytes, str] | N
 def select_cover(draft: dict, session: requests.Session) -> tuple[bytes, str, str, str, CoverCredit]:
     image_url = image_url_from_draft(draft)
     if image_rights_approved(draft):
-        downloaded = download_image(image_url, session)
+        downloaded = download_cover_photo(image_url, session)
         if downloaded:
             credit = CoverCredit(
                 str(draft.get("image_attribution") or "").strip(),
@@ -874,15 +876,30 @@ def select_cover(draft: dict, session: requests.Session) -> tuple[bytes, str, st
                 str(draft.get("image_license") or ""),
                 str(draft.get("image_license_url") or ""),
             )
-            return *downloaded, "licensed_source_image", image_url, credit
-    commons = commons_photo(image_url, str(draft.get("cover_subject") or ""),
-                           str(draft.get("title") or ""), session)
-    if commons:
-        url, credit = commons
-        downloaded = download_image(url, session)
+            return downloaded, ".jpg", "licensed_source_image", image_url, credit
+    for url, credit in commons_photos(image_url, str(draft.get("cover_subject") or ""),
+                                    str(draft.get("title") or ""), session):
+        downloaded = download_cover_photo(url, session)
         if downloaded:
-            return *downloaded, "wikimedia_commons", url, credit
-    return generate_ai_cover(draft), ".jpg", "ai_generated", "", CoverCredit("")
+            return downloaded, ".jpg", "wikimedia_commons", url, credit
+    return generate_ai_cover(draft), ".jpg", "ai_generated", "", CoverCredit(AI_CREDIT)
+
+
+def download_cover_photo(url: str, session: requests.Session) -> bytes | None:
+    downloaded = download_image(url, session)
+    if not downloaded:
+        return None
+    with Image.open(io.BytesIO(downloaded[0])) as source:
+        photo = ImageOps.exif_transpose(source)
+        if photo.width < 1080 or photo.height < 608 or photo.width < photo.height:
+            return None
+        if "transparency" in photo.info or "A" in photo.getbands():
+            if photo.convert("RGBA").getchannel("A").getextrema()[0] < 255:
+                return None
+        photo = ImageOps.fit(photo.convert("RGB"), COVER_SIZE, Image.Resampling.LANCZOS)
+        if cover_exposure(photo).usable:
+            return encode_cover_jpeg(photo)
+    return None
 
 
 class WordPressClient:

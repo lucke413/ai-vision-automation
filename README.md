@@ -122,6 +122,8 @@ Il workflow `inline-image-repair.yml` esegue una riparazione conservativa degli 
 
 La generazione automatica gira sulla CPU di GitHub Actions con i pesi pubblici di LCM DreamShaper, bloccati a una revisione. Il runner installa le dipendenze in live, le simulazioni non caricano il modello. Non occorre un servizio immagini a consumo. Se falliscono sia la ricerca sia la generazione, l’articolo interessato resta fuori dalla programmazione e il report WordPress conserva l’errore.
 
+Le nuove copertine sono JPEG 1280×720. Il publisher cerca una fotografia pertinente con licenza verificata e prova le successive quando il file è troppo piccolo, trasparente o scuro. Le immagini generate partono da 896×512 e, se il primo risultato resta poco leggibile, vengono rigenerate una volta. Il workflow `cover-quality.yml` controlla la coda WordPress e l’archivio, in modalità di sola lettura per impostazione predefinita. L’opzione di correzione schiarisce soltanto le immagini IA riconoscibili e registra gli ID delle immagini precedenti e sostitutive.
+
 ### Rassegna Amazon e campagne
 
 `AI Vision Automation` verifica le campagne pubbliche di Amazon Italia e pubblica la rassegna

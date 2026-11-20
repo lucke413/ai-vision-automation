@@ -11,10 +11,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 from statistics import median
 from threading import Lock
+from typing import Iterator
 from urllib.parse import quote, unquote, urlsplit
 
 import requests
-from PIL import Image, ImageColor, ImageEnhance, ImageOps, ImageStat
+from PIL import Image, ImageColor, ImageEnhance, ImageOps
 
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
@@ -24,7 +25,9 @@ MODEL_REVISION = "a85df6a8bd976cdd08b4fd8f3b73f229c9e54df5"
 CREATIVE_COMMONS = re.compile(r"^https://creativecommons\.org/(?:licenses/by(?:-sa)?/(?:2\.0|2\.5|3\.0|4\.0)|publicdomain/(?:zero|mark)/1\.0)/?$")
 PHOTO_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff")
 MODEL_LOCK = Lock()
-EDITORIAL_LIGHT = "Vibrant editorial photograph, bright colored surfaces, directional daylight, crisp natural contrast"
+COVER_SIZE = (1280, 720)
+EDITORIAL_LIGHT = "High detail editorial photograph, bright soft daylight, light midtones, neutral shadows, true colors"
+AI_CREDIT = "Illustrazione generata con IA"
 
 
 class CoverUnavailable(RuntimeError):
@@ -74,12 +77,12 @@ def commons_file_title(image_url: str) -> str:
     return ""
 
 
-def commons_photo(image_url: str, subject: str, title: str, session: requests.Session) -> tuple[str, CoverCredit] | None:
-    """Resolve a known Commons asset or search only for the exact named subject."""
+def commons_photos(image_url: str, subject: str, title: str, session: requests.Session) -> Iterator[tuple[str, CoverCredit]]:
+    """Offer verified candidates in search order so a broken thumbnail can be skipped."""
     file_title = commons_file_title(image_url)
     terms = normalized(subject)
     if not file_title and (len(terms.split()) < 2 or f" {terms} " not in f" {normalized(title)} "):
-        return None
+        return
     params = {
         "action": "query", "format": "json", "formatversion": 2, "prop": "imageinfo",
         "iiprop": "url|size|mime|extmetadata", "iiurlwidth": 1280,
@@ -95,9 +98,9 @@ def commons_photo(image_url: str, subject: str, title: str, session: requests.Se
         response.raise_for_status()
         pages = response.json().get("query", {}).get("pages", [])
     except (requests.RequestException, ValueError):
-        return None
+        return
 
-    for page in pages:
+    for page in sorted(pages, key=lambda row: row.get("index", 0)):
         filename = page.get("title", "").removeprefix("File:")
         if not filename.casefold().endswith(PHOTO_EXTENSIONS):
             continue
@@ -105,7 +108,7 @@ def commons_photo(image_url: str, subject: str, title: str, session: requests.Se
             continue
         for photo in page.get("imageinfo", []):
             width, height = photo.get("width", 0), photo.get("height", 0)
-            if width < 800 or height < 400 or (not file_title and width < height):
+            if width < 1080 or height < 608 or width < height:
                 continue
             image = str(photo.get("thumburl") or photo.get("url") or "")
             if not safe_https_url(image) or urlsplit(image).netloc not in {"upload.wikimedia.org", "thumb.wikimedia.org"}:
@@ -127,9 +130,8 @@ def commons_photo(image_url: str, subject: str, title: str, session: requests.Se
                 continue
             credit_text = f"Foto: {artist}" if artist else "Foto in pubblico dominio"
             source = "https://commons.wikimedia.org/wiki/" + quote(page["title"].replace(" ", "_"), safe=":")
-            return image, CoverCredit(credit_text + " · versioni ridimensionate/ritagliate", source,
+            yield image, CoverCredit(credit_text + " · immagine ridimensionata e ritagliata", source,
                                      license_name, license_url)
-    return None
 
 
 @lru_cache(maxsize=1)
@@ -144,43 +146,79 @@ def load_image_model():
 
 
 def generate_ai_cover(draft: dict) -> bytes:
-    """Generate one new image on the runner without using a paid API."""
+    """Generate a daylight photograph with one alternate take if the first fails inspection."""
     title = str(draft.get("title") or "").strip()
     scene = str(draft.get("cover_prompt") or "").strip()[:300]
     if not scene:
-        scene = "Photographic editorial interpretation of " + title[:160]
-    prompt = f"{EDITORIAL_LIGHT}. {scene}, clear focal subject, realistic texture, landscape, no text, no logos"
+        scene = "A practical real-world scene illustrating " + title[:140]
     seed = int.from_bytes(hashlib.sha256(title.encode()).digest()[:4], "big")
     try:
         import torch
 
-        with MODEL_LOCK, torch.inference_mode():
-            result = load_image_model()(prompt, width=640, height=384, num_inference_steps=8, guidance_scale=6.0,
-                           generator=torch.Generator().manual_seed(seed))
-        if any(result.nsfw_content_detected or []):
-            raise CoverUnavailable("Il generatore ha respinto questa copertina.")
-        image = ImageOps.fit(result.images[0].convert("RGB"), (1200, 675), Image.Resampling.LANCZOS)
-        if max(high - low for low, high in image.getextrema()) < 24:
-            raise CoverUnavailable("Il generatore ha restituito un'immagine vuota.")
-        image = grade_ai_cover(image)
-        output = io.BytesIO()
-        image.save(output, format="JPEG", quality=88, optimize=True)
-        return output.getvalue()
+        for index, lighting in enumerate((EDITORIAL_LIGHT, "Real editorial photograph in an airy daylight studio, evenly lit foreground")):
+            prompt = f"{lighting}. {scene}. Sharp single subject, natural materials, wide 16:9 composition, no lettering."
+            with MODEL_LOCK, torch.inference_mode():
+                result = load_image_model()(
+                    prompt, width=896, height=512, num_inference_steps=6, guidance_scale=7.0,
+                    generator=torch.Generator().manual_seed(seed + index),
+                )
+            if any(result.nsfw_content_detected or []):
+                continue
+            frame = ImageOps.fit(result.images[0].convert("RGB"), COVER_SIZE, Image.Resampling.LANCZOS)
+            if not cover_exposure(frame).has_detail:
+                continue
+            image = grade_ai_cover(frame)
+            if cover_exposure(image).usable:
+                return encode_cover_jpeg(image)
+        raise CoverUnavailable("Il generatore non ha restituito una copertina sufficientemente nitida e luminosa.")
     except (ImportError, OSError, RuntimeError, ValueError, requests.RequestException) as exc:
         if isinstance(exc, CoverUnavailable):
             raise
         raise CoverUnavailable(f"Generazione copertina IA fallita ({type(exc).__name__}: {exc}).") from exc
 
 
+@dataclass(frozen=True)
+class CoverExposure:
+    median: int
+    high: int
+    spread: int
+    shadow_fraction: float
+
+    @property
+    def dark(self) -> bool:
+        return (self.median < 91 and self.high < 146) or self.shadow_fraction > 0.57
+
+    @property
+    def has_detail(self) -> bool:
+        return self.spread >= 35
+
+    @property
+    def usable(self) -> bool:
+        return not self.dark and self.has_detail and self.median < 244
+
+
+def cover_exposure(image: Image.Image) -> CoverExposure:
+    thumbnail = ImageOps.fit(image.convert("L"), (160, 90), Image.Resampling.BILINEAR)
+    values = sorted(thumbnail.getdata())
+    return CoverExposure(values[7200], values[12240], values[13680] - values[1440],
+                         sum(value < 54 for value in values) / len(values))
+
+
 def grade_ai_cover(image: Image.Image) -> Image.Image:
-    """Lift deep midtones without brightening highlights or altering external photos."""
-    image = ImageOps.autocontrast(image, cutoff=0.6, preserve_tone=True)
-    luma = ImageStat.Stat(image.convert("L")).median[0]
-    if luma < 115:
-        gamma = max(0.72, min(1.0, luma / 115))
+    """Open the midtones while preserving the peak brightness and deepest blacks."""
+    rgb = image.convert("RGB")
+    exposure = cover_exposure(rgb)
+    if exposure.dark:
+        gamma = max(0.47, min(0.83, exposure.median / 115))
         curve = [round(255 * (level / 255) ** gamma) for level in range(256)]
-        image = image.point(curve * 3)
-    return ImageEnhance.Color(image).enhance(1.16)
+        rgb = rgb.point(curve * 3)
+    return ImageEnhance.Color(rgb).enhance(1.08)
+
+
+def encode_cover_jpeg(image: Image.Image) -> bytes:
+    output = io.BytesIO()
+    image.save(output, format="JPEG", quality=91, optimize=True)
+    return output.getvalue()
 
 
 def is_striped_cover(image: Image.Image) -> bool:

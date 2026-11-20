@@ -161,10 +161,11 @@ REGOLE EDITORIALI:
   fonti. Se pertinente, puoi riportare un prezzo di listino documentato
   indicando esplicitamente che è quello del produttore.
 - non presentare la bozza come verifica indipendente dei fatti.
-- Compila cover_prompt con una scena di 25-45 parole in inglese, incentrata
-  su un soggetto visivo preciso, con ambiente, luce e inquadratura. Preferisci
-  luce direzionale chiara e accostamenti di colori vivi ma naturali, pertinenti
-  al tema. Mantieni il soggetto leggibile anche in miniatura. Per persone,
+- Compila cover_prompt con 20-35 parole in inglese per una fotografia:
+  scegli un oggetto o un gesto concreto, materiali reali, un ambiente semplice
+  e luce diurna diffusa sul primo piano. Anche per IA, gaming e sicurezza
+  evita stanze buie, neon, sfondi astratti e resa 3D. Mantieni il soggetto
+  grande e leggibile anche in miniatura, con colori naturali. Per persone,
   notizie e prodotti specifici preferisci una scena simbolica, senza ritratti,
   loghi, schermate ufficiali o dettagli inventati. Niente testo nell’immagine.
 - In cover_subject inserisci un nome completo di persona, luogo o modello

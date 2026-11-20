@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from PIL import Image
 
 from scripts import inline_image_repair as repair
+from scripts import cover_quality_repair as quality
 
 
 class InlineImageRepairTests(unittest.TestCase):
@@ -84,6 +85,23 @@ class InlineImageRepairTests(unittest.TestCase):
     def test_later_image_is_not_captured_by_a_broken_leading_marker(self):
         content = '<!-- wp:image {"id":42} -->' + self.body + self.cover
         self.assertEqual(repair.leading_cover(content), (None, ""))
+
+    @patch.object(quality, "request_with_retry")
+    def test_exposure_update_retains_the_caption_body_and_schedule(self, request):
+        cover = repair.featured_image_block(self.media, "Alt originale", repair.CoverCredit("Credito originale"))
+        post = self.post(cover + self.body + '<p><a href="https://www.amazon.it/?tag=lavocdelweb-21">Vedi</a></p>')
+        post.update(date="2026-11-22T08:00:00", date_gmt="2026-11-22T07:00:00", slug="test")
+        block, _ = repair.leading_cover(repair.raw_content(post))
+        current, query, reread, write, after = [MagicMock() for _ in range(5)]
+        request.side_effect = [current, query, reread, write, after]
+        current.json.return_value = post
+        reread.json.return_value = post
+        query.json.return_value = [{"source_url": self.new_url, "id": 77}]
+        new_cover = cover.replace(self.old_url, self.new_url).replace('"id":42', '"id":77').replace("wp-image-42", "wp-image-77")
+        new_content = new_cover + repair.raw_content(post)[len(cover):]
+        after.json.return_value = {**post, "featured_media": 77, "content": {"raw": new_content}}
+        self.assertEqual(quality.update_cover(self.client, post, self.media, Image.new("RGB", (1280, 720)), block), 77)
+        self.assertEqual(request.call_args_list[3].kwargs["json"], {"featured_media": 77, "content": new_content})
 
 
 if __name__ == "__main__":
