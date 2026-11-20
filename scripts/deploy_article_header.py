@@ -20,7 +20,10 @@ RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
 RELATED_SOURCE = SOURCE.with_name("related-cards.php")
 READING_NAME = "AI Vision: articoli di tendenza e più letti"
 READING_SOURCE = SOURCE.with_name("reading-widget.php")
-PREVIOUS_READING_HASH = "28e535440a8a1a6174432563d67ca53394f08d7f6a227d6a36769b0acea321bb"
+PREVIOUS_READING_HASH = "005d6234235eedac6e1b17722ee2a1ad1d0f4054996a4db908241d9845020fff"
+TELEGRAM_NAME = "AI Vision: fascia offerte Telegram"
+TELEGRAM_SOURCE = SOURCE.with_name("telegram-offers.php")
+TELEGRAM_URL = "https://t.me/aivision_tech"
 NAVIGATION_NAME = "AI Vision: navigazione offerte e indice articoli"
 NAVIGATION_SOURCE = SOURCE.with_name("editorial-navigation.php")
 ARTICLES = (
@@ -98,41 +101,31 @@ def verify_related_cards(session):
 
 
 def verify_reading_widget(session):
-    for path in ("/", *ARTICLES, *CATEGORIES):
+    for path in ("/", *ARTICLES, *CATEGORIES, "/category/gaming/", "/tag/gta-6/",
+                 "/contatti/", "/page/2/", "/?s=Amazon"):
         page = get_page(session, path)
-        widget = page.select(".aiv-reading")
-        container = ".top-right-area .aiv-reading" if path == "/" else "#sidebar-right .aiv-reading"
         if not page.select_one("#aivision-reading-widget-inline-css"):
             raise RuntimeError(f"Stile del menu lingua mancante su {path}")
-        if path in CATEGORIES:
-            language = page.select_one("#sidebar-right .aiv-language")
-        elif len(widget) == 1 and page.select_one(container) and len(widget[0].select(".aiv-reading-panel li a[href]")) >= 2:
-            if path == "/":
-                language = widget[0].find_previous_sibling()
-                if not page.select_one("#sidebar-right #block-20 .aiv-social-box"):
-                    raise RuntimeError("Widget social assente dalla posizione prevista in home.")
-            else:
-                sidebar = page.select_one("#sidebar-right")
-                language = sidebar.select_one(".aiv-language")
-                social = sidebar.select("#block-20:has(.aiv-social-box)")
-                children = sidebar.find_all(recursive=False)
-                adverts = [
-                    node for node in children
-                    if "av-autopilot-sidebar-widget" in node.get("class", [])
-                    or node.get("id", "").startswith("av_sidebar_banner_")
-                ]
-                if (not language or len(social) != 1 or len(sidebar.select(".aiv-social-box")) != 1
-                        or any(node not in children for node in (language, social[0], widget[0]))
-                        or len(adverts) != 1 or widget[0].find_previous_sibling() != adverts[0]
-                        or not children.index(language) < children.index(social[0]) < children.index(adverts[0])):
-                    positions = [node.get("id") or node.get("class") or node.name for node in children]
-                    raise RuntimeError(f"Ordine della barra laterale inatteso su {path}: {positions}")
-                print(f"Widget Da leggere verificato subito sotto la pubblicità su {path}")
-        else:
+        sidebar = page.select_one("#sidebar-right")
+        if not sidebar:
+            raise RuntimeError(f"Barra laterale mancante su {path}")
+        children = sidebar.find_all(recursive=False)
+        language = page.select("details.aiv-language")
+        widget = page.select(".aiv-reading")
+        if len(widget) != 1 or len(widget[0].select(".aiv-reading-panel li a[href]")) < 2:
             raise RuntimeError(f"Widget letture mancante o incompleto su {path}")
-        if not language or language.name != "details" or "aiv-language" not in language.get("class", []):
-            raise RuntimeError(f"Selettore della lingua mancante su {path}")
-        links = language.select("a[lang][href]")
+        adverts = [
+            node for node in children
+            if "av-autopilot-sidebar-widget" in node.get("class", [])
+            or node.get("id", "").startswith("av_sidebar_banner_")
+        ]
+        social = sidebar.select("#block-20:has(.aiv-social-box)")
+        categories = sidebar.select("#block-7.widget_categories")
+        if (any(len(group) != 1 for group in (language, adverts, social, categories))
+                or children != [language[0], adverts[0], social[0], widget[0], categories[0]]):
+            positions = [node.get("id") or node.get("class") or node.name for node in children]
+            raise RuntimeError(f"Ordine della barra laterale inatteso su {path}: {positions}")
+        links = language[0].select("a[lang][href]")
         original = SITE + path
         if (not links or links[0]["lang"] != "it" or links[0]["href"] != original
                 or links[0].get("data-original") != original):
@@ -148,7 +141,22 @@ def verify_reading_widget(session):
             languages.add(link["lang"])
         if len(links) != 9 or len(languages) != 8 or "it" in languages:
             raise RuntimeError(f"Elenco delle lingue incompleto su {path}")
-        print(f"Menu lingua verificato su {path} — italiano e {len(languages)} traduzioni")
+        print(f"Ordine dei cinque widget e {len(languages)} traduzioni verificati su {path}")
+
+
+def verify_telegram_offers(session):
+    for path in ("/", ARCHIVE, "/contatti/", *ARTICLES):
+        page = get_page(session, path)
+        header = page.select_one("header.mg-headwidget")
+        banners = page.select(".aiv-telegram-offers")
+        if (not header or not header.select_one(".mg-menu-full") or len(banners) != 1
+                or header.find_next_sibling(lambda node: "clearfix" not in node.get("class", [])) != banners[0]
+                or not page.select_one("#aivision-telegram-offers-inline-css")):
+            raise RuntimeError(f"Fascia Telegram mancante o fuori posizione su {path}")
+        links = banners[0].select("a[href]")
+        if len(links) != 1 or links[0]["href"] != TELEGRAM_URL or not links[0].get_text(strip=True):
+            raise RuntimeError(f"Collegamento Telegram inatteso su {path}")
+        print(f"Fascia offerte e destinazione Telegram verificate su {path}")
 
 
 def verify_editorial_navigation(session):
@@ -226,6 +234,7 @@ def main():
     variants.add_argument("--related-cards", action="store_true")
     variants.add_argument("--reading-widget", action="store_true")
     variants.add_argument("--editorial-navigation", action="store_true")
+    variants.add_argument("--telegram-offers", action="store_true")
     args = parser.parse_args()
     base = os.environ.get("WP_BASE_URL", "").rstrip("/").removesuffix("/wp-json")
     user, password = (os.environ.get(key, "") for key in ("WP_USERNAME", "WP_APP_PASSWORD"))
@@ -235,6 +244,8 @@ def main():
         admin.auth = (user, password)
         if args.editorial_navigation:
             deploy(admin, public, NAVIGATION_NAME, NAVIGATION_SOURCE, verify_editorial_navigation)
+        elif args.telegram_offers:
+            deploy(admin, public, TELEGRAM_NAME, TELEGRAM_SOURCE, verify_telegram_offers)
         elif args.reading_widget:
             deploy(admin, public, READING_NAME, READING_SOURCE, verify_reading_widget,
                    previous_hash=PREVIOUS_READING_HASH)
