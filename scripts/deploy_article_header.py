@@ -30,6 +30,8 @@ RESPONSIVE_SOURCE = SOURCE.with_name("responsive-layout.php")
 PREVIOUS_RESPONSIVE_HASH = "16fb5561034de4b21e8efaf4b82cba16f279606e62804641e0730f98e9c4e158"
 NAVIGATION_NAME = "AI Vision: navigazione offerte e indice articoli"
 NAVIGATION_SOURCE = SOURCE.with_name("editorial-navigation.php")
+PREVIOUS_NAVIGATION_HASH = "85c3a0be501f25f920f24334bbb65fb2849fad044f94a2d12d48e08f09fd9029"
+GTA_ANALYSIS = "/gta-6-su-ps5-e-ps5-pro-prestazioni-grafica-e-dualsense/"
 ARTICLES = (
     "/migliori-sedie-gaming-modelli-fasce-prezzo/",
     "/amazon-black-friday-2026-11-19-2/",
@@ -193,7 +195,16 @@ def verify_editorial_navigation(session):
         links = outline[0].select('a[href^="#"]') if len(outline) == 1 else []
         if len(links) < 3 or any(not page.find(id=unquote(link["href"][1:])) for link in links):
             raise RuntimeError(f"Indice mancante o collegamenti incompleti su {path}")
+        if path == ARTICLES[0] and len(page.select("main .aiv-guide-comparison tbody tr")) != 3:
+            raise RuntimeError("Confronto tra le sedie gaming mancante o incompleto.")
         print(f"Indice verificato su {path} — {len(links)} sezioni")
+    gta = get_page(session, GTA_ANALYSIS)
+    gta_links = gta.select('main .av-amazon-affiliate a[href="https://www.amazon.it/dp/B0GZH9BJYD?tag=lavocdelweb-21"]')
+    if len(gta_links) != 1 or "sponsored" not in gta_links[0].get("rel", []):
+        raise RuntimeError("Link affiliato all'edizione GTA VI per PS5 mancante o duplicato.")
+    if not get_page(session, "/chi-sono/").select_one(".aiv-buying-method"):
+        raise RuntimeError("Metodo di selezione editoriale mancante nella pagina del progetto.")
+    print("Verificati confronto sedie, scheda GTA VI per PS5 e metodo editoriale.")
 
 
 def ensure_snippets_plugin(session):
@@ -264,7 +275,8 @@ def main():
     with requests.Session() as admin, requests.Session() as public:
         admin.auth = (user, password)
         if args.editorial_navigation:
-            deploy(admin, public, NAVIGATION_NAME, NAVIGATION_SOURCE, verify_editorial_navigation)
+            deploy(admin, public, NAVIGATION_NAME, NAVIGATION_SOURCE, verify_editorial_navigation,
+                   previous_hash=PREVIOUS_NAVIGATION_HASH)
         elif args.telegram_offers:
             deploy(admin, public, TELEGRAM_NAME, TELEGRAM_SOURCE, verify_telegram_offers,
                    previous_hash=PREVIOUS_TELEGRAM_HASH)

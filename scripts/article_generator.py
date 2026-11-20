@@ -146,10 +146,12 @@ REGOLE EDITORIALI:
 - evita come cornice narrativa "secondo la fonte", "stando alla fonte",
   "la fonte riporta/segnala", "come riportato dalla fonte" e formule simili;
 - non inserire link affiliati, codici tracking o pubblicità nel testo;
-- Per le recensioni, gli articoli su prodotti e le offerte, elenca in
+- Per le recensioni, gli articoli su prodotti, videogiochi, console, accessori e le offerte, elenca in
   amazon_products tutti i modelli trattati singolarmente, fino a dodici, includendo marca e variante quando
   sono nella fonte. Compila il campo anche per una NEWS se il suo argomento
-  principale è un modello disponibile o annunciato. Usa una lista vuota per altri articoli e per indiscrezioni
+  principale è un modello disponibile o annunciato. Per un gioco indica il titolo esatto e la piattaforma
+  se la fonte e l’articolo nominano entrambi come parte della stessa edizione. Usa una lista vuota per
+  notizie su abbonamenti o aggiornamenti che citano prodotti soltanto di passaggio, altri articoli e indiscrezioni
   su prodotti non ancora annunciati. Non inventare nomi o codici prodotto.
   Negli articoli di offerte e nelle guide allo shopping, per ciascun modello
   inserisci anche in amazon_product_notes il nome esatto già in amazon_products,

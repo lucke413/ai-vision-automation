@@ -1,3 +1,17 @@
 {
-  "tracking_id": "lavocdelweb-21"
+  "tracking_id": "lavocdelweb-21",
+  "verified_games": [
+    {
+      "aliases": ["Grand Theft Auto VI", "GTA 6", "GTA VI"],
+      "platform": ["PlayStation 5", "PS5"],
+      "label": "Grand Theft Auto VI per PlayStation 5 (codice download)",
+      "url": "https://www.amazon.it/Grand-Theft-Auto-VI-PlayStation/dp/B0GZH9BJYD"
+    },
+    {
+      "aliases": ["Grand Theft Auto VI", "GTA 6", "GTA VI"],
+      "platform": ["Xbox Series X", "Xbox Series S", "Xbox Series X S", "Xbox Series"],
+      "label": "Grand Theft Auto VI per Xbox Series X|S (codice download)",
+      "url": "https://www.amazon.it/dp/B0GZVXB4DX"
+    }
+  ]
 }

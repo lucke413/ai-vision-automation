@@ -113,12 +113,42 @@ class AmazonAffiliateTests(unittest.TestCase):
 
     def test_subscription_and_vehicle_do_not_add_incidental_products(self):
         subscription = {"title": "GTA Plus gratis con GTA 6: l'abbonamento",
-                        "cover_subject": "GTA 6", "body_markdown": "GTA 6 arriva su console."}
+                        "cover_subject": "GTA 6", "body_markdown": "GTA 6 arriva su PS5.",
+                        "amazon_products": ["GTA 6"]}
         vehicle = {"title": "Kymco People R Hybrid porta l'ibrido sugli scooter",
                    "body_markdown": "Kymco People R Hybrid è uno scooter.",
                    "amazon_products": ["Kymco People R Hybrid"]}
         self.assertEqual(article_products(subscription), [])
+        self.assertEqual(affiliate_section(subscription, "<p>Testo</p>", TEST_TAG)[1], "no_product")
         self.assertEqual(article_products(vehicle), [])
+
+    def test_game_analysis_uses_verified_edition_without_guessing_a_platform(self):
+        draft = {"title": "Come gira GTA 6 su PS5 e PS5 Pro",
+                 "body_markdown": "Grand Theft Auto VI gira sulle due console Sony.",
+                 "amazon_products": ["Grand Theft Auto VI"]}
+        block, status, links = affiliate_section(draft, "<p>Testo</p>", TEST_TAG)
+        self.assertEqual(status, "inserted")
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["asin"], "B0GZH9BJYD")
+        self.assertIn("PlayStation 5 (codice download)", block)
+        self.assertIn(DISCLOSURE, block)
+        self.assertIn(f"/dp/B0GZH9BJYD?tag={TEST_TAG}", block)
+
+        xbox = {"title": "GTA 6 su Xbox Series X: analisi delle prestazioni",
+                "body_markdown": "GTA 6 è l'argomento principale su Xbox e citiamo la PS5.",
+                "amazon_products": ["GTA 6"]}
+        _, _, xbox_links = affiliate_section(xbox, "<p>Testo</p>", TEST_TAG)
+        self.assertEqual([link["asin"] for link in xbox_links], ["B0GZVXB4DX"])
+        pc = {**xbox, "title": "GTA 6 su PC"}
+        self.assertEqual(affiliate_section(pc, "<p>Testo</p>", TEST_TAG)[1], "no_product")
+
+    def test_console_title_can_recover_a_specific_model_without_metadata(self):
+        console = {"title": "PlayStation 5 Slim: la console di Sony",
+                   "body_markdown": "La PlayStation 5 Slim è la console al centro della guida."}
+        self.assertEqual(article_products(console), ["PlayStation 5 Slim"])
+        block, _, links = affiliate_section(console, "<p>Testo</p>", TEST_TAG)
+        self.assertEqual(links[0]["type"], "search")
+        self.assertIn("k=PlayStation+5+Slim", block)
 
     def test_does_not_guess_canonical_links_or_use_platform_tag(self):
         self.assertEqual(product_asin("https://amazon.it.example.org/dp/B012345678"), "")
@@ -152,6 +182,26 @@ class AmazonAffiliateTests(unittest.TestCase):
         self.assertIn(DISCLOSURE, content)
         self.assertIn('rel="sponsored nofollow"', content)
         self.assertEqual(result["amazon_affiliate_status"], "inserted")
+
+    def test_generic_gaming_guide_uses_thematic_archive(self):
+        client = publisher.WordPressClient("https://example.com", "", "", dry_run=True)
+        categories = {
+            "Guide": {"id": 7, "name": "Guide", "link": "https://example.com/category/guide/"},
+            "Gaming e console": {"id": 8, "name": "Gaming e console",
+                                 "link": "https://example.com/category/gaming/"},
+        }
+        client.get_or_create_term = MagicMock(side_effect=lambda kind, name: categories[name])
+        client.related_link = MagicMock(return_value="")
+        client.create_post = MagicMock(return_value={"status": "planned"})
+        draft = {"title": "Come organizzare una postazione da gioco", "category": "Gaming",
+                 "story_type": "GUIDA", "body_markdown": " ".join(["contenuto"] * 600)}
+        with patch.dict(os.environ, {"AMAZON_ASSOCIATE_TAG": TEST_TAG}):
+            publisher.publish_one(draft, datetime.now(timezone.utc), client, client.session)
+        payload = client.create_post.call_args.args[0]
+        client.related_link.assert_called_once_with(draft, 8)
+        self.assertEqual(payload["categories"], [7, 8])
+        self.assertIn("https://example.com/category/gaming/", payload["content"])
+        self.assertNotIn("https://www.amazon.it/", payload["content"])
 
 
 if __name__ == "__main__":

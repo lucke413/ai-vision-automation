@@ -111,6 +111,54 @@ function aivision_article_outline( $content ) {
     return $panel . "\n" . $updated;
 }
 
+function aivision_buying_context( $content ) {
+    if ( ! is_main_query() || ! in_the_loop() || is_feed() ) {
+        return $content;
+    }
+
+    if ( is_single( 2957 ) ) {
+        if ( false !== strpos( $content, 'aiv-guide-comparison' ) ) {
+            return $content;
+        }
+        $comparison = <<<'HTML'
+<figure class="wp-block-table aiv-guide-comparison" tabindex="0">
+    <table>
+        <caption>Confronto rapido tra tre sedie, dalle schede dei produttori</caption>
+        <thead><tr><th scope="col">Modello</th><th scope="col">Per chi</th><th scope="col">Punto forte</th><th scope="col">Da considerare</th></tr></thead>
+        <tbody>
+            <tr><th scope="row"><a href="https://www.corsair.com/it/it/p/gaming-chairs/cf-9010051-ww/tc100-relaxed-gaming-chair-fabric-black-black-cf-9010051-ww">Corsair TC100 Relaxed</a></th><td>Chi preferisce una seduta in tessuto</td><td>Cuscino lombare regolabile</td><td>Braccioli 2D</td></tr>
+            <tr><th scope="row"><a href="https://www.corsair.com/us/en/p/gaming-chairs/cf-9010056-ww/t3-rush-fabric-gaming-chair-2023-grey-charcoal-cf-9010056-ww">Corsair T3 Rush (2023)</a></th><td>Chi vuole regolare meglio i braccioli</td><td>Braccioli 4D e rivestimento in tessuto</td><td>Seduta alta 48–58 cm</td></tr>
+            <tr><th scope="row"><a href="https://www.razer.com/it-it/gaming-chairs/razer-fujin-pro">Razer Fujin Pro</a></th><td>Chi cerca una seduta in rete</td><td>Supporto lombare regolabile in altezza e profondità</td><td>Portata dichiarata fino a 136 kg</td></tr>
+        </tbody>
+    </table>
+</figure>
+HTML;
+        return preg_replace( '/<h2\b/i', $comparison . "\n" . '$0', $content, 1 ) ?? $content;
+    }
+
+    if ( is_single( 2936 ) && false === strpos( $content, 'B0GZH9BJYD' ) ) {
+        return $content . <<<'HTML'
+<p>Il confronto riprende <a href="https://www.everyeye.it/notizie/come-gira-gta-6-ps5-ps5-pro-prestazioni-grafica-potenzialit-dualsense-912320.html">l’analisi di Davide Leoni su Everyeye</a>. La <a href="https://www.playstation.com/it-it/games/grand-theft-auto-vi/">scheda ufficiale di PlayStation</a> riporta il supporto alla vibrazione e agli effetti dei grilletti del DualSense.</p>
+<section class="av-amazon-affiliate" aria-label="Edizione PlayStation 5 su Amazon">
+    <p><strong>Grand Theft Auto VI per PS5 · codice download</strong></p>
+    <p>La confezione contiene un codice da riscattare su PlayStation. Prezzo e disponibilità sono indicati sulla scheda del venditore.</p>
+    <p>In qualità di Affiliato Amazon io ricevo un guadagno dagli acquisti idonei.</p>
+    <p><a href="https://www.amazon.it/dp/B0GZH9BJYD?tag=lavocdelweb-21" rel="sponsored nofollow">Vedi l’edizione PS5 su Amazon.it</a></p>
+</section>
+HTML;
+    }
+
+    if ( is_page( 288 ) && false === strpos( $content, 'aiv-buying-method' ) ) {
+        return $content . <<<'HTML'
+<section class="aiv-buying-method">
+    <h2>Come selezioniamo prodotti e offerte</h2>
+    <p>Colleghiamo alla scheda di acquisto quando possiamo identificare con precisione il prodotto, la sua variante e, per i videogiochi, la piattaforma. Le guide possono basarsi su schede dei produttori, documentazione e analisi attribuite. Quando una prova è citata, indichiamo chi l’ha svolta.</p>
+</section>
+HTML;
+    }
+    return $content;
+}
+
 function aivision_editorial_navigation_styles() {
     if ( ! is_singular( 'post' ) && ! is_category( 'offerte-2' ) ) {
         return;
@@ -147,9 +195,13 @@ function aivision_editorial_navigation_styles() {
 .aiv-article-outline li { padding: 4px 0; }
 .aiv-article-outline .aiv-outline-level-3 { margin-inline-start: 12px; }
 .single main h2[id], .single main h3[id] { scroll-margin-top: 105px; }
+.aiv-guide-comparison { overflow-x: auto; }
+.aiv-guide-comparison table { width: 100%; min-width: 34rem; }
+.aiv-guide-comparison caption { caption-side: top; color: inherit; font-weight: 700; }
 CSS
     );
 }
 add_action( 'loop_start', 'aivision_offers_overview' );
 add_filter( 'the_content', 'aivision_article_outline', 25 );
+add_filter( 'the_content', 'aivision_buying_context', 26 );
 add_action( 'wp_enqueue_scripts', 'aivision_editorial_navigation_styles', 31 );

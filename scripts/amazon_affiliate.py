@@ -36,8 +36,16 @@ RETAIL_PRODUCT = re.compile(
     r"\b(?:mouse|tastier\w*|cuffi\w*|auricolar\w*|smartphone|tablet|notebook|"
     r"monitor|televisor\w*|smartwatch|controller|scheda grafica|processore|"
     r"ssd|aspirapolvere|lavapavimenti|sed(?:ia|ie)|stampant\w*|fotocamer\w*|"
-    r"e-reader|altoparlant\w*|soundbar|proiettor\w*|console|power bank)\b", re.I,
+    r"e-reader|altoparlant\w*|soundbar|proiettor\w*|console|power bank|videogioch[io]|"
+    r"playstation\s*[45]|ps[45]|xbox\s+series|nintendo switch)\b", re.I,
 )
+GAMING_NEWS = re.compile(r"\b(?:gta|grand theft auto|videogioch[io]|playstation|ps[45]|xbox|nintendo switch)\b", re.I)
+NON_PURCHASE_NEWS = re.compile(
+    r"\b(?:gta plus|playstation plus|ps plus|game pass|abbonament\w*|gratis|gratuit\w*|"
+    r"trucc(?:o|hi)|ban|patch|hotfix)\b", re.I,
+)
+PLATFORM_MENTION = re.compile(r"\b(?:pc|steam|windows|xbox|ps[45]|playstation\s*[45]|nintendo switch)\b", re.I)
+ACCESSORY_SUBJECT = re.compile(r"\b(?:controller|dualsense|gamepad|cuffi\w*|accessori\w*)\b", re.I)
 MODEL_CODE = re.compile(r"\b(?=[a-z\d-]*[a-z])(?=[a-z\d-]*\d)[a-z\d-]{3,}\b", re.I)
 HEADLINE_WORDS = re.compile(r"\b(?:che|come|cosa|quando|quanto|gratis|con|del|della|aggiornament\w*|scadenz\w*)\b", re.I)
 
@@ -60,12 +68,15 @@ def configured_tag() -> str:
     value = os.environ.get("AMAZON_ASSOCIATE_TAG", "")
     if value:
         return tracking_tag(value)
-    if CONFIG.is_file():
-        try:
-            return tracking_tag(str(json.loads(CONFIG.read_text(encoding="utf-8")).get("tracking_id") or ""))
-        except (OSError, ValueError, AttributeError):
-            return ""
-    return ""
+    return tracking_tag(str(affiliate_config().get("tracking_id") or ""))
+
+
+def affiliate_config() -> dict:
+    try:
+        data = json.loads(CONFIG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def product_asin(url: str) -> str:
@@ -106,6 +117,8 @@ def article_products(draft: dict, source: str | None = None) -> list[str]:
         values = []
     title = str(draft.get("title") or "")
     if PREVIEW_ONLY.search(title) or (VEHICLE.search(title) and not RETAIL_PRODUCT.search(title)):
+        return []
+    if GAMING_NEWS.search(title) and NON_PURCHASE_NEWS.search(title):
         return []
     body = str(draft.get("body_markdown") or "")
     excerpt = str(draft.get("excerpt") or "")
@@ -163,6 +176,37 @@ def matched_asin(product: str, links: list[dict]) -> str:
         if label == name and asin:
             matches.add(asin)
     return next(iter(matches)) if len(matches) == 1 else ""
+
+
+def verified_game_editions(draft: dict) -> tuple[dict[str, str], set[str]]:
+    """Resolve an explicitly discussed game to a verified edition for its platform."""
+    title = str(draft.get("title") or "")
+    body = str(draft.get("body_markdown") or "")
+    if PREVIEW_ONLY.search(title) or NON_PURCHASE_NEWS.search(title):
+        return {}, set()
+    title_words = words(title)
+    editions = {}
+    generic_names = set()
+    for game in affiliate_config().get("verified_games") or []:
+        aliases = {words(alias) for alias in game["aliases"]}
+        in_title = [alias for alias in aliases if mentions(alias, title)]
+        if not in_title or not any(mentions(alias, body) for alias in aliases):
+            continue
+        first = min(title_words.index(alias) for alias in in_title)
+        if ACCESSORY_SUBJECT.search(title_words[:first]):
+            continue
+        generic_names.update(aliases)
+        platform_names = {words(platform) for platform in game["platform"]}
+        generic_names.update(f"{alias} {platform}" for alias in aliases for platform in platform_names)
+        generic_names.add(words(game["label"]))
+        platform_text = title if PLATFORM_MENTION.search(title) else body
+        if not any(mentions(platform, platform_text) or mentions(platform + " pro", platform_text)
+                   for platform in platform_names):
+            continue
+        asin = product_asin(game["url"])
+        if asin:
+            editions[game["label"]] = asin
+    return editions, generic_names
 
 
 class ExistingAmazonLinks(HTMLParser):
@@ -265,6 +309,12 @@ def product_notes(values: object, products: list[str]) -> dict[str, dict[str, st
 
 def affiliate_section(draft: dict, body: str, tag: str) -> tuple[str, str, list[dict]]:
     products = article_products(draft)
+    if GAMING_NEWS.search(str(draft.get("title") or "")):
+        verified, generic_names = verified_game_editions(draft)
+        products = [*verified, *(product for product in products if words(product) not in generic_names)]
+        products = products[:MAX_PRODUCTS]
+    else:
+        verified = {}
     if not products:
         return "", "no_product", []
     tag = tracking_tag(tag)
@@ -280,7 +330,7 @@ def affiliate_section(draft: dict, body: str, tag: str) -> tuple[str, str, list[
     notes = product_notes(draft.get("amazon_product_notes"), products)
     links = []
     for product in products:
-        asin = matched_asin(product, source_links)
+        asin = verified.get(product) or matched_asin(product, source_links)
         if asin:
             url = f"https://www.amazon.it/dp/{asin}?" + urlencode({"tag": tag})
         else:

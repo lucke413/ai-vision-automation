@@ -1103,10 +1103,12 @@ class WordPressClient:
             )
             response.raise_for_status()
             stop = {"della", "delle", "dello", "degli", "come", "sono", "anche",
-                    "questo", "quello", "ecco", "nuovo", "nuova", "disponibile"}
+                    "questo", "quello", "ecco", "nuovo", "nuova", "disponibile",
+                    "guida", "migliori", "modelli", "fasce", "prezzo", "budget"}
             def words(value):
                 return {w for w in re.findall(r"[a-zà-ù0-9]+", value.lower())
-                        if (len(w) >= 4 or (w.isdigit() and len(w) >= 2)) and w not in stop}
+                        if (len(w) >= 4 or w in {"gta", "ps5", "ps4", "ssd"}
+                            or (w.isdigit() and len(w) >= 2)) and w not in stop}
             target = words(str(draft.get("title") or "") + " " +
                            str(draft.get("focus_keyphrase") or ""))
             candidates = []
@@ -1330,6 +1332,7 @@ def publish_one(
         print(f"AVVISO categoria: impossibile assegnare {category_name!r}; continuo con la categoria predefinita ({type(exc).__name__}).")
         category = {"id": None, "name": category_name, "slug": slugify(category_name)}
     category_ids = [category["id"]] if category.get("id") else []
+    related_category = category
     # Guide, Confronti e Offerte restano primarie; aggiunge la sezione tematica.
     topic = SOURCE_CATEGORY_MAP.get(str(draft.get("category") or ""))
     if topic in {"Gaming e console", "Casa smart", "Accessori e postazioni"} and topic != category_name:
@@ -1337,13 +1340,15 @@ def publish_one(
             topic_term = client.get_or_create_term("categories", topic)
             if topic_term.get("id") and topic_term["id"] not in category_ids:
                 category_ids.append(topic_term["id"])
+                if live_offer_html is None and category_name != "Offerte":
+                    related_category = topic_term
         except Exception as exc:
             print(f"AVVISO categoria secondaria: salto {topic!r} ({type(exc).__name__}); la pubblicazione continua.")
-    related = client.related_link(draft, category.get("id"))
+    related = client.related_link(draft, related_category.get("id"))
     if related:
         body += "\n" + related
     else:
-        category_link = category_archive_link(category, client.base_url)
+        category_link = category_archive_link(related_category, client.base_url)
         if category_link:
             body += "\n" + category_link
 
