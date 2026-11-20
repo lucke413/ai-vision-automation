@@ -6,6 +6,11 @@ on:
       - 'scripts/auto_internal_link_repair.py'
       - '.github/workflows/auto-internal-link-repair.yml'
   workflow_dispatch:
+    inputs:
+      apply_changes:
+        description: 'Applica le modifiche ai link negli articoli pubblicati'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -35,6 +40,7 @@ jobs:
             data/auto_internal_links_backup.json
           retention-days: 90
       - name: Apply and verify internal links
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_changes }}
         env:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}

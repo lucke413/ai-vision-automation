@@ -130,7 +130,7 @@ compare nel titolo e nella copertina. Il primo annuncio ha uno slug stabile e un
 per categoria è disponibile quando il catalogo restituisce abbastanza prodotti distinti.
 I prezzi ottenuti da Creators API vengono mostrati con data e ora della verifica. Per le
 selezioni redazionali e le pagine pubbliche, il lettore consulta il prezzo sulla scheda Amazon.
-Un controllo orario rimuove prezzi e link delle offerte scadute.
+La rassegna verifica le offerte prima di pubblicarle e conserva il contenuto e i link delle edizioni pubblicate. La nota sui prezzi data i valori rilevati al momento della pubblicazione.
 
 - Il catalogo dei singoli prodotti richiede i secret Actions `AMAZON_CREATORS_CREDENTIAL_ID`
   e `AMAZON_CREATORS_CREDENTIAL_SECRET` per Creators API EU 3.2. Il publisher usa il Tracking ID

@@ -56,7 +56,7 @@ class AmazonPromotionsTests(unittest.TestCase):
         listing["dealDetails"]["endTime"] = (self.now + timedelta(minutes=30)).isoformat()
         self.assertIsNone(promos.product_offer(self.product, promos.CATEGORIES[0], self.now, self.tag))
 
-    def test_archive_removes_expired_cta_and_price(self):
+    def test_render_includes_verified_price_discount_image_and_publication_note(self):
         deal = promos.product_offer(self.product, promos.CATEGORIES[0], self.now, self.tag)
         body = "<p>Introduzione</p>" + promos.render_offers([deal], self.now)
         self.assertIn("Scelte da AI Vision per voi", body)
@@ -72,14 +72,6 @@ class AmazonPromotionsTests(unittest.TestCase):
         self.assertEqual(image["src"], self.product["images"]["primary"]["medium"]["url"])
         self.assertEqual(image["alt"], deal.title)
         self.assertEqual(image.parent["href"], deal.url)
-        self.assertEqual(body, promos.expire_in_body(body, self.now))
-        archive = promos.expire_in_body(body, self.now + timedelta(hours=4))
-        self.assertIn("Introduzione", archive)
-        self.assertNotIn("59,90", archive)
-        self.assertNotIn("Sconto 20%", archive)
-        self.assertNotIn("<img", archive)
-        self.assertNotIn('id="aivision-amazon-price-note"', archive)
-        self.assertNotIn("amazon.it/dp", archive)
 
     def test_refresh_uses_exact_product_and_preserves_editorial_copy_and_earlier_expiry(self):
         stamped = self.now + timedelta(minutes=3)
@@ -133,19 +125,27 @@ class AmazonPromotionsTests(unittest.TestCase):
         other_campaign = promos.replace(campaign, title="Prime Day")
         self.assertFalse(promos.belongs_to_campaign(deal, other_campaign))
 
-    def test_append_new_asins_only(self):
+    def test_existing_edition_is_skipped_after_offer_expiry(self):
         offer = promos.product_offer(self.product, promos.CATEGORIES[0], self.now, self.tag)
         body = promos.render_offers([offer], self.now)
-        post = {"id": 12, "status": "publish", "slug": "black-friday", "link": "example", "content": {"raw": body}}
-        client = Mock()
-        client.session.get.return_value.json.return_value = post
-        extra = promos.replace(offer, key="B012345679", url=offer.url.replace(offer.key, "B012345679"))
-        self.assertEqual(promos.extend_edition(client, post, [offer, extra], self.now)["status"], "updated")
-        saved = client.session.post.call_args.kwargs["json"]["content"]
-        self.assertTrue(saved.startswith(promos.PRICE_NOTE.sub("", body)))
-        self.assertEqual(saved.count('id="aivision-amazon-price-note"'), 1)
-        self.assertEqual(saved.count(offer.key), 1)
-        self.assertEqual(saved.count(extra.key), 1)
+        post = {"id": 12, "status": "publish", "slug": "offerte-amazon-del-giorno-2026-11-19",
+                "title": {"rendered": "Offerte Amazon del giorno"}, "content": {"raw": body}}
+        client = Mock(existing_post=lambda slug: post if slug == post["slug"] else None)
+        with patch.object(promos, "newsroom_offers", return_value=[]), \
+             patch.object(promos, "editorial_offers", return_value={}), \
+             patch.object(promos, "publish_edition") as publish:
+            report = promos.run(client, Mock(), offer.expires + timedelta(minutes=1))
+        self.assertEqual(report["editions"][0]["status"], "already_exists")
+        self.assertEqual(post["content"]["raw"], body)
+        publish.assert_not_called()
+        client.session.post.assert_not_called()
+
+    def test_legacy_expiry_command_exits_without_accessing_wordpress(self):
+        with patch.object(sys, "argv", ["amazon_promotions.py", "--expire"]), \
+             patch.object(promos, "WordPressClient") as client, \
+             patch("builtins.print"):
+            promos.main()
+        client.assert_not_called()
 
     def test_public_card_needs_a_product_price_and_matching_campaign(self):
         source = promos.PublicDeals(None, self.tag, promos.AMAZON + "/blackfriday")

@@ -39,9 +39,7 @@ ONGOING = "Selezione Amazon AI Vision"
 MONTHS = "gennaio febbraio marzo aprile maggio giugno luglio agosto settembre ottobre novembre dicembre".split()
 MONTH_PATTERN = "|".join(MONTHS)
 DATE_PATTERN = rf"\b([0-3]?\d)(?:°)?\s+({MONTH_PATTERN})(?:\s+(20\d{{2}}))?\b"
-BLOCK = re.compile(r"<!-- aivision-amazon-promo ([^ <>]+) -->.*?<!-- /aivision-amazon-promo -->", re.S)
 PRICE_LINE = 'class="aivision-amazon-price"'
-PRICE_NOTE = re.compile(r"\n?<!-- aivision-amazon-price-note -->.*?<!-- /aivision-amazon-price-note -->", re.S)
 PRICE_NOTE_HTML = (
     '<!-- aivision-amazon-price-note -->\n'
     '<p id="aivision-amazon-price-note"><small>I prezzi e gli sconti indicati sono quelli verificati al momento '
@@ -49,7 +47,6 @@ PRICE_NOTE_HTML = (
     'Si applicano il prezzo e la disponibilità mostrati su Amazon.it al momento dell’acquisto.</small></p>\n'
     '<!-- /aivision-amazon-price-note -->'
 )
-ARCHIVE = "<p>Questa offerta è terminata. Prezzo e disponibilità possono essere diversi da quelli della pubblicazione.</p>"
 SAFETY_WINDOW = timedelta(minutes=75)
 EDITORIAL_CAMPAIGNS = {"black-friday": "Black Friday", "cyber-monday": "Cyber Monday"}
 
@@ -773,40 +770,6 @@ def picks_section(picks: list[Offer], now: datetime, *, disclosure: bool = True)
     return '<!-- aivision-product-picks -->\n' + content + '\n<!-- /aivision-product-picks -->'
 
 
-def expire_in_body(body: str, now: datetime) -> str:
-    def hide(match):
-        try:
-            return ARCHIVE if parse_utc(match[1]) <= now else match[0]
-        except ValueError:
-            return match[0]
-    archived = BLOCK.sub(hide, body)
-    return archived if PRICE_LINE in archived else PRICE_NOTE.sub("", archived)
-
-
-def expire_posts(client: WordPressClient, now: datetime) -> int:
-    if client.dry_run:
-        return 0
-    params = {"context": "edit", "status": "publish", "search": MARK, "per_page": 50,
-              "_fields": "id,content"}
-    pending = []
-    for page in range(1, 100):
-        response = client.session.get(client._url("posts"), params={**params, "page": page}, timeout=20)
-        response.raise_for_status()
-        pending.extend(response.json())
-        if page >= int(response.headers.get("X-WP-TotalPages", "1")):
-            break
-    updated = 0
-    for post in pending:
-        raw = post["content"]["raw"]
-        content = expire_in_body(raw, now)
-        if raw == content:
-            continue
-        response = client.session.post(client._url(f'posts/{post["id"]}'), json={"content": content}, timeout=20)
-        response.raise_for_status()
-        updated += 1
-    return updated
-
-
 def publish_edition(client, session, title, slug, intro, scene, label, check):
     draft = {"title": title, "slug": slug, "article_id": slug, "editorial_kind": "OFFERTA",
              "category": "Offerte & Prezzi", "body_markdown": intro, "excerpt": intro,
@@ -821,28 +784,6 @@ def edition_asins(post):
         return set()
     parsed = BeautifulSoup(post["content"]["raw"], "html.parser")
     return {asin for link in parsed.select(f".{MARKER} a[href]") if (asin := product_asin(link["href"]))}
-
-
-def extend_edition(client, post, offers, checked):
-    endpoint = client._url(f"posts/{post['id']}")
-    fresh = client.session.get(endpoint, params={"context": "edit"}, timeout=20)
-    fresh.raise_for_status()
-    current = fresh.json()
-    body = current["content"]["raw"]
-    if current["status"] != "publish" or MARKER not in body or current["slug"] != post["slug"]:
-        raise ValueError("Edizione modificata o non pubblicata")
-    known = edition_asins(current)
-    additions = [o for o in offers if o.key not in known and o.expires > checked]
-    if additions:
-        section = render_offers(additions, checked, disclosure=False,
-                                heading=f"Aggiornamento delle {checked:%H:%M}")
-        content = PRICE_NOTE.sub("", body + "\n" + section)
-        if PRICE_LINE in content:
-            content += "\n" + PRICE_NOTE_HTML
-        response = client.session.post(endpoint, json={"content": content}, timeout=20)
-        response.raise_for_status()
-    return {"post_id": post["id"], "link": current["link"], "wp_status": "publish",
-            "status": "updated" if additions else "already_exists"}
 
 
 def run(client: WordPressClient, session: requests.Session, now: datetime) -> dict:
@@ -924,7 +865,7 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
             posts = [client.existing_post(key) for key in slugs]
             existing = [edition_asins(post) for post in posts]
             used.update(set().union(*existing))
-            needed = sum(max(0, TARGET_OFFERS - len(keys)) for keys in existing)
+            needed = TARGET_OFFERS * posts.count(None)
             manual = editorial.get(editorial_kind or slug, {})
             allowed_categories = CATEGORIES + BOOKS if categories is CATEGORIES else categories
             departments = {category.title for category in allowed_categories}
@@ -949,42 +890,34 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                     report["warnings"].append(f"{label}: catalogo pubblico: {exc}.")
             for index, (post, keys, outcome) in enumerate(zip(posts, existing, outcomes), start=1):
                 checked = datetime.now(get_timezone())
+                if post is not None:
+                    outcome.update(status="already_exists", verified=len(keys))
+                    continue
                 if checked.date() != now.date():
                     return
-                target = max(0, TARGET_OFFERS - len(keys))
-                if not target:
-                    outcome.update(status="already_complete", verified=len(keys))
-                    continue
                 valid = spread_by_category(offer for offer in pending.values() if offer.expires > checked)
-                batch = valid[:target]
-                outcome["verified"] = len(keys) + len(batch)
-                if len(batch) < target:
+                batch = valid[:TARGET_OFFERS]
+                outcome["verified"] = len(batch)
+                if len(batch) < TARGET_OFFERS:
                     report["warnings"].append(f"{outcome['slug']}: {outcome['verified']}/{TARGET_OFFERS} prodotti verificati.")
                     continue
                 departments = {offer.category for offer in batch}
                 if categories is CATEGORIES and (len(departments) < 3 or not departments & NON_TECH):
                     report["warnings"].append(f"{outcome['slug']}: categorie verificate insufficienti.")
                     continue
-                if post:
+                suffix = f" · selezione {index}" if count > 1 else ""
+                title = f"{label}{suffix} | {stamp}"
+                event = f" della campagna {campaign.title}" if campaign else ""
+                intro = (f"La selezione del {stamp} raccoglie le offerte{event} su Amazon.it. "
+                         "I prodotti sono raggruppati per categoria. Le schede Amazon mostrano prezzo e condizioni aggiornati.")
+                scene = ("books and an e-reader" if categories is BOOKS else
+                         "a frying pan, a canvas backpack, a board game and wireless headphones")
+
+                def content():
                     confirmed, current = publication_batch(batch, campaign, topic, label, outcome)
-                    if not confirmed:
-                        report["warnings"].append(f"{outcome['slug']}: selezione scaduta o incompleta all’ultima verifica.")
-                        continue
-                    result = extend_edition(client, post, confirmed, current)
-                else:
-                    suffix = f" · selezione {index}" if count > 1 else ""
-                    title = f"{label}{suffix} | {stamp}"
-                    event = f" della campagna {campaign.title}" if campaign else ""
-                    intro = (f"La selezione del {stamp} raccoglie le offerte{event} su Amazon.it. "
-                             "I prodotti sono raggruppati per categoria. Le schede Amazon mostrano prezzo e condizioni aggiornati.")
-                    scene = ("books and an e-reader" if categories is BOOKS else
-                             "a frying pan, a canvas backpack, a board game and wireless headphones")
+                    return render_offers(confirmed, current)
 
-                    def content():
-                        confirmed, current = publication_batch(batch, campaign, topic, label, outcome)
-                        return render_offers(confirmed, current)
-
-                    result = publish_edition(client, session, title, outcome["slug"], intro, scene, label.upper(), content)
+                result = publish_edition(client, session, title, outcome["slug"], intro, scene, label.upper(), content)
                 report["items"].append({k: result.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
                 outcome["status"] = result.get("status", "processed")
                 outcome["editorial_products"] = sum(offer.key in manual for offer in batch)
@@ -1021,17 +954,16 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--expire", action="store_true")
-    args = parser.parse_args()
+    parser.add_argument("--expire", action="store_true", help=argparse.SUPPRESS)
+    if parser.parse_args().expire:
+        print("Gli articoli pubblicati conservano il contenuto originale.")
+        return
     dry = env_bool("WP_DRY_RUN", True)
     base, user, password = (os.environ.get(k, "") for k in ("WP_BASE_URL", "WP_USERNAME", "WP_APP_PASSWORD"))
     if not dry and not all((base, user, password)):
         raise RuntimeError("Credenziali WordPress mancanti.")
     client = WordPressClient(base, user, password, dry)
     now = datetime.now(get_timezone())
-    if args.expire:
-        print(f"Articoli promozionali aggiornati: {expire_posts(client, now)}")
-        return
     with requests.Session() as session:
         report = run(client, session, now)
     save_json(REPORT, report)

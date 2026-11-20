@@ -3,8 +3,8 @@ import argparse
 import html
 import json
 import os
+import re
 import subprocess
-from datetime import timedelta
 from pathlib import Path
 from time import time
 
@@ -12,7 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from amazon_affiliate import DISCLOSURE, MARKER, product_asin
-from amazon_promotions import Offer, expire_in_body, parse_utc, render_offers, spread_by_category
+from amazon_promotions import Offer, parse_utc, render_offers, spread_by_category
 from wp_publisher import WordPressClient
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,6 +22,8 @@ TARGETS = (
     (3003, "amazon-black-friday-2026-11-19-2", "black-friday"),
     (3006, "amazon-offerte-ordinarie-2026-11-19", "daily"),
 )
+LEGACY_MARKER = re.compile(r"<!-- aivision-amazon-promo [^ <>]+ -->.*?<!-- /aivision-amazon-promo -->", re.S)
+LEGACY_NOTICE = "<p>Questa offerta è terminata. Prezzo e disponibilità possono essere diversi da quelli della pubblicazione.</p>"
 NOTE = ('<p class="aivision-offer-archive"><strong>Selezione d’archivio del 19 novembre 2026.</strong> '
         'Per le promozioni attuali, consulta la <a href="/category/offerte-2/">sezione Offerte</a>.</p>')
 
@@ -42,7 +44,7 @@ def original_sections():
         offers = spread_by_category(offers)[:20]
         if len({offer.key for offer in offers if offer.key}) != 20:
             raise ValueError("La selezione originale non contiene 20 prodotti distinti.")
-        expected = expire_in_body(render_offers(offers, checked), expires + timedelta(seconds=1))
+        expected = LEGACY_MARKER.sub(LEGACY_NOTICE, render_offers(offers, checked))
         sections = [f'<div class="{MARKER}">', f"<p>{DISCLOSURE}</p>", NOTE, "<h2>Scelte da AI Vision per voi</h2>"]
         for category in dict.fromkeys(offer.category for offer in offers):
             sections.append(f"<h3>{html.escape(category)}</h3>")
