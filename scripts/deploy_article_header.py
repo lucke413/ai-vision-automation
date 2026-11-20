@@ -102,8 +102,11 @@ def deploy(admin, public):
         raise RuntimeError("Il contenuto dello snippet non è stato salvato correttamente.")
     route = f"{SNIPPETS}/{int(saved['id'])}"
     try:
-        result = wp(admin, "POST", route + "/activate")
-        if not result.get("active"):
+        wp(admin, "POST", route + "/activate")
+        state = wp(admin, "GET", route)
+        if not state.get("active"):
+            state = wp(admin, "POST", route, json={"active": True})
+        if not state.get("active") or state.get("code_error"):
             raise RuntimeError("WordPress non ha confermato l'attivazione dello snippet.")
         verify(public)
     except (RuntimeError, requests.RequestException):
