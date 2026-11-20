@@ -20,7 +20,7 @@ RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
 RELATED_SOURCE = SOURCE.with_name("related-cards.php")
 READING_NAME = "AI Vision: articoli di tendenza e più letti"
 READING_SOURCE = SOURCE.with_name("reading-widget.php")
-PREVIOUS_READING_HASH = "eeb00742367ae176a4ba411128981f1073cf2d2b1284842ff1be4bec0f95eb60"
+PREVIOUS_READING_HASH = "28e535440a8a1a6174432563d67ca53394f08d7f6a227d6a36769b0acea321bb"
 NAVIGATION_NAME = "AI Vision: navigazione offerte e indice articoli"
 NAVIGATION_SOURCE = SOURCE.with_name("editorial-navigation.php")
 ARTICLES = (
@@ -116,11 +116,18 @@ def verify_reading_widget(session):
                 language = sidebar.select_one(".aiv-language")
                 social = sidebar.select("#block-20:has(.aiv-social-box)")
                 children = sidebar.find_all(recursive=False)
+                adverts = [
+                    node for node in children
+                    if "av-autopilot-sidebar-widget" in node.get("class", [])
+                    or node.get("id", "").startswith("av_sidebar_banner_")
+                ]
                 if (not language or len(social) != 1 or len(sidebar.select(".aiv-social-box")) != 1
                         or any(node not in children for node in (language, social[0], widget[0]))
-                        or not children.index(language) < children.index(social[0]) < children.index(widget[0])):
-                    raise RuntimeError(f"Ordine della barra laterale inatteso su {path}")
-                print(f"Widget social verificato sopra Da leggere su {path}")
+                        or len(adverts) != 1 or widget[0].find_previous_sibling() != adverts[0]
+                        or not children.index(language) < children.index(social[0]) < children.index(adverts[0])):
+                    positions = [node.get("id") or node.get("class") or node.name for node in children]
+                    raise RuntimeError(f"Ordine della barra laterale inatteso su {path}: {positions}")
+                print(f"Widget Da leggere verificato subito sotto la pubblicità su {path}")
         else:
             raise RuntimeError(f"Widget letture mancante o incompleto su {path}")
         if not language or language.name != "details" or "aiv-language" not in language.get("class", []):

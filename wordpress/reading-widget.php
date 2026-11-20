@@ -160,18 +160,12 @@ function aivision_reading_home() {
 }
 
 function aivision_reading_sidebar( $sidebar ) {
-    if ( 'sidebar-1' === $sidebar ) {
-        aivision_reading_language();
-        if ( is_singular( 'post' ) ) {
-            global $wp_registered_widgets;
-            $widgets = wp_get_sidebars_widgets()['sidebar-1'] ?? array();
-            $social = $wp_registered_widgets[ AIVISION_SOCIAL_WIDGET ] ?? array();
-            if ( in_array( AIVISION_SOCIAL_WIDGET, $widgets, true ) && is_callable( $social['callback'] ?? null ) ) {
-                add_filter( 'dynamic_sidebar_params', 'aivision_reading_after_social' );
-            } else {
-                aivision_render_reading_widget();
-            }
-        }
+    if ( 'sidebar-1' !== $sidebar ) {
+        return;
+    }
+    aivision_reading_language();
+    if ( is_singular( 'post' ) ) {
+        aivision_reading_after_ad();
     }
 }
 
@@ -185,15 +179,36 @@ function aivision_social_first( $sidebars ) {
     return $sidebars;
 }
 
-function aivision_reading_after_social( $params ) {
-    if ( 'sidebar-1' !== ( $params[0]['id'] ?? '' ) || AIVISION_SOCIAL_WIDGET !== ( $params[0]['widget_id'] ?? '' ) ) {
+function aivision_reading_after_ad() {
+    $ad_seen = false;
+    $rendered = false;
+    $before_next_widget = static function ( $params ) use ( &$ad_seen, &$rendered ) {
+        if ( 'sidebar-1' !== ( $params[0]['id'] ?? '' ) || $rendered ) {
+            return $params;
+        }
+        if ( $ad_seen ) {
+            $rendered = true;
+            aivision_render_reading_widget();
+        } else {
+            $id = $params[0]['widget_id'] ?? '';
+            $wrapper = $params[0]['before_widget'] ?? '';
+            $ad_seen = 0 === strpos( $id, 'av_sidebar_banner_' )
+                || false !== strpos( $wrapper, 'av-autopilot-sidebar-widget' );
+        }
         return $params;
-    }
-    remove_filter( 'dynamic_sidebar_params', 'aivision_reading_after_social' );
-    ob_start();
-    aivision_render_reading_widget();
-    $params[0]['after_widget'] .= ob_get_clean();
-    return $params;
+    };
+    $after_sidebar = static function ( $sidebar ) use ( &$after_sidebar, $before_next_widget, &$rendered ) {
+        if ( 'sidebar-1' !== $sidebar ) {
+            return;
+        }
+        remove_filter( 'dynamic_sidebar_params', $before_next_widget, PHP_INT_MAX );
+        remove_action( 'dynamic_sidebar_after', $after_sidebar, PHP_INT_MAX );
+        if ( ! $rendered ) {
+            aivision_render_reading_widget();
+        }
+    };
+    add_filter( 'dynamic_sidebar_params', $before_next_widget, PHP_INT_MAX );
+    add_action( 'dynamic_sidebar_after', $after_sidebar, PHP_INT_MAX );
 }
 
 function aivision_reading_styles() {
