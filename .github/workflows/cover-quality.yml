@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/cover-quality.yml"
+      - "scripts/cover_media.py"
       - "scripts/cover_quality_repair.py"
   workflow_dispatch:
     inputs:
@@ -22,6 +23,7 @@ concurrency:
 
 jobs:
   audit:
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[AI-VISION-PHOTO-MODEL]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -56,7 +58,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   generation-check:
-    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-COVER-EXPOSURE]') }}
+    if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[AI-VISION-COVER-EXPOSURE]') || contains(github.event.head_commit.message, '[AI-VISION-PHOTO-MODEL]')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

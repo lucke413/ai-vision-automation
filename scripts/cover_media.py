@@ -20,13 +20,16 @@ from PIL import Image, ImageColor, ImageEnhance, ImageOps
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 COMMONS_HEADERS = {"User-Agent": "AI-Vision-Cover/2.0 (https://aivision.altervista.org/)"}
-MODEL_ID = "SimianLuo/LCM_Dreamshaper_v7"
-MODEL_REVISION = "a85df6a8bd976cdd08b4fd8f3b73f229c9e54df5"
+MODEL_ID = "SG161222/Realistic_Vision_V5.1_noVAE"
+MODEL_REVISION = "1e9f017a7b1eaefb63a1900ea6c5953d2739fd21"
+SAFETY_MODEL_ID = "CompVis/stable-diffusion-safety-checker"
+SAFETY_MODEL_REVISION = "cb41f3a270d63d454d385fc2e4f571c487c253c5"
 CREATIVE_COMMONS = re.compile(r"^https://creativecommons\.org/(?:licenses/by(?:-sa)?/(?:2\.0|2\.5|3\.0|4\.0)|publicdomain/(?:zero|mark)/1\.0)/?$")
 PHOTO_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff")
 MODEL_LOCK = Lock()
 COVER_SIZE = (1280, 720)
 EDITORIAL_LIGHT = "High detail editorial photograph, bright soft daylight, light midtones, neutral shadows, true colors"
+NEGATIVE_PROMPT = "illustration, painting, 3d render, CGI, neon, dim subject, silhouette, text, logo, watermark, blur, duplicates"
 AI_CREDIT = "Illustrazione generata con IA"
 
 
@@ -137,12 +140,21 @@ def commons_photos(image_url: str, subject: str, title: str, session: requests.S
 @lru_cache(maxsize=1)
 def load_image_model():
     import torch
-    from diffusers import DiffusionPipeline
+    from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline
+    from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
+    from transformers import CLIPImageProcessor
 
     torch.set_num_threads(min(4, os.cpu_count() or 1))
-    return DiffusionPipeline.from_pretrained(
-        MODEL_ID, revision=MODEL_REVISION, use_safetensors=True, torch_dtype=torch.float32,
+    safety_checker = StableDiffusionSafetyChecker.from_pretrained(
+        SAFETY_MODEL_ID, revision=SAFETY_MODEL_REVISION, weights_only=True,
     )
+    processor = CLIPImageProcessor.from_pretrained(SAFETY_MODEL_ID, revision=SAFETY_MODEL_REVISION)
+    model = StableDiffusionPipeline.from_pretrained(
+        MODEL_ID, revision=MODEL_REVISION, use_safetensors=True, torch_dtype=torch.float32,
+        safety_checker=safety_checker, feature_extractor=processor,
+    )
+    model.scheduler = DPMSolverMultistepScheduler.from_config(model.scheduler.config, use_karras_sigmas=True)
+    return model
 
 
 def generate_ai_cover(draft: dict) -> bytes:
@@ -155,11 +167,12 @@ def generate_ai_cover(draft: dict) -> bytes:
     try:
         import torch
 
-        for index, lighting in enumerate((EDITORIAL_LIGHT, "Real editorial photograph in an airy daylight studio, evenly lit foreground")):
-            prompt = f"{lighting}. {scene}. Sharp single subject, natural materials, wide 16:9 composition, no lettering."
+        for index, lighting in enumerate((EDITORIAL_LIGHT, "Clear daylight product photograph, soft front fill illumination")):
+            prompt = f"{scene}. {lighting}. Single prominent subject filling the center, natural materials, editorial photograph."
             with MODEL_LOCK, torch.inference_mode():
                 result = load_image_model()(
-                    prompt, width=896, height=512, num_inference_steps=6, guidance_scale=7.0,
+                    prompt, negative_prompt=NEGATIVE_PROMPT, width=896, height=512,
+                    num_inference_steps=12, guidance_scale=5.0,
                     generator=torch.Generator().manual_seed(seed + index),
                 )
             if any(result.nsfw_content_detected or []):
@@ -168,7 +181,8 @@ def generate_ai_cover(draft: dict) -> bytes:
             if not cover_exposure(frame).has_detail:
                 continue
             image = grade_ai_cover(frame)
-            if cover_exposure(image).usable:
+            center = image.crop((224, 135, 1056, 655))
+            if cover_exposure(image).usable and cover_exposure(center).median >= 82:
                 return encode_cover_jpeg(image)
         raise CoverUnavailable("Il generatore non ha restituito una copertina sufficientemente nitida e luminosa.")
     except (ImportError, OSError, RuntimeError, ValueError, requests.RequestException) as exc:
@@ -285,5 +299,5 @@ if __name__ == "__main__":
         raise SystemExit("Uso: python scripts/cover_media.py percorso-di-prova.jpg")
     Path(sys.argv[1]).write_bytes(generate_ai_cover({
         "title": "Come scegliere le cuffie wireless",
-        "cover_prompt": "Charcoal over-ear headphones on a walnut desk in afternoon window light, studio still life",
+        "cover_prompt": "Close-up of one black wireless headphone set resting on a pale oak table against a light blue wall, light from the front",
     }))

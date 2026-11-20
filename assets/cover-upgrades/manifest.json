@@ -138,7 +138,8 @@
     "credit": {
       "text": "Illustrazione generata con IA"
     },
-    "previous_media": 3011
+    "previous_media": 3066,
+    "asset_revision": "daylight-20261120"
   },
   "3020": {
     "credit": {
@@ -157,5 +158,40 @@
       "text": "Illustrazione generata con IA"
     },
     "previous_media": 3031
+  },
+  "2783": {
+    "credit": {
+      "text": "Illustrazione generata con IA"
+    },
+    "previous_media": 3111,
+    "asset_revision": "daylight-20261120"
+  },
+  "2881": {
+    "credit": {
+      "text": "Illustrazione generata con IA"
+    },
+    "previous_media": 3118,
+    "asset_revision": "daylight-20261120"
+  },
+  "2933": {
+    "credit": {
+      "text": "Illustrazione generata con IA"
+    },
+    "previous_media": 2932,
+    "asset_revision": "daylight-20261120"
+  },
+  "2951": {
+    "credit": {
+      "text": "Illustrazione generata con IA"
+    },
+    "previous_media": 3106,
+    "asset_revision": "daylight-20261120"
+  },
+  "2963": {
+    "credit": {
+      "text": "Illustrazione generata con IA"
+    },
+    "previous_media": 3098,
+    "asset_revision": "daylight-20261120"
   }
 }

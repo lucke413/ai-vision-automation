@@ -80,6 +80,13 @@ def leading_cover(content: str):
     return (block, html.unescape(image.group(2))) if image else (None, "")
 
 
+def cover_filename(post_id: int, upgrade: dict | None) -> str:
+    revision = str((upgrade or {}).get("asset_revision") or "")
+    if revision and not re.fullmatch(r"[a-z0-9-]{1,36}", revision):
+        raise PublisherError("Revisione del file immagine non valida.")
+    return f"ai-vision-photo-{post_id}" + (f"-{revision}" if revision else "")
+
+
 def raw_title(post: dict) -> str:
     value = post.get("title") or {}
     title = value.get("raw") or value.get("rendered") if isinstance(value, dict) else value
@@ -235,7 +242,6 @@ def repair_post(client: WordPressClient, post: dict, upgrade: dict | None = None
     title = raw_title(post)
     content = raw_content(post)
     credit = None
-    filename = f"ai-vision-photo-{post_id}"
     if upgrade and post.get("featured_media") == upgrade["previous_media"]:
         block, inline_url = leading_cover(content)
         inline_id = ATTACHMENT_CLASS.search(block.group()) if block else None
@@ -251,9 +257,10 @@ def repair_post(client: WordPressClient, post: dict, upgrade: dict | None = None
         plan = plan_repair(client, post)
         if plan is None:
             return None
+    filename = cover_filename(post_id, upgrade)
     media = plan.media
     url = client._url(f"posts/{post_id}")
-    params = {"context": "edit", "_fields": "id,modified,status,featured_media,content,meta"}
+    params = {"context": "edit", "_fields": "id,modified,status,date,date_gmt,slug,featured_media,content,meta"}
     current = request_with_retry(client.session, "get", url, params=params).json()
     if (current.get("modified") != post.get("modified") or
             current.get("featured_media") != post.get("featured_media") or raw_content(current) != content):
@@ -286,7 +293,11 @@ def repair_post(client: WordPressClient, post: dict, upgrade: dict | None = None
         payload["meta"] = {"_jetpack_hide_featured_image": True}
     request_with_retry(client.session, "post", url, params={"context": "edit"}, json=payload)
     saved = request_with_retry(client.session, "get", url, params=params).json()
-    if int(saved.get("featured_media") or 0) != media_id or raw_content(saved) != payload.get("content", content):
+    schedule = ("date", "date_gmt", "slug")
+    if (int(saved.get("featured_media") or 0) != media_id or raw_content(saved) != payload.get("content", content)
+            or any(saved.get(field) != current.get(field) for field in schedule)
+            or (current.get("status") != saved.get("status")
+                and (current.get("status"), saved.get("status")) != ("future", "publish"))):
         raise PublisherError(f"Verifica WordPress fallita per articolo {post_id}.")
     return {
         "id": post_id, "title": title, "status": saved.get("status"), "link": post.get("link"),
@@ -322,13 +333,13 @@ def main() -> int:
             post = request_with_retry(
                 client.session, "get", client._url(f"posts/{post_id}"), params={"context": "edit"}
             ).json()
-            if post["status"] != "publish":
-                raise PublisherError(f"L'articolo {post_id} non è pubblicato.")
+            if post["status"] not in {"publish", "future"}:
+                raise PublisherError(f"L'articolo {post_id} non è pubblicato né programmato.")
             if post.get("featured_media") != upgrade["previous_media"]:
                 _, inline_url = leading_cover(raw_content(post))
                 current = fetch_media(client, int(post["featured_media"])) if post.get("featured_media") else {}
                 current_url = str(current.get("source_url") or "")
-                if (media_path(current_url).endswith(f"/ai-vision-photo-{post_id}.jpg")
+                if (media_path(current_url).endswith(f"/{cover_filename(post_id, upgrade)}.jpg")
                         and media_path(inline_url) == media_path(current_url)):
                     print(f"Copertina dell'articolo {post_id} già aggiornata.")
                     continue
@@ -340,7 +351,10 @@ def main() -> int:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "site": base_url,
         "count": len(posts),
-        "posts": posts,
+        "posts": ([
+            {key: post.get(key) for key in ("id", "status", "date", "date_gmt", "featured_media")}
+            for post in posts
+        ] if args.upgrade_post else posts),
     }
     write_json_atomic(BACKUP_PATH, backup)
     print(f"Backup salvato prima delle modifiche: {BACKUP_PATH} ({len(posts)} articoli).")
@@ -361,6 +375,8 @@ def main() -> int:
             try:
                 result = future.result()
                 if result:
+                    if result["status"] == "future":
+                        result = {key: value for key, value in result.items() if key not in {"title", "link"}}
                     repaired.append(result)
                     print(f"OK #{post_id}: copertina {result['featured_media']} ({result['previous_featured']}/{result['previous_inline']}).")
             except Exception as exc:
