@@ -1,167 +1,167 @@
 [
   {
     "kind": "daily",
-    "checked_at": "2026-11-19T22:53:07+01:00",
-    "expires_at": "2026-11-20T00:50:00+01:00",
+    "checked_at": "2026-11-20T09:38:00+01:00",
+    "expires_at": "2026-11-20T23:00:00+01:00",
     "products": [
       {
-        "url": "https://www.amazon.it/dp/B073QSXXCH",
+        "url": "https://www.amazon.it/dp/B0DCJZV1R5",
+        "category": "PC e accessori",
+        "title": "HP Everyday 14 Odyssey, borsa per notebook",
+        "description": "HP Everyday 14 Odyssey, borsa per notebook",
+        "why": "Verifica che il tuo portatile non superi 14 pollici.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B00W8NNH34",
         "category": "Casa e arredo",
-        "title": "Osram LED Base Classic A E27, 3 lampadine",
-        "description": "Lampadine a luce neutra con attacco a vite.",
-        "why": "Controlla il portalampada e prendi questa confezione se devi sostituire più lampadine insieme.",
+        "title": "Yankee Candle Clean Cotton, giara grande",
+        "description": "Yankee Candle Clean Cotton, giara grande",
+        "why": "Scegli la fragranza in base all'ambiente in cui la userai.",
         "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
       },
       {
-        "url": "https://www.amazon.it/dp/8863114404",
-        "category": "Narrativa",
-        "title": "Le notti bianche, edizione integrale",
-        "description": "Il racconto di Dostoevskij segue l'incontro fra due sconosciuti a Pietroburgo.",
-        "why": "È una lettura breve per chi vuole avvicinarsi all'autore.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B07NLKYPPW",
-        "category": "PC e archiviazione",
-        "title": "Adobe Acrobat Pro, licenza annuale",
-        "description": "Abbonamento digitale per lavorare con documenti PDF su PC o Mac.",
-        "why": "Valutalo se ti serve modificare o organizzare PDF con regolarità.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B0FTST1GY5",
-        "category": "Casa smart",
-        "title": "Blink Outdoor 4 con Blink Mini 2K+",
-        "description": "Abbinamento di una videocamera da esterno e una da interno.",
-        "why": "Controlla quali funzioni richiedono un piano e dove puoi installare le due unità.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B0H6FFLYPN",
-        "category": "Sport",
-        "title": "Calze antiscivolo per pilates",
-        "description": "Calze con presa sulla pianta, pensate per attività sul tappetino.",
-        "why": "Controlla taglia e numero di paia nel pacco prima di scegliere la variante.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B0GTM5QMWR",
-        "category": "Casa e pulizia",
-        "title": "Dzaki aspirapolvere senza fili con batteria rimovibile",
-        "description": "Scopa elettrica con display e batteria estraibile.",
-        "why": "Ha senso per una pulizia rapida se puoi ricaricare la batteria vicino a una presa.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B07T5SHQDD",
-        "category": "Moda",
-        "title": "Jack & Jones Jachuey Trunks, 7 boxer XL",
-        "description": "Confezione di intimo nero da uomo in taglia XL.",
-        "why": "Confronta la tabella misure se è il primo acquisto di questo modello.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B0HG9NGGLN",
-        "category": "Casa e arredo",
-        "title": "DONAMA cuscino cervicale in memory foam",
-        "description": "Cuscino sagomato con due altezze e fodera removibile.",
-        "why": "Confronta le altezze con il tuo cuscino abituale, soprattutto se dormi sul fianco.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B005625TSK",
-        "category": "Cancelleria",
-        "title": "Pigna Monocromo, 5 quaderni A4 a spirale",
-        "description": "Quaderni a quadretti con pagine microperforate.",
-        "why": "Utili per appunti e calcoli da staccare e archiviare al bisogno.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B0FYRJRPNH",
-        "category": "Moda",
-        "title": "Swarovski Clarica, orologio con bracciale in metallo",
-        "description": "Orologio in acciaio con finitura argentata.",
-        "why": "Misura il polso e considera l'eventuale regolazione del bracciale.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B0CLW42484",
-        "category": "Sport",
-        "title": "Columbia Crestwood Waterproof",
-        "description": "Scarpe basse da trekking con tomaia impermeabile.",
-        "why": "Sono da valutare per sentieri umidi, controllando calzata e spazio per le calze da trekking.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B0GZ87YWMT",
-        "category": "Bellezza",
-        "title": "Bopcal 891, asciugacapelli da viaggio",
-        "description": "Asciugacapelli con diffusore e alimentazione a doppia tensione.",
-        "why": "Se lo porti all'estero, verifica anche il tipo di spina richiesto.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B09BW2XYMR",
-        "category": "Giochi e giocattoli",
-        "title": "Mattel Disney Pixar Cars, Mack trasformabile",
-        "description": "Camion giocattolo che si apre in una stazione da gioco.",
-        "why": "Controlla le macchinine incluse e se è compatibile con quelle che hai già.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B077L3RV2B",
-        "category": "Giochi e giocattoli",
-        "title": "Asmodee Exploding Kittens",
-        "description": "Gioco di carte rapido per piccoli gruppi.",
-        "why": "Prima di ordinare, controlla la lingua e il numero di giocatori della confezione.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B09W714VSG",
-        "category": "Alimentari",
-        "title": "Armando Il Fusillo, 12 confezioni da 500 g",
-        "description": "Pasta di semola trafilata al bronzo in formato scorta.",
-        "why": "Valutala se consumi questo formato spesso e hai spazio in dispensa.",
-        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
-      },
-      {
-        "url": "https://www.amazon.it/dp/B0H29GNJC9",
+        "url": "https://www.amazon.it/dp/B0BWN9MKY5",
         "category": "Animali",
-        "title": "APAUK fontanella per gatti, 3,2 L",
-        "description": "Distributore d'acqua in acciaio con pompa e filtri.",
-        "why": "Prima dell'acquisto verifica come si smonta per sciacquare la pompa.",
+        "title": "Vitakraft Liquid Snack, 16 porzioni",
+        "description": "Vitakraft Liquid Snack, 16 porzioni",
+        "why": "Controlla ingredienti e razione consigliata per il tuo animale.",
         "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
       },
       {
-        "url": "https://www.amazon.it/dp/B082WV8TCZ",
+        "url": "https://www.amazon.it/dp/B0H87DDHF6",
+        "category": "Animali",
+        "title": "Dreamzie coperta impermeabile per cani 100x130",
+        "description": "Dreamzie coperta impermeabile per cani 100x130",
+        "why": "Misura divano o sedile prima di scegliere il formato.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0FN4S8KYN",
         "category": "Giochi e giocattoli",
-        "title": "Hasbro Twister, edizione italiana",
-        "description": "Gioco di movimento con tappeto colorato e ruota.",
-        "why": "Serve una superficie piana dove il gruppo possa muoversi senza ostacoli.",
+        "title": "Quickstop Kids, gioco di carte",
+        "description": "Quickstop Kids, gioco di carte",
+        "why": "Adatto a chi cerca partite rapide in famiglia; verifica l'età consigliata.",
         "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
       },
       {
-        "url": "https://www.amazon.it/dp/B01M67WLIB",
+        "url": "https://www.amazon.it/dp/B0F3JRR5D3",
+        "category": "Valigeria",
+        "title": "Roncato B-Flying, set tre valigie",
+        "description": "Roncato B-Flying, set tre valigie",
+        "why": "Confronta le misure con i limiti bagagli dei voli abituali.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0CR68NP6N",
         "category": "Prima infanzia",
-        "title": "Suavinex detersivo per biberon e tettarelle, 500 ml",
-        "description": "Detergente liquido specifico per gli accessori della pappa.",
-        "why": "Segui le istruzioni di dosaggio e risciacquo della confezione.",
+        "title": "Narhinel ricambi morbidi, 60 pezzi",
+        "description": "Narhinel ricambi morbidi, 60 pezzi",
+        "why": "Verifica la compatibilità con l'aspiratore che possiedi.",
         "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
       },
       {
-        "url": "https://www.amazon.it/dp/B0757Q314Q",
-        "category": "Cancelleria",
-        "title": "Stabilo Boss Original, set da 15",
-        "description": "Evidenziatori in colori neon e pastello con supporto da scrivania.",
-        "why": "I colori chiari aiutano a distinguere priorità e argomenti nello stesso quaderno.",
+        "url": "https://www.amazon.it/dp/B0FW442XYW",
+        "category": "Sport e moda",
+        "title": "Adidas Response 2, scarpe running",
+        "description": "Adidas Response 2, scarpe running",
+        "why": "Controlla la taglia specifica e la calzata della versione in promozione.",
         "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
       },
       {
-        "url": "https://www.amazon.it/dp/B0GX2F4CX3",
-        "category": "Bellezza",
-        "title": "Borotalco, kit deodoranti vapo e salviette",
-        "description": "Confezione con quattro deodoranti e salviette.",
-        "why": "Confronta fragranza e formato prima di scegliere una confezione multipla.",
+        "url": "https://www.amazon.it/dp/B00BC39YFQ",
+        "category": "Fai da te",
+        "title": "Klein Tools Katapult 11063W, spelafili",
+        "description": "Klein Tools Katapult 11063W, spelafili",
+        "why": "Verifica le sezioni di filo compatibili prima dell'acquisto.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0HK87G9H9",
+        "category": "Gaming",
+        "title": "Disney Dreamlight Valley Cozy Edition Switch 2",
+        "description": "Disney Dreamlight Valley Cozy Edition Switch 2",
+        "why": "Controlla che la confezione contenga il codice per la tua console.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B00EO65VXC",
+        "category": "Animali",
+        "title": "InnoPet Premium Comfort, passeggino per cani",
+        "description": "InnoPet Premium Comfort, passeggino per cani",
+        "why": "Verifica peso massimo supportato e dimensioni da chiuso.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0HBR69DHR",
+        "category": "Prima infanzia",
+        "title": "Munchkin Miracle 360, tazza 207 ml",
+        "description": "Munchkin Miracle 360, tazza 207 ml",
+        "why": "Valuta capacità e indicazione d'età per il bambino.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H1H1MDWN",
+        "category": "Decorazioni",
+        "title": "BESCOST luci natalizie da esterno, 50 metri",
+        "description": "BESCOST luci natalizie da esterno, 50 metri",
+        "why": "Verifica protezione degli elementi elettrici e lunghezza utile.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B07XP66LSP",
+        "category": "Bambini",
+        "title": "PAW Patrol Skye, accappatoio 5-6 anni",
+        "description": "PAW Patrol Skye, accappatoio 5-6 anni",
+        "why": "Controlla la tabella taglie e le istruzioni di lavaggio.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H94C68DZ",
+        "category": "Sport",
+        "title": "Garmin CIRQA, smart band L/XL",
+        "description": "Garmin CIRQA, smart band L/XL",
+        "why": "Misura il polso e verifica le funzioni disponibili nell'app.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0G34GMPLH",
+        "category": "Prima infanzia",
+        "title": "Vitalispa Malia, fasciatoio con cassettiera",
+        "description": "Vitalispa Malia, fasciatoio con cassettiera",
+        "why": "Misura lo spazio disponibile e controlla il fissaggio antiribaltamento.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/3989293273",
+        "category": "Libri",
+        "title": "Calendario dell'Avvento Origami, 24 modelli",
+        "description": "Calendario dell'Avvento Origami, 24 modelli",
+        "why": "Una proposta creativa: verifica lingua e livello dei progetti.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H7R33KFJ",
+        "category": "Decorazioni",
+        "title": "Adesivi natalizi per finestre, 133 pezzi",
+        "description": "Adesivi natalizi per finestre, 133 pezzi",
+        "why": "Controlla la superficie di applicazione e la rimozione.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0GJ7DT532",
+        "category": "Informatica",
+        "title": "Acer Aspire Lite 15 Ryzen 3, 8 GB e 256 GB",
+        "description": "Acer Aspire Lite 15 Ryzen 3, 8 GB e 256 GB",
+        "why": "Valuta memoria e spazio SSD rispetto ai programmi che usi.",
+        "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
+      },
+      {
+        "url": "https://www.amazon.it/dp/B0H87BHJYG",
+        "category": "Casa e cucina",
+        "title": "SONGMICS pattumiera a pedale da 50 litri",
+        "description": "SONGMICS pattumiera a pedale da 50 litri",
+        "why": "Misura larghezza e profondità dello spazio in cucina.",
         "evidence_url": "https://webscontisti.it/offerte-amazon-oggi"
       }
     ]
