@@ -3,9 +3,10 @@ import argparse
 import os
 from collections import Counter
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
 from time import time
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -19,6 +20,7 @@ RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
 RELATED_SOURCE = SOURCE.with_name("related-cards.php")
 READING_NAME = "AI Vision: articoli di tendenza e più letti"
 READING_SOURCE = SOURCE.with_name("reading-widget.php")
+PREVIOUS_READING_HASH = "cc1ebffa41f2f38a2b63d3d02c350b42283f2592886070acbb99bebd71ec6c52"
 ARTICLES = (
     "/migliori-sedie-gaming-modelli-fasce-prezzo/",
     "/amazon-black-friday-2026-11-19-2/",
@@ -100,8 +102,23 @@ def verify_reading_widget(session):
         if (len(widget) != 1 or not page.select_one(container) or not page.select_one("#aivision-reading-widget-inline-css")
                 or len(widget[0].select(".aiv-reading-panel li a[href]")) < 2):
             raise RuntimeError(f"Widget letture mancante o incompleto su {path}")
+        language = widget[0].find_previous_sibling()
+        if not language or language.name != "details" or "aiv-language" not in language.get("class", []):
+            raise RuntimeError(f"Selettore della lingua mancante su {path}")
+        links = language.select("a[lang][href]")
+        languages = set()
+        for link in links:
+            url = urlsplit(link["href"])
+            params = parse_qs(url.query)
+            if (url.scheme, url.netloc, url.path) != ("https", "translate.google.com", "/translate") or params != {
+                "sl": ["it"], "tl": [link["lang"]], "u": [SITE + path]
+            }:
+                raise RuntimeError(f"Destinazione di traduzione inattesa su {path}")
+            languages.add(link["lang"])
+        if len(links) != 8 or len(languages) != 8:
+            raise RuntimeError(f"Elenco delle lingue incompleto su {path}")
         labels = [label.get_text(strip=True) for label in widget[0].select(".aiv-reading-labels label")]
-        print(f"Widget verificato su {path} — {', '.join(labels)}")
+        print(f"Widget verificato su {path} — {', '.join(labels)}, {len(languages)} lingue")
 
 
 def ensure_snippets_plugin(session):
@@ -117,23 +134,26 @@ def ensure_snippets_plugin(session):
     print("Code Snippets installato e attivo.")
 
 
-def deploy(admin, public, name, source, check):
+def deploy(admin, public, name, source, check, *, previous_hash=None):
     ensure_snippets_plugin(admin)
     code = source.read_text(encoding="utf-8").removeprefix("<?php\n")
     matches = [item for item in wp(admin, "GET", SNIPPETS) if item.get("name") == name]
-    if len(matches) > 1 or any(item.get("code", "").strip() != code.strip() for item in matches):
+    if len(matches) > 1:
         raise RuntimeError("Uno snippet con questo nome ha contenuto diverso dal repository.")
-    if matches and matches[0]["active"]:
+    before = matches[0] if matches else None
+    update = before and before.get("code", "").strip() != code.strip()
+    if update and sha256(before.get("code", "").strip().encode("utf-8")).hexdigest() != previous_hash:
+        raise RuntimeError("Uno snippet con questo nome ha contenuto diverso dal repository.")
+    if before and before["active"] and not update:
         check(public)
         return
-    if matches:
-        saved = matches[0]
-    else:
-        saved = wp(admin, "POST", SNIPPETS, json={"name": name, "code": code, "scope": "front-end", "active": False})
-    if saved.get("code", "").strip() != code.strip() or saved.get("code_error"):
-        raise RuntimeError("Il contenuto dello snippet non è stato salvato correttamente.")
-    route = f"{SNIPPETS}/{int(saved['id'])}"
+    if not before:
+        before = wp(admin, "POST", SNIPPETS, json={"name": name, "code": code, "scope": "front-end", "active": False})
+    route = f"{SNIPPETS}/{int(before['id'])}"
     try:
+        saved = wp(admin, "POST", route, json={"code": code, "active": False}) if update else before
+        if saved.get("code", "").strip() != code.strip() or saved.get("code_error"):
+            raise RuntimeError("Il contenuto dello snippet non è stato salvato correttamente.")
         wp(admin, "POST", route + "/activate")
         state = wp(admin, "GET", route)
         if not state.get("active"):
@@ -143,7 +163,13 @@ def deploy(admin, public, name, source, check):
         check(public)
     except (RuntimeError, requests.RequestException):
         wp(admin, "POST", route + "/deactivate")
-        print("Snippet disattivato dopo verifica pubblica fallita.")
+        if update:
+            wp(admin, "POST", route, json={"code": before["code"], "active": False})
+            if before["active"]:
+                wp(admin, "POST", route + "/activate")
+            print("Versione precedente ripristinata dopo verifica fallita.")
+        else:
+            print("Snippet disattivato dopo verifica pubblica fallita.")
         raise
 
 
@@ -160,7 +186,8 @@ def main():
     with requests.Session() as admin, requests.Session() as public:
         admin.auth = (user, password)
         if args.reading_widget:
-            deploy(admin, public, READING_NAME, READING_SOURCE, verify_reading_widget)
+            deploy(admin, public, READING_NAME, READING_SOURCE, verify_reading_widget,
+                   previous_hash=PREVIOUS_READING_HASH)
             from wp_publisher import WordPressClient, get_timezone
             now = datetime.now(get_timezone())
             days = Counter(WordPressClient(base, user, password, False).ai_cyber_publication_days(now))

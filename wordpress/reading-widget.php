@@ -109,14 +109,49 @@ function aivision_render_reading_widget() {
     <?php
 }
 
+function aivision_reading_language() {
+    $page_url = is_singular( 'post' ) ? get_permalink( get_queried_object_id() ) : home_url( '/' );
+    $languages = array(
+        'en' => 'English',
+        'fr' => 'Français',
+        'de' => 'Deutsch',
+        'es' => 'Español',
+        'pt' => 'Português',
+        'nl' => 'Nederlands',
+        'pl' => 'Polski',
+        'ro' => 'Română',
+    );
+    ?>
+    <details class="aiv-language">
+        <summary>
+            <i class="fas fa-globe" aria-hidden="true"></i>
+            <span>Lingua <span class="aiv-language-alt" lang="en">/ Language</span></span>
+        </summary>
+        <ul>
+            <?php foreach ( $languages as $code => $language ) :
+                $translate_url = 'https://translate.google.com/translate?' . http_build_query(
+                    array( 'sl' => 'it', 'tl' => $code, 'u' => $page_url ), '', '&', PHP_QUERY_RFC3986
+                );
+                ?>
+                <li><a href="<?php echo esc_url( $translate_url ); ?>" lang="<?php echo esc_attr( $code ); ?>"
+                       hreflang="<?php echo esc_attr( $code ); ?>"><?php echo esc_html( $language ); ?></a></li>
+            <?php endforeach; ?>
+        </ul>
+        <small>Google Translate</small>
+    </details>
+    <?php
+}
+
 function aivision_reading_home() {
     echo '<div class="col-md-4 top-right-area">';
+    aivision_reading_language();
     aivision_render_reading_widget();
     echo '</div>';
 }
 
 function aivision_reading_sidebar( $sidebar ) {
     if ( 'sidebar-1' === $sidebar ) {
+        aivision_reading_language();
         aivision_render_reading_widget();
     }
 }
@@ -125,17 +160,58 @@ function aivision_reading_styles() {
     wp_register_style( 'aivision-reading-widget', false, array( 'newsup-style' ) );
     wp_enqueue_style( 'aivision-reading-widget' );
     wp_add_inline_style( 'aivision-reading-widget', <<<'CSS'
+.aiv-language {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 0 12px;
+    border: 1px solid #cad8ec;
+    border-radius: 11px;
+    background: #f4f8ff;
+    color: #203a60;
+    font-size: .88rem;
+}
+.aiv-language summary {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 42px;
+    padding: 7px 11px;
+    cursor: pointer;
+    list-style: none;
+    font-weight: 700;
+}
+.aiv-language summary::-webkit-details-marker { display: none; }
+.aiv-language summary::after { content: '▾'; margin-inline-start: auto; }
+.aiv-language[open] summary::after { transform: rotate(180deg); }
+.aiv-language summary .fa-globe { font-size: 1.12rem; color: #305c9b; }
+.aiv-language-alt { font-weight: 500; color: #51698a; }
+.aiv-language ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 4px;
+    list-style: none;
+    padding: 0 8px;
+    margin: 0;
+}
+.aiv-language li { margin: 0; }
+.aiv-language a { display: block; padding: 6px; color: #244f88; border-radius: 5px; }
+.aiv-language a:hover { background: #deecff; text-decoration: underline; }
+.aiv-language summary:focus-visible, .aiv-language a:focus-visible {
+    outline: 2px solid #305c9b;
+    outline-offset: -2px;
+}
+.aiv-language small { display: block; margin: 4px 13px 8px; color: #51698a; }
 .aiv-reading {
     --reading-ink: #eff6ff;
-    --reading-muted: #aac0e3;
+    --reading-muted: #c5d6f1;
     --reading-accent: #8ce0ff;
     box-sizing: border-box;
     width: 100%;
     margin: 0 0 20px;
     padding: clamp(12px, 1.5vw, 20px);
-    border: 1px solid #254575;
+    border: 1px solid #3a5785;
     border-radius: 16px;
-    background: radial-gradient(ellipse at top right, #1b4077, transparent 58%), #101d37;
+    background: radial-gradient(ellipse at top right, #31598c, transparent 65%), #1b3356;
     color: var(--reading-ink);
     box-shadow: 0 8px 22px #101d3724;
 }
@@ -158,8 +234,8 @@ function aivision_reading_styles() {
     flex-wrap: wrap;
     gap: 4px;
     padding: 4px;
-    background: #09172d;
-    border: 1px solid #294471;
+    background: #172e50;
+    border: 1px solid #46648e;
     border-radius: 10px;
 }
 .aiv-reading-labels label {
@@ -196,7 +272,7 @@ function aivision_reading_styles() {
     font-size: .76rem;
 }
 .aiv-reading .aiv-reading-panel ul { list-style: none; margin: 5px 0 0; padding: 0; }
-.aiv-reading .aiv-reading-panel li { border-bottom: 1px solid #385075; margin: 0; padding: 0; }
+.aiv-reading .aiv-reading-panel li { border-bottom: 1px solid #49658d; margin: 0; padding: 0; }
 .aiv-reading .aiv-reading-panel li:last-child { border-bottom: 0; }
 .aiv-reading .aiv-reading-panel li a {
     display: flex;
@@ -213,7 +289,7 @@ function aivision_reading_styles() {
     text-decoration: underline;
 }
 .aiv-reading-thumb {
-    flex: 0 0 clamp(43px, 5vw, 62px);
+    flex: 0 0 clamp(52px, 5.8vw, 74px);
     aspect-ratio: 1.18;
     border-radius: 8px;
     overflow: hidden;
