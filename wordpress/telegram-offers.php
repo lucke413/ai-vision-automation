@@ -15,6 +15,20 @@ function aivision_telegram_offers_banner() {
             </div>
         </div>
     </aside>
+    <script id="aivision-telegram-placement">
+    (() => {
+        // Newsup renders its Top Tags before the banner hook on the home page.
+        const banner = document.currentScript.previousElementSibling;
+        const header = banner.parentElement.querySelector(':scope > header.mg-headwidget');
+        if (header) {
+            const next = header.nextElementSibling;
+            const anchor = next && next.classList.contains('clearfix') ? next : header;
+            if (anchor.nextElementSibling !== banner) {
+                anchor.after(banner);
+            }
+        }
+    })();
+    </script>
     <?php
 }
 

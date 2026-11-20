@@ -5,7 +5,7 @@ from collections import Counter
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
-from time import time
+from time import time_ns
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import requests
@@ -20,10 +20,11 @@ RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
 RELATED_SOURCE = SOURCE.with_name("related-cards.php")
 READING_NAME = "AI Vision: articoli di tendenza e più letti"
 READING_SOURCE = SOURCE.with_name("reading-widget.php")
-PREVIOUS_READING_HASH = "005d6234235eedac6e1b17722ee2a1ad1d0f4054996a4db908241d9845020fff"
+PREVIOUS_READING_HASH = "c6f5615aec8070e8f3b3e98b137588a94fc8a426ff7552450aee7802fa9eff50"
 TELEGRAM_NAME = "AI Vision: fascia offerte Telegram"
 TELEGRAM_SOURCE = SOURCE.with_name("telegram-offers.php")
 TELEGRAM_URL = "https://t.me/aivision_tech"
+PREVIOUS_TELEGRAM_HASH = "13825a80433f002788defe90b8328586d5ef0414d9a904cb5d3484321d4307ca"
 NAVIGATION_NAME = "AI Vision: navigazione offerte e indice articoli"
 NAVIGATION_SOURCE = SOURCE.with_name("editorial-navigation.php")
 ARTICLES = (
@@ -48,7 +49,7 @@ def wp(session, method, route, **kwargs):
 
 
 def get_page(session, path):
-    response = session.get(SITE + path, params={"aivision_header_check": int(time())},
+    response = session.get(SITE + path, params={"aivision_header_check": time_ns()},
                            timeout=(10, 25), allow_redirects=False)
     if response.status_code != 200:
         raise RuntimeError(f"Pagina pubblica {path}: HTTP {response.status_code}")
@@ -125,6 +126,8 @@ def verify_reading_widget(session):
                 or children != [language[0], adverts[0], social[0], widget[0], categories[0]]):
             positions = [node.get("id") or node.get("class") or node.name for node in children]
             raise RuntimeError(f"Ordine della barra laterale inatteso su {path}: {positions}")
+        if path in ("/", "/page/2/") and page.select_one(".mg-fea-area .top-right-area"):
+            raise RuntimeError(f"Schede di lettura duplicate sopra la colonna laterale su {path}")
         links = language[0].select("a[lang][href]")
         original = SITE + path
         if (not links or links[0]["lang"] != "it" or links[0]["href"] != original
@@ -149,8 +152,10 @@ def verify_telegram_offers(session):
         page = get_page(session, path)
         header = page.select_one("header.mg-headwidget")
         banners = page.select(".aiv-telegram-offers")
+        placement = page.select_one("script#aivision-telegram-placement")
         if (not header or not header.select_one(".mg-menu-full") or len(banners) != 1
-                or header.find_next_sibling(lambda node: "clearfix" not in node.get("class", [])) != banners[0]
+                or banners[0] not in list(header.next_siblings)
+                or not placement or placement.find_previous_sibling() != banners[0]
                 or not page.select_one("#aivision-telegram-offers-inline-css")):
             raise RuntimeError(f"Fascia Telegram mancante o fuori posizione su {path}")
         links = banners[0].select("a[href]")
@@ -245,7 +250,8 @@ def main():
         if args.editorial_navigation:
             deploy(admin, public, NAVIGATION_NAME, NAVIGATION_SOURCE, verify_editorial_navigation)
         elif args.telegram_offers:
-            deploy(admin, public, TELEGRAM_NAME, TELEGRAM_SOURCE, verify_telegram_offers)
+            deploy(admin, public, TELEGRAM_NAME, TELEGRAM_SOURCE, verify_telegram_offers,
+                   previous_hash=PREVIOUS_TELEGRAM_HASH)
         elif args.reading_widget:
             deploy(admin, public, READING_NAME, READING_SOURCE, verify_reading_widget,
                    previous_hash=PREVIOUS_READING_HASH)
