@@ -1,4 +1,5 @@
-"""Publish only the AI Vision article header snippet and verify live HTML."""
+"""Publish AI Vision article layout snippets and verify live HTML."""
+import argparse
 import os
 from pathlib import Path
 from time import time
@@ -11,8 +12,9 @@ SITE = "https://aivision.altervista.org"
 PLUGIN = "code-snippets/code-snippets"
 SNIPPETS = "/code-snippets/v1/snippets"
 NAME = "AI Vision: Top Tags e notizie negli articoli"
-MARKER = "function aivision_article_header_strips()"
 SOURCE = Path(__file__).resolve().parents[1] / "wordpress/article-header.php"
+RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
+RELATED_SOURCE = SOURCE.with_name("related-cards.php")
 ARTICLES = (
     "/migliori-sedie-gaming-modelli-fasce-prezzo/",
     "/amazon-black-friday-2026-11-19-2/",
@@ -72,6 +74,20 @@ def verify(session):
     print("Verificate la home e la pagina archivio.")
 
 
+def verify_related_cards(session):
+    style_id = "#aivision-related-cards-inline-css"
+    paths = ("/amazon-offerte-ordinarie-2026-11-19/", ARTICLES[0])
+    for path in paths:
+        page = get_page(session, path)
+        style = page.select_one(style_id)
+        cards = page.select(".single-class .mg-featured-slider > .row > .col-md-4 > .mg-blog-post-3")
+        if not style or not cards or any(not card.select_one("h4.title a[href]") for card in cards):
+            raise RuntimeError(f"Stile o schede correlate mancanti su {path}")
+        print(f"Verificato lo stile per {len(cards)} schede correlate su {path}")
+    if any(get_page(session, path).select_one(style_id) for path in ("/", ARCHIVE)):
+        raise RuntimeError("Lo stile per gli articoli correlati compare fuori dagli articoli.")
+
+
 def ensure_snippets_plugin(session):
     plugins = wp(session, "GET", "/wp/v2/plugins", params={"context": "edit", "_fields": "plugin,status"})
     installed = next((item for item in plugins if item["plugin"] == PLUGIN), None)
@@ -85,20 +101,20 @@ def ensure_snippets_plugin(session):
     print("Code Snippets installato e attivo.")
 
 
-def deploy(admin, public):
+def deploy(admin, public, name, source, check):
     ensure_snippets_plugin(admin)
-    code = SOURCE.read_text(encoding="utf-8").removeprefix("<?php\n")
-    matches = [item for item in wp(admin, "GET", SNIPPETS) if item.get("name") == NAME]
+    code = source.read_text(encoding="utf-8").removeprefix("<?php\n")
+    matches = [item for item in wp(admin, "GET", SNIPPETS) if item.get("name") == name]
     if len(matches) > 1 or any(item.get("code", "").strip() != code.strip() for item in matches):
         raise RuntimeError("Uno snippet con questo nome ha contenuto diverso dal repository.")
     if matches and matches[0]["active"]:
-        verify(public)
+        check(public)
         return
     if matches:
         saved = matches[0]
     else:
-        saved = wp(admin, "POST", SNIPPETS, json={"name": NAME, "code": code, "scope": "front-end", "active": False})
-    if MARKER not in saved.get("code", "") or saved.get("code_error"):
+        saved = wp(admin, "POST", SNIPPETS, json={"name": name, "code": code, "scope": "front-end", "active": False})
+    if saved.get("code", "").strip() != code.strip() or saved.get("code_error"):
         raise RuntimeError("Il contenuto dello snippet non è stato salvato correttamente.")
     route = f"{SNIPPETS}/{int(saved['id'])}"
     try:
@@ -108,7 +124,7 @@ def deploy(admin, public):
             state = wp(admin, "POST", route, json={"active": True})
         if not state.get("active") or state.get("code_error"):
             raise RuntimeError("WordPress non ha confermato l'attivazione dello snippet.")
-        verify(public)
+        check(public)
     except (RuntimeError, requests.RequestException):
         wp(admin, "POST", route + "/deactivate")
         print("Snippet disattivato dopo verifica pubblica fallita.")
@@ -116,13 +132,19 @@ def deploy(admin, public):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--related-cards", action="store_true")
+    args = parser.parse_args()
     base = os.environ.get("WP_BASE_URL", "").rstrip("/").removesuffix("/wp-json")
     user, password = (os.environ.get(key, "") for key in ("WP_USERNAME", "WP_APP_PASSWORD"))
     if base != SITE or not user or not password:
         raise SystemExit("Configurazione WordPress AI Vision mancante.")
     with requests.Session() as admin, requests.Session() as public:
         admin.auth = (user, password)
-        deploy(admin, public)
+        if args.related_cards:
+            deploy(admin, public, RELATED_NAME, RELATED_SOURCE, verify_related_cards)
+        else:
+            deploy(admin, public, NAME, SOURCE, verify)
 
 
 if __name__ == "__main__":
