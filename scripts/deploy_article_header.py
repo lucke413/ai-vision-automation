@@ -20,7 +20,7 @@ RELATED_NAME = "AI Vision: copertine e titoli degli articoli correlati"
 RELATED_SOURCE = SOURCE.with_name("related-cards.php")
 READING_NAME = "AI Vision: articoli di tendenza e più letti"
 READING_SOURCE = SOURCE.with_name("reading-widget.php")
-PREVIOUS_READING_HASH = "3b305cbb621a19d813295b840b2af42c8847d95f36e77a1707451a2eba036cc4"
+PREVIOUS_READING_HASH = "eeb00742367ae176a4ba411128981f1073cf2d2b1284842ff1be4bec0f95eb60"
 NAVIGATION_NAME = "AI Vision: navigazione offerte e indice articoli"
 NAVIGATION_SOURCE = SOURCE.with_name("editorial-navigation.php")
 ARTICLES = (
@@ -107,7 +107,20 @@ def verify_reading_widget(session):
         if path in CATEGORIES:
             language = page.select_one("#sidebar-right .aiv-language")
         elif len(widget) == 1 and page.select_one(container) and len(widget[0].select(".aiv-reading-panel li a[href]")) >= 2:
-            language = widget[0].find_previous_sibling()
+            if path == "/":
+                language = widget[0].find_previous_sibling()
+                if not page.select_one("#sidebar-right #block-20 .aiv-social-box"):
+                    raise RuntimeError("Widget social assente dalla posizione prevista in home.")
+            else:
+                sidebar = page.select_one("#sidebar-right")
+                language = sidebar.select_one(".aiv-language")
+                social = sidebar.select("#block-20:has(.aiv-social-box)")
+                children = sidebar.find_all(recursive=False)
+                if (not language or len(social) != 1 or len(sidebar.select(".aiv-social-box")) != 1
+                        or any(node not in children for node in (language, social[0], widget[0]))
+                        or not children.index(language) < children.index(social[0]) < children.index(widget[0])):
+                    raise RuntimeError(f"Ordine della barra laterale inatteso su {path}")
+                print(f"Widget social verificato sopra Da leggere su {path}")
         else:
             raise RuntimeError(f"Widget letture mancante o incompleto su {path}")
         if not language or language.name != "details" or "aiv-language" not in language.get("class", []):

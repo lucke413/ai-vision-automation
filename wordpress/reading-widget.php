@@ -1,6 +1,8 @@
 <?php
 /** Newsup reading lists, ranked by the site's existing Jetpack view data. */
 
+const AIVISION_SOCIAL_WIDGET = 'block-20';
+
 function aivision_reading_view_ids( $days ) {
     $key = 'aivision_reading_views_' . $days;
     $cached = get_transient( $key );
@@ -161,9 +163,37 @@ function aivision_reading_sidebar( $sidebar ) {
     if ( 'sidebar-1' === $sidebar ) {
         aivision_reading_language();
         if ( is_singular( 'post' ) ) {
-            aivision_render_reading_widget();
+            global $wp_registered_widgets;
+            $widgets = wp_get_sidebars_widgets()['sidebar-1'] ?? array();
+            $social = $wp_registered_widgets[ AIVISION_SOCIAL_WIDGET ] ?? array();
+            if ( in_array( AIVISION_SOCIAL_WIDGET, $widgets, true ) && is_callable( $social['callback'] ?? null ) ) {
+                add_filter( 'dynamic_sidebar_params', 'aivision_reading_after_social' );
+            } else {
+                aivision_render_reading_widget();
+            }
         }
     }
+}
+
+function aivision_social_first( $sidebars ) {
+    $widgets = $sidebars['sidebar-1'] ?? array();
+    $position = array_search( AIVISION_SOCIAL_WIDGET, $widgets, true );
+    if ( false !== $position ) {
+        unset( $widgets[ $position ] );
+        $sidebars['sidebar-1'] = array_merge( array( AIVISION_SOCIAL_WIDGET ), $widgets );
+    }
+    return $sidebars;
+}
+
+function aivision_reading_after_social( $params ) {
+    if ( 'sidebar-1' !== ( $params[0]['id'] ?? '' ) || AIVISION_SOCIAL_WIDGET !== ( $params[0]['widget_id'] ?? '' ) ) {
+        return $params;
+    }
+    remove_filter( 'dynamic_sidebar_params', 'aivision_reading_after_social' );
+    ob_start();
+    aivision_render_reading_widget();
+    $params[0]['after_widget'] .= ob_get_clean();
+    return $params;
 }
 
 function aivision_reading_styles() {
@@ -320,6 +350,9 @@ function aivision_mount_reading_widget() {
         add_action( 'newsup_action_banner_tabbed_posts', 'aivision_reading_home', 10 );
     } elseif ( is_singular( 'post' ) || is_category( array( 'offerte-2', 'guide', 'ai-pratica' ) ) ) {
         add_action( 'dynamic_sidebar_before', 'aivision_reading_sidebar', 9 );
+        if ( is_singular( 'post' ) ) {
+            add_filter( 'sidebars_widgets', 'aivision_social_first', PHP_INT_MAX );
+        }
     } else {
         return;
     }
