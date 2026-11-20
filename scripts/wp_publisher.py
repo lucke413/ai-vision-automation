@@ -206,6 +206,13 @@ def next_ai_cyber_time(occupied: set[date], now: datetime) -> datetime:
     raise PublisherError("Nessuno slot libero per IA e cybersicurezza nei prossimi 14 giorni.")
 
 
+def ai_cyber_publication_day(post: dict) -> date:
+    timestamp = datetime.fromisoformat(post["date_gmt"])
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(get_timezone()).date()
+
+
 def category_for(draft: dict) -> str:
     category = str(draft.get("category") or "Tecnologia")
     story_type = str(draft.get("story_type") or "NEWS")
@@ -972,6 +979,9 @@ class WordPressClient:
         return set(self.ai_cyber_publication_days(now))
 
     def ai_cyber_publication_days(self, now: datetime) -> list[date]:
+        return [ai_cyber_publication_day(post) for post in self.ai_cyber_posts(now)]
+
+    def ai_cyber_posts(self, now: datetime) -> list[dict]:
         if self.dry_run:
             return []
         tag_id = self.get_or_create_term("tags", AI_CYBER_TAG).get("id")
@@ -979,7 +989,7 @@ class WordPressClient:
         if not tag_id or not category_id:
             raise PublisherError("Impossibile verificare la tassonomia di cybersicurezza.")
         current = now.astimezone(get_timezone())
-        days = []
+        scheduled = []
         for status in ("publish", "future"):
             page = 1
             while True:
@@ -988,7 +998,7 @@ class WordPressClient:
                     params={"status": status, "per_page": 100, "page": page, "context": "edit",
                             "after": (current.date() - timedelta(days=1)).isoformat() + "T00:00:00",
                             "before": (current.date() + timedelta(days=14)).isoformat() + "T00:00:00",
-                            "_fields": "date_gmt,title,categories,tags"},
+                            "_fields": "id,status,date_gmt,title,categories,tags"},
                     timeout=REQUEST_TIMEOUT,
                 )
                 response.raise_for_status()
@@ -997,13 +1007,43 @@ class WordPressClient:
                     if (tag_id not in post["tags"] and category_id not in post["categories"]
                             and not is_cybersecurity({"title": title})):
                         continue
-                    timestamp = datetime.fromisoformat(post["date_gmt"])
-                    timestamp = timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=timezone.utc)
-                    days.append(timestamp.astimezone(current.tzinfo).date())
+                    scheduled.append(post)
                 if page >= int(response.headers.get("X-WP-TotalPages", "1")):
                     break
                 page += 1
-        return days
+        return scheduled
+
+    def reschedule_cyber_conflict(self, now: datetime, day: date) -> None:
+        if self.dry_run or day != now.astimezone(get_timezone()).date():
+            return
+        posts = self.ai_cyber_posts(now)
+        matching = [post for post in posts if ai_cyber_publication_day(post) == day]
+        if len(matching) < 2:
+            print("Nessuna sovrapposizione di cybersicurezza da correggere.")
+            return
+        pending = [post for post in matching if post["status"] == "future"]
+        if len(matching) != 2 or len(pending) != 1:
+            raise PublisherError("Il calendario è cambiato rispetto alla sovrapposizione verificata.")
+        post = pending[0]
+        next_slot = next_ai_cyber_time({ai_cyber_publication_day(item) for item in posts}, now)
+        endpoint = self._url(f"posts/{post['id']}")
+        params = {"context": "edit", "_fields": "status,date_gmt,slug,title,content,featured_media"}
+        response = self.session.get(endpoint, params=params, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        before = response.json()
+        if before["status"] != "future" or before["date_gmt"] != post["date_gmt"]:
+            raise PublisherError("La data o lo stato dell’articolo è cambiato durante la verifica.")
+        utc_date = next_slot.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        response = self.session.post(
+            endpoint, params=params, timeout=REQUEST_TIMEOUT,
+            json={"date": next_slot.strftime("%Y-%m-%dT%H:%M:%S"), "date_gmt": utc_date, "status": "future"},
+        )
+        response.raise_for_status()
+        after = response.json()
+        if (after["status"] != "future" or after["date_gmt"] != utc_date
+                or any(after[key] != before[key] for key in ("slug", "title", "content", "featured_media"))):
+            raise PublisherError("La nuova programmazione richiede verifica.")
+        print(f"Articolo di cybersicurezza spostato dal {day} al {next_slot.isoformat()}.")
 
     def upload_media(self, content: bytes, filename: str, mime_type: str, alt_text: str, caption: str) -> dict:
         if self.dry_run:

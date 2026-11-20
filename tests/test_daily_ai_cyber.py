@@ -123,6 +123,25 @@ class DailyAICyberTests(unittest.TestCase):
         self.assertEqual([call.args for call in client.get_or_create_term.call_args_list],
                          [("tags", "IA e cybersicurezza"), ("categories", "Sicurezza")])
 
+    def test_reschedule_moves_only_the_conflicting_future_post(self):
+        client = publisher.WordPressClient("https://example.com", "", "", False)
+        rome = ZoneInfo("Europe/Rome")
+        now = datetime(2026, 11, 20, 11, 30, tzinfo=rome)
+        future = {"id": 2, "status": "future", "date_gmt": "2026-11-20T18:30:00"}
+        client.ai_cyber_posts = MagicMock(return_value=[
+            {"id": 1, "status": "publish", "date_gmt": "2026-11-20T07:00:00"}, future,
+            {"id": 3, "status": "future", "date_gmt": "2026-11-21T18:30:00"},
+        ])
+        client.session = MagicMock()
+        content = {**future, "slug": "slug", "title": {"raw": "titolo"}, "content": {"raw": "testo"}, "featured_media": 5}
+        client.session.get.return_value.json.return_value = content
+        client.session.post.return_value.json.return_value = {**content, "date_gmt": "2026-11-22T18:30:00"}
+        with contextlib.redirect_stdout(io.StringIO()):
+            client.reschedule_cyber_conflict(now, now.date())
+        self.assertTrue(client.session.post.call_args.args[0].endswith("/posts/2"))
+        self.assertEqual(client.session.post.call_args.kwargs["json"],
+                         {"date": "2026-11-22T19:30:00", "date_gmt": "2026-11-22T18:30:00", "status": "future"})
+
 
 if __name__ == "__main__":
     unittest.main()
