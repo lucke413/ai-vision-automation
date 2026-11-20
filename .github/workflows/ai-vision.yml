@@ -155,7 +155,7 @@ jobs:
     needs: editorial-preflight
     if: ${{ always() && !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.editorial-preflight.result == 'success' && (contains(github.event.head_commit.message, '[AI-VISION-AMAZON-QA]') || contains(github.event.head_commit.message, '[AI-VISION-AMAZON-EDITORIAL-LIVE]')))) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     concurrency:
       group: ai-vision-amazon-wordpress-${{ github.ref }}
       cancel-in-progress: false
@@ -222,7 +222,7 @@ jobs:
   ai-pipeline:
     if: ${{ (github.event_name == 'schedule' && github.event.schedule == '17 11 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.offers_only) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 80
     env:
       PYTHONUNBUFFERED: "1"
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
