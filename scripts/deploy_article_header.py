@@ -25,6 +25,8 @@ TELEGRAM_NAME = "AI Vision: fascia offerte Telegram"
 TELEGRAM_SOURCE = SOURCE.with_name("telegram-offers.php")
 TELEGRAM_URL = "https://t.me/aivision_tech"
 PREVIOUS_TELEGRAM_HASH = "13825a80433f002788defe90b8328586d5ef0414d9a904cb5d3484321d4307ca"
+RESPONSIVE_NAME = "AI Vision: lettura e spazi pubblicitari responsive"
+RESPONSIVE_SOURCE = SOURCE.with_name("responsive-layout.php")
 NAVIGATION_NAME = "AI Vision: navigazione offerte e indice articoli"
 NAVIGATION_SOURCE = SOURCE.with_name("editorial-navigation.php")
 ARTICLES = (
@@ -164,6 +166,18 @@ def verify_telegram_offers(session):
         print(f"Fascia offerte e destinazione Telegram verificate su {path}")
 
 
+def verify_responsive_layout(session):
+    for path in ("/", *ARTICLES, ARCHIVE, "/contatti/"):
+        page = get_page(session, path)
+        if not page.select_one("#aivision-responsive-layout-inline-css"):
+            raise RuntimeError(f"Stile responsive mancante su {path}")
+        if not page.select_one("header .mg-menu-full .navbar-toggler") or not page.select_one("#sidebar-right"):
+            raise RuntimeError(f"Menu o colonna laterale mancante su {path}")
+        if path in ARTICLES and not page.select_one("main.single-class article.page-content-single > p"):
+            raise RuntimeError(f"Testo dell'articolo mancante su {path}")
+        print(f"Stile e struttura responsive verificati su {path}")
+
+
 def verify_editorial_navigation(session):
     archive = get_page(session, ARCHIVE)
     overview = archive.select(".aiv-offers-overview")
@@ -240,6 +254,7 @@ def main():
     variants.add_argument("--reading-widget", action="store_true")
     variants.add_argument("--editorial-navigation", action="store_true")
     variants.add_argument("--telegram-offers", action="store_true")
+    variants.add_argument("--responsive-layout", action="store_true")
     args = parser.parse_args()
     base = os.environ.get("WP_BASE_URL", "").rstrip("/").removesuffix("/wp-json")
     user, password = (os.environ.get(key, "") for key in ("WP_USERNAME", "WP_APP_PASSWORD"))
@@ -252,6 +267,8 @@ def main():
         elif args.telegram_offers:
             deploy(admin, public, TELEGRAM_NAME, TELEGRAM_SOURCE, verify_telegram_offers,
                    previous_hash=PREVIOUS_TELEGRAM_HASH)
+        elif args.responsive_layout:
+            deploy(admin, public, RESPONSIVE_NAME, RESPONSIVE_SOURCE, verify_responsive_layout)
         elif args.reading_widget:
             deploy(admin, public, READING_NAME, READING_SOURCE, verify_reading_widget,
                    previous_hash=PREVIOUS_READING_HASH)

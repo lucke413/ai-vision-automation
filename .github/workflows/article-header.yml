@@ -11,6 +11,7 @@ on:
       - 'wordpress/reading-widget.php'
       - 'wordpress/editorial-navigation.php'
       - 'wordpress/telegram-offers.php'
+      - 'wordpress/responsive-layout.php'
       - 'scripts/deploy_article_header.py'
 
 permissions:
@@ -22,7 +23,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[AI-VISION-ARTICLE-HEADER]') || contains(github.event.head_commit.message, '[AI-VISION-RELATED-CARDS]') || contains(github.event.head_commit.message, '[AI-VISION-READING-WIDGET]') || contains(github.event.head_commit.message, '[AI-VISION-EDITORIAL-NAVIGATION]') || contains(github.event.head_commit.message, '[AI-VISION-TELEGRAM-OFFERS]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[AI-VISION-ARTICLE-HEADER]') || contains(github.event.head_commit.message, '[AI-VISION-RELATED-CARDS]') || contains(github.event.head_commit.message, '[AI-VISION-READING-WIDGET]') || contains(github.event.head_commit.message, '[AI-VISION-EDITORIAL-NAVIGATION]') || contains(github.event.head_commit.message, '[AI-VISION-TELEGRAM-OFFERS]') || contains(github.event.head_commit.message, '[AI-VISION-RESPONSIVE-LAYOUT]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -37,6 +38,7 @@ jobs:
       - run: php -l wordpress/reading-widget.php
       - run: php -l wordpress/editorial-navigation.php
       - run: php -l wordpress/telegram-offers.php
+      - run: php -l wordpress/responsive-layout.php
       - run: python -m pip install -r requirements.txt
       - name: Attiva le barre Newsup e verifica il sito
         if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[AI-VISION-ARTICLE-HEADER]') }}
@@ -74,3 +76,10 @@ jobs:
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
         run: python scripts/deploy_article_header.py --telegram-offers
+      - name: Attiva e verifica il layout responsive
+        if: ${{ contains(github.event.head_commit.message, '[AI-VISION-RESPONSIVE-LAYOUT]') }}
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/deploy_article_header.py --responsive-layout
