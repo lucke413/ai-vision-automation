@@ -2,7 +2,7 @@ import sys
 import json
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -19,6 +19,10 @@ class AmazonPromotionsTests(unittest.TestCase):
             "asin": "B012345678",
             "detailPageURL": f"https://www.amazon.it/dp/B012345678?tag={self.tag}",
             "itemInfo": {"title": {"displayValue": "Modello X cuffie Bluetooth"}},
+            "images": {"primary": {"medium": {
+                "url": "https://m.media-amazon.com/images/I/modello-x.jpg",
+                "width": 160, "height": 122,
+            }}},
             "offersV2": {"listings": [{
                 "isBuyBoxWinner": True,
                 "availability": {"type": "IN_STOCK"},
@@ -42,6 +46,8 @@ class AmazonPromotionsTests(unittest.TestCase):
     def test_prices_from_exact_available_items_only(self):
         offer = promos.product_offer(self.product, promos.CATEGORIES[0], self.now, self.tag)
         self.assertEqual(offer.price, "59,90 €")
+        self.assertEqual(offer.savings, 20)
+        self.assertEqual(offer.image[1:], (160, 122))
         self.assertIn("Prime", offer.terms)
         listing = self.product["offersV2"]["listings"][0]
         listing["availability"]["type"] = "OUT_OF_STOCK"
@@ -56,12 +62,42 @@ class AmazonPromotionsTests(unittest.TestCase):
         self.assertIn("Scelte da AI Vision per voi", body)
         self.assertIn("Clicca qui per acquistarlo", body)
         self.assertIn('rel="sponsored nofollow"', body)
-        self.assertIn("Prezzo verificato e valido al momento della pubblicazione", body)
+        self.assertIn("Prezzo 59,90 €", body)
+        self.assertIn("Sconto 20%", body)
+        self.assertIn("Verificato il 19/11/2026 alle 12:00", body)
+        self.assertIn("verificati al momento della pubblicazione", body)
+        self.assertGreater(body.index('id="aivision-amazon-price-note"'), body.index("Clicca qui per acquistarlo"))
+        parsed = promos.BeautifulSoup(body, "html.parser")
+        image = parsed.find("img")
+        self.assertEqual(image["src"], self.product["images"]["primary"]["medium"]["url"])
+        self.assertEqual(image["alt"], deal.title)
+        self.assertEqual(image.parent["href"], deal.url)
         self.assertEqual(body, promos.expire_in_body(body, self.now))
         archive = promos.expire_in_body(body, self.now + timedelta(hours=4))
         self.assertIn("Introduzione", archive)
         self.assertNotIn("59,90", archive)
+        self.assertNotIn("Sconto 20%", archive)
+        self.assertNotIn("<img", archive)
+        self.assertNotIn('id="aivision-amazon-price-note"', archive)
         self.assertNotIn("amazon.it/dp", archive)
+
+    def test_refresh_uses_exact_product_and_preserves_editorial_copy_and_earlier_expiry(self):
+        stamped = self.now + timedelta(minutes=3)
+        self.product["images"]["primary"]["medium"]["url"] = "https://example.org/not-amazon.jpg"
+        original = promos.Offer(self.product["asin"], "Casa e pulizia", "Titolo redazionale", "Descrizione originale",
+                                "Consiglio originale", "", self.product["detailPageURL"],
+                                self.now + timedelta(hours=1), affiliate=True)
+        api = Mock(tag=self.tag)
+        api.get_products.return_value = [self.product]
+        with patch.object(promos, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = stamped
+            refreshed, = promos.refresh_products(api, [original], None, None)
+        api.get_products.assert_called_once_with([original.key])
+        self.assertEqual(refreshed.description, original.description)
+        self.assertEqual(refreshed.expires, original.expires)
+        self.assertEqual(refreshed.verified_at, stamped)
+        self.assertEqual(refreshed.savings, 20)
+        self.assertIsNone(refreshed.image)
 
     def test_audible_uses_the_exact_public_offer_and_accepts_campaign_link(self):
         text = ("I clienti idonei possono ottenere tre mesi di abbonamento Audible Premium a soli 0,99€ al mese. "
@@ -106,7 +142,8 @@ class AmazonPromotionsTests(unittest.TestCase):
         extra = promos.replace(offer, key="B012345679", url=offer.url.replace(offer.key, "B012345679"))
         self.assertEqual(promos.extend_edition(client, post, [offer, extra], self.now)["status"], "updated")
         saved = client.session.post.call_args.kwargs["json"]["content"]
-        self.assertTrue(saved.startswith(body))
+        self.assertTrue(saved.startswith(promos.PRICE_NOTE.sub("", body)))
+        self.assertEqual(saved.count('id="aivision-amazon-price-note"'), 1)
         self.assertEqual(saved.count(offer.key), 1)
         self.assertEqual(saved.count(extra.key), 1)
 

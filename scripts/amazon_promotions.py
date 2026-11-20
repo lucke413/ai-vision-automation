@@ -32,6 +32,7 @@ CONFIG = ROOT / "config/amazon-promotions.json"
 EDITORIAL_FEED = ROOT / "config/amazon-editorial-offers.json"
 REPORT = ROOT / "data/amazon_promotions_report.json"
 AMAZON = "https://www.amazon.it"
+PRODUCT_IMAGE_HOSTS = {"m.media-amazon.com", "images-eu.ssl-images-amazon.com", "images-na.ssl-images-amazon.com"}
 NEWS_HOST = "www.aboutamazon.it"
 MARK = "aivision-amazon-promo"
 ONGOING = "Selezione Amazon AI Vision"
@@ -39,6 +40,15 @@ MONTHS = "gennaio febbraio marzo aprile maggio giugno luglio agosto settembre ot
 MONTH_PATTERN = "|".join(MONTHS)
 DATE_PATTERN = rf"\b([0-3]?\d)(?:°)?\s+({MONTH_PATTERN})(?:\s+(20\d{{2}}))?\b"
 BLOCK = re.compile(r"<!-- aivision-amazon-promo ([^ <>]+) -->.*?<!-- /aivision-amazon-promo -->", re.S)
+PRICE_LINE = 'class="aivision-amazon-price"'
+PRICE_NOTE = re.compile(r"\n?<!-- aivision-amazon-price-note -->.*?<!-- /aivision-amazon-price-note -->", re.S)
+PRICE_NOTE_HTML = (
+    '<!-- aivision-amazon-price-note -->\n'
+    '<p id="aivision-amazon-price-note"><small>I prezzi e gli sconti indicati sono quelli verificati al momento '
+    'della pubblicazione. Prezzi e disponibilità sono aggiornati alla data e all’ora indicate e possono cambiare. '
+    'Si applicano il prezzo e la disponibilità mostrati su Amazon.it al momento dell’acquisto.</small></p>\n'
+    '<!-- /aivision-amazon-price-note -->'
+)
 ARCHIVE = "<p>Questa offerta è terminata. Prezzo e disponibilità possono essere diversi da quelli della pubblicazione.</p>"
 SAFETY_WINDOW = timedelta(minutes=75)
 EDITORIAL_CAMPAIGNS = {"black-friday": "Black Friday", "cyber-monday": "Cyber Monday"}
@@ -154,6 +164,8 @@ class Offer:
     evidence_url: str = ""
     campaign_badge: str = ""
     product: bool = False
+    verified_at: datetime | None = None
+    image: tuple[str, int, int] | None = None
 
 
 def italian_date(day: date, year: bool = True) -> str:
@@ -472,7 +484,7 @@ class PublicDeals:
 
 class CreatorsAPI:
     RESOURCES = (
-            "itemInfo.title", "offersV2.listings.price", "offersV2.listings.availability",
+        "itemInfo.title", "images.primary.medium", "offersV2.listings.price", "offersV2.listings.availability",
         "offersV2.listings.condition", "offersV2.listings.dealDetails",
         "offersV2.listings.isBuyBoxWinner", "parentASIN",
     )
@@ -529,24 +541,36 @@ class CreatorsAPI:
         if not selections:
             return []
         selected = {offer.key: category for category, offer in selections}
-        keys = list(selected)
-        items = []
-        for offset in range(0, len(keys), 10):
-            items.extend(self.items("getItems", itemIds=keys[offset:offset + 10], itemIdType="ASIN"))
         return [
-            offer for item in items
+            offer for item in self.get_products(list(selected))
             if (category := selected.get(item.get("asin"))) and (offer := product_offer(item, category, now, self.tag))
             and (campaign is None or belongs_to_campaign(offer, campaign))
         ]
 
+    def get_products(self, keys: list[str]) -> list[dict]:
+        items = []
+        for offset in range(0, len(keys), 10):
+            items.extend(self.items("getItems", itemIds=keys[offset:offset + 10], itemIdType="ASIN"))
+        return items
 
-def product_offer(item: dict, category: Category, now: datetime, tag: str) -> Offer | None:
+
+def product_image(item: dict) -> tuple[str, int, int] | None:
+    medium = ((item.get("images") or {}).get("primary") or {}).get("medium") or {}
+    url, width, height = medium.get("url"), medium.get("width"), medium.get("height")
+    if (isinstance(url, str) and valid_https(url, PRODUCT_IMAGE_HOSTS)
+            and type(width) is int and type(height) is int and 0 < width <= 2048 and 0 < height <= 2048):
+        return url, width, height
+    return None
+
+
+def product_offer(item: dict, category: Category, now: datetime, tag: str, *,
+                  match_category: bool = True) -> Offer | None:
     asin = str(item.get("asin") or "")
     url = str(item.get("detailPageURL") or "")
     if not valid_https(url, {"www.amazon.it", "amazon.it"}) or not asin or product_asin(url) != asin or tracking_tag(url) != tag:
         return None
     title = ((item.get("itemInfo") or {}).get("title") or {}).get("displayValue", "")
-    if not title or not re.search(category.product, title, re.I):
+    if not title or (match_category and not re.search(category.product, title, re.I)):
         return None
     for listing in (item.get("offersV2") or {}).get("listings") or []:
         deal = listing.get("dealDetails")
@@ -574,13 +598,42 @@ def product_offer(item: dict, category: Category, now: datetime, tag: str) -> Of
         return Offer(asin, category.title, " ".join(title.split())[:180],
                      category.summary or title, category.why + (" " + category.caveat if category.caveat else ""),
                      terms, url, min(now + timedelta(hours=3), end - SAFETY_WINDOW), display, savings,
-                     affiliate=True, campaign_badge=str(deal.get("badge") or ""))
+                     affiliate=True, campaign_badge=str(deal.get("badge") or ""),
+                     verified_at=now, image=product_image(item))
     return None
 
 
 def belongs_to_campaign(offer: Offer, campaign: Offer) -> bool:
     badge = offer.campaign_badge.casefold()
     return campaign.title.casefold() in badge
+
+
+def refresh_products(api: CreatorsAPI, offers: list[Offer], campaign: Offer | None,
+                     topic: tuple[str, ...] | None) -> list[Offer]:
+    asins = {offer.key for offer in offers if product_asin(offer.url) == offer.key}
+    if not asins:
+        return offers
+    catalog = {item["asin"]: item for item in api.get_products(sorted(asins)) if item.get("asin") in asins}
+    checked = datetime.now(get_timezone())
+    categories = {category.title: category for category in CATEGORIES + BOOKS}
+    refreshed = []
+    for offer in offers:
+        category = categories.get(offer.category)
+        listing = (
+            product_offer(catalog[offer.key], category, checked, api.tag, match_category=False)
+            if category and offer.key in catalog else None
+        )
+        if listing and ((campaign and not belongs_to_campaign(listing, campaign))
+                        or (topic and not any(word in listing.campaign_badge.casefold() for word in topic))):
+            listing = None
+        if listing:
+            terms = " ".join(dict.fromkeys(filter(None, (listing.terms, offer.terms))))
+            refreshed.append(replace(offer, price=listing.price, savings=listing.savings, image=listing.image,
+                                     verified_at=listing.verified_at, expires=min(offer.expires, listing.expires),
+                                     terms=terms))
+        elif offer.verified_at is None:
+            refreshed.append(offer)
+    return refreshed
 
 
 def render_offers(offers: list[Offer], now: datetime, *, disclosure: bool = True,
@@ -592,7 +645,6 @@ def render_offers(offers: list[Offer], now: datetime, *, disclosure: bool = True
     if disclosure:
         sections.append(f"<p>{DISCLOSURE}</p>")
     sections.append(f"<h2>{heading}</h2>")
-    verified = now.strftime("%d/%m/%Y alle %H:%M")
     for category in dict.fromkeys(offer.category for offer in offers):
         sections.append(f"<h3>{html.escape(category)}</h3>")
         for offer in (item for item in offers if item.category == category):
@@ -615,14 +667,32 @@ def render_offers(offers: list[Offer], now: datetime, *, disclosure: bool = True
                 label = "Vedi il prodotto sul sito ufficiale"
             sections.append(f"<p><strong>{reason}.</strong> {html.escape(offer.why)}</p>")
             if offer.price:
-                sections.append(f"<p><strong>{html.escape(offer.price)}</strong>. "
-                                f"Prezzo verificato e valido al momento della pubblicazione ({verified}, ora italiana). "
-                                "Prezzi e disponibilità possono cambiare. Si applicano quelli mostrati al momento dell'acquisto.</p>")
+                verified = (offer.verified_at or now).astimezone(get_timezone()).strftime("%d/%m/%Y alle %H:%M")
+                discount = (
+                    f' <strong style="display:inline-block;background-color:#e1f4e8;color:#18482c;'
+                    f'border-radius:6px;padding:2px 8px"><span aria-hidden="true">↓</span> Sconto {offer.savings}%</strong>'
+                    if offer.savings else ""
+                )
+                sections.append(f'<p {PRICE_LINE}><strong><span aria-hidden="true">🏷️</span> '
+                                f'Prezzo {html.escape(offer.price)}</strong>{discount}<br>'
+                                f'<small>Verificato il {verified}, ora italiana. '
+                                '<a href="#aivision-amazon-price-note">Dettagli sui prezzi</a></small></p>')
             if offer.terms:
                 sections.append(f"<p>{html.escape(offer.terms)}</p>")
-            sections.append(f'<p><a href="{html.escape(offer.url, quote=True)}"{rel}>{label}</a></p>')
+            image = ""
+            if offer.image:
+                image_url, width, height = offer.image
+                scale = min(1, 112 / max(width, height))
+                width, height = max(1, round(width * scale)), max(1, round(height * scale))
+                image = (f'<img src="{html.escape(image_url, quote=True)}" width="{width}" height="{height}" '
+                         f'alt="{title}" loading="lazy" decoding="async" '
+                         'style="display:block;max-width:100%;height:auto;margin-bottom:8px">')
+            sections.append(f'<p><a href="{html.escape(offer.url, quote=True)}"{rel}>{image}{label}</a></p>')
             sections.append(f"<!-- /{MARK} -->")
-    return "\n".join([*sections, "</div>"])
+    sections.append("</div>")
+    if any(offer.price for offer in offers):
+        sections.append(PRICE_NOTE_HTML)
+    return "\n".join(sections)
 
 
 def cover_label(content: bytes, label: str) -> bytes:
@@ -709,7 +779,8 @@ def expire_in_body(body: str, now: datetime) -> str:
             return ARCHIVE if parse_utc(match[1]) <= now else match[0]
         except ValueError:
             return match[0]
-    return BLOCK.sub(hide, body)
+    archived = BLOCK.sub(hide, body)
+    return archived if PRICE_LINE in archived else PRICE_NOTE.sub("", archived)
 
 
 def expire_posts(client: WordPressClient, now: datetime) -> int:
@@ -765,7 +836,10 @@ def extend_edition(client, post, offers, checked):
     if additions:
         section = render_offers(additions, checked, disclosure=False,
                                 heading=f"Aggiornamento delle {checked:%H:%M}")
-        response = client.session.post(endpoint, json={"content": body + "\n" + section}, timeout=20)
+        content = PRICE_NOTE.sub("", body + "\n" + section)
+        if PRICE_LINE in content:
+            content += "\n" + PRICE_NOTE_HTML
+        response = client.session.post(endpoint, json={"content": content}, timeout=20)
         response.raise_for_status()
     return {"post_id": post["id"], "link": current["link"], "wp_status": "publish",
             "status": "updated" if additions else "already_exists"}
@@ -819,6 +893,28 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
 
     used = set()
 
+    def publication_batch(offers, campaign, topic, label, outcome):
+        nonlocal api_denied
+        confirmed = offers
+        if api and not api_denied:
+            try:
+                confirmed = refresh_products(api, offers, campaign, topic)
+            except requests.RequestException as exc:
+                code = catalog_error(exc) if isinstance(exc, requests.HTTPError) else type(exc).__name__
+                report["warnings"].append(f"{label}: verifica prezzi Creators API {code}.")
+                if (isinstance(exc, requests.HTTPError)
+                        and exc.response is not None and exc.response.status_code in {401, 403}):
+                    api_denied = True
+        if confirmed is offers:
+            confirmed = [replace(offer, price="", savings=0, verified_at=None, image=None)
+                         if offer.verified_at else offer for offer in offers]
+        current = datetime.now(get_timezone())
+        if current.date() != now.date() or len(confirmed) != len(offers) or any(o.expires <= current for o in confirmed):
+            return [], current
+        outcome["prices_verified"] = sum(bool(offer.price) for offer in confirmed)
+        outcome["product_images"] = sum(offer.image is not None for offer in confirmed)
+        return confirmed, current
+
     def editions(label, slug, categories, count, campaign=None, topic=None, source=None, editorial_kind=None):
         nonlocal api_denied
         slugs = [f"{slug}-{day}" + (f"-{i + 1}" if count > 1 else "") for i in range(count)]
@@ -870,7 +966,11 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                     report["warnings"].append(f"{outcome['slug']}: categorie verificate insufficienti.")
                     continue
                 if post:
-                    result = extend_edition(client, post, batch, checked)
+                    confirmed, current = publication_batch(batch, campaign, topic, label, outcome)
+                    if not confirmed:
+                        report["warnings"].append(f"{outcome['slug']}: selezione scaduta o incompleta all’ultima verifica.")
+                        continue
+                    result = extend_edition(client, post, confirmed, current)
                 else:
                     suffix = f" · selezione {index}" if count > 1 else ""
                     title = f"{label}{suffix} | {stamp}"
@@ -881,10 +981,8 @@ def run(client: WordPressClient, session: requests.Session, now: datetime) -> di
                              "a frying pan, a canvas backpack, a board game and wireless headphones")
 
                     def content():
-                        current = datetime.now(get_timezone())
-                        if current.date() != now.date() or any(offer.expires <= current for offer in batch):
-                            return ""
-                        return render_offers(batch, current)
+                        confirmed, current = publication_batch(batch, campaign, topic, label, outcome)
+                        return render_offers(confirmed, current)
 
                     result = publish_edition(client, session, title, outcome["slug"], intro, scene, label.upper(), content)
                 report["items"].append({k: result.get(k) for k in ("title", "status", "wp_status", "link", "post_id")})
