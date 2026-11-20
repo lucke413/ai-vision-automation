@@ -1,0 +1,59 @@
+[
+  {
+    "available_from": "2026-11-20",
+    "slug": "come-installare-ssd-m2-ps5",
+    "title": "Come installare un SSD M.2 su PS5 e spostare i giochi",
+    "category": "Gaming",
+    "excerpt": "Come scegliere un SSD compatibile con PS5, montarlo nel vano di espansione e spostare i giochi dopo la formattazione.",
+    "focus_keyphrase": "installare SSD M.2 PS5",
+    "seo_title": "Come installare un SSD M.2 su PS5 e spostare i giochi",
+    "seo_description": "Requisiti dell’SSD con dissipatore, montaggio su PS5 e spostamento dei giochi. Con un esempio di modello e gli errori da evitare.",
+    "cover_prompt": "Close-up of a silver and white game console expansion bay and a compact black M.2 SSD with heatsink, on a bright cobalt workbench with amber tools, daylight product photography",
+    "tags": ["PS5", "SSD", "Gaming"],
+    "amazon_products": ["Samsung 990 PRO 2 TB con dissipatore"],
+    "amazon_source_links": [
+      {
+        "label": "Samsung 990 PRO 2 TB con dissipatore",
+        "url": "https://www.amazon.it/dp/B0BM459NHM"
+      }
+    ],
+    "resources": [
+      {"label": "PlayStation — Montaggio per ciascun modello di PS5", "url": "https://www.playstation.com/it-it/support/hardware/ps5-install-m2-ssd/"},
+      {"label": "PlayStation — Gestire giochi e spazio di archiviazione", "url": "https://www.playstation.com/it-it/support/hardware/ps5-manage-storage-space/"},
+      {"label": "Samsung — Scheda del 990 PRO 2 TB con dissipatore", "url": "https://www.samsung.com/it/memory-storage/nvme-ssd/nvme-pcie-gen-4-2tb-mz-v9p2t0cw/"}
+    ]
+  },
+  {
+    "available_from": "2026-11-24",
+    "slug": "come-collegare-dualsense-pc-windows",
+    "title": "Come collegare il DualSense al PC con USB o Bluetooth",
+    "category": "Gaming",
+    "excerpt": "I passaggi per collegare il controller PS5 a Windows, verificare se funziona e capire quando usare un cavo dati.",
+    "focus_keyphrase": "collegare DualSense al PC",
+    "seo_title": "Come collegare il DualSense al PC con USB o Bluetooth",
+    "seo_description": "Collega il DualSense a Windows via USB o Bluetooth. Scopri come verificare i comandi e risolvere i problemi di associazione.",
+    "cover_prompt": "White game controller on a bright cobalt blue desk beside a laptop and an orange USB cable, crisp afternoon window light, vivid warm and cool contrast, realistic editorial photography",
+    "tags": ["PS5", "DualSense", "Windows"],
+    "amazon_products": ["Sony DualSense"],
+    "resources": [
+      {"label": "PlayStation — Compatibilità e collegamento del DualSense", "url": "https://www.playstation.com/it-it/support/hardware/pair-dualsense-controller-bluetooth/"},
+      {"label": "PlayStation — Uso e associazione del controller alla PS5", "url": "https://www.playstation.com/it-it/support/hardware/dualsense-controller-support/"}
+    ]
+  },
+  {
+    "available_from": "2026-11-27",
+    "slug": "come-trasferire-whatsapp-nuovo-android",
+    "title": "Come trasferire WhatsApp da un Android a un altro",
+    "category": "Smartphone & Mobile",
+    "excerpt": "Come spostare chat e allegati di WhatsApp sul nuovo Android con il codice QR e controllare che il trasferimento sia riuscito.",
+    "focus_keyphrase": "trasferire WhatsApp Android",
+    "seo_title": "Come trasferire WhatsApp da un Android a un altro",
+    "seo_description": "Sposta le chat di WhatsApp da un Android a un altro con lo stesso numero. Preparazione, scansione del QR e controlli finali.",
+    "cover_prompt": "Two phones side by side showing abstract transfer indicators on a vivid teal desk with yellow accents, clear window lighting, practical and clean smartphone editorial photograph",
+    "tags": ["Android", "WhatsApp", "Backup"],
+    "resources": [
+      {"label": "WhatsApp — Trasferire le chat da Android ad Android", "url": "https://faq.whatsapp.com/209942271778103/?cms_platform=android&locale=it_IT"},
+      {"label": "WhatsApp — Risolvere i problemi di trasferimento", "url": "https://faq.whatsapp.com/1039228717453239/"}
+    ]
+  }
+]

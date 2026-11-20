@@ -162,7 +162,9 @@ REGOLE EDITORIALI:
   indicando esplicitamente che è quello del produttore.
 - non presentare la bozza come verifica indipendente dei fatti.
 - Compila cover_prompt con una scena di 25-45 parole in inglese, incentrata
-  su un soggetto visivo preciso, con ambiente, luce e inquadratura. Per persone,
+  su un soggetto visivo preciso, con ambiente, luce e inquadratura. Preferisci
+  luce direzionale chiara e accostamenti di colori vivi ma naturali, pertinenti
+  al tema. Mantieni il soggetto leggibile anche in miniatura. Per persone,
   notizie e prodotti specifici preferisci una scena simbolica, senza ritratti,
   loghi, schermate ufficiali o dettagli inventati. Niente testo nell’immagine.
 - In cover_subject inserisci un nome completo di persona, luogo o modello

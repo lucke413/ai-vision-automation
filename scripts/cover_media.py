@@ -14,7 +14,7 @@ from threading import Lock
 from urllib.parse import quote, unquote, urlsplit
 
 import requests
-from PIL import Image, ImageColor, ImageOps
+from PIL import Image, ImageColor, ImageEnhance, ImageOps, ImageStat
 
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
@@ -24,6 +24,7 @@ MODEL_REVISION = "a85df6a8bd976cdd08b4fd8f3b73f229c9e54df5"
 CREATIVE_COMMONS = re.compile(r"^https://creativecommons\.org/(?:licenses/by(?:-sa)?/(?:2\.0|2\.5|3\.0|4\.0)|publicdomain/(?:zero|mark)/1\.0)/?$")
 PHOTO_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff")
 MODEL_LOCK = Lock()
+EDITORIAL_LIGHT = "Bright editorial photography, clear directional light, rich natural colors, crisp subject contrast"
 
 
 class CoverUnavailable(RuntimeError):
@@ -148,7 +149,7 @@ def generate_ai_cover(draft: dict) -> bytes:
     scene = str(draft.get("cover_prompt") or "").strip()[:300]
     if not scene:
         scene = "Photographic editorial interpretation of " + title[:160]
-    prompt = scene + ", editorial cover, clear focal subject, realistic texture, landscape, no text, no logos"
+    prompt = f"{EDITORIAL_LIGHT}. {scene}, clear focal subject, realistic texture, landscape, no text, no logos"
     seed = int.from_bytes(hashlib.sha256(title.encode()).digest()[:4], "big")
     try:
         import torch
@@ -161,6 +162,7 @@ def generate_ai_cover(draft: dict) -> bytes:
         image = ImageOps.fit(result.images[0].convert("RGB"), (1200, 675), Image.Resampling.LANCZOS)
         if max(high - low for low, high in image.getextrema()) < 24:
             raise CoverUnavailable("Il generatore ha restituito un'immagine vuota.")
+        image = grade_ai_cover(image)
         output = io.BytesIO()
         image.save(output, format="JPEG", quality=88, optimize=True)
         return output.getvalue()
@@ -168,6 +170,16 @@ def generate_ai_cover(draft: dict) -> bytes:
         if isinstance(exc, CoverUnavailable):
             raise
         raise CoverUnavailable(f"Generazione copertina IA fallita ({type(exc).__name__}: {exc}).") from exc
+
+
+def grade_ai_cover(image: Image.Image) -> Image.Image:
+    """Lift deep midtones without brightening highlights or altering external photos."""
+    luma = ImageStat.Stat(image.convert("L")).median[0]
+    if luma < 115:
+        gamma = max(0.72, min(1.0, luma / 115))
+        curve = [round(255 * (level / 255) ** gamma) for level in range(256)]
+        image = image.point(curve * 3)
+    return ImageEnhance.Color(image).enhance(1.16)
 
 
 def is_striped_cover(image: Image.Image) -> bool:

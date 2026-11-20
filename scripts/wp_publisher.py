@@ -1244,6 +1244,8 @@ def publish_one(
     *,
     live_offer_html: Callable[[], str] | None = None,
     offer_cover: Callable[[bytes], bytes] | None = None,
+    publish_now: bool = False,
+    reader_resources: tuple[tuple[str, str], ...] = (),
 ) -> dict:
     title = str(draft.get("title") or "").strip()
     if not title:
@@ -1313,6 +1315,13 @@ def publish_one(
         body = guide_place_figures(body, figures)
         body += guide_prompt_blocks(draft)
     body += guide_resources(draft)
+    if reader_resources:
+        links = "".join(
+            f'<li><a href="{html.escape(url, quote=True)}">{html.escape(label)}</a></li>'
+            for label, url in reader_resources if safe_https_url(url)
+        )
+        if links:
+            body += f"\n<h2>Istruzioni e schede ufficiali</h2><ul>{links}</ul>"
     if live_offer_html is None:
         # Only the product selector may introduce commercial links into editorial posts.
         body = ensure_article_tracking(body, configured_tag(), remove_unselected=True)
@@ -1381,6 +1390,8 @@ def publish_one(
             raise PublisherError("Nessuna promozione confermata al momento della pubblicazione.")
         body += "\n" + offer_html
         affiliate_status = "offer_links_checked"
+    publish_immediately = publish_now or live_offer_html is not None
+    if publish_immediately:
         planned_time = datetime.now(get_timezone())
 
     body = ensure_article_tracking(body, configured_tag())
@@ -1391,7 +1402,7 @@ def publish_one(
         "content": body,
         "excerpt": str(draft.get("excerpt") or ""),
         "slug": slug,
-        "status": "publish" if live_offer_html is not None else "future",
+        "status": "publish" if publish_immediately else "future",
         "date": local_date,
         "date_gmt": utc_date,
         "categories": category_ids,
@@ -1410,7 +1421,7 @@ def publish_one(
         "originality_status": originality_check.get("status", "legacy_unchecked"),
         "originality_check": originality_check or None,
         "title": title,
-        "status": "planned" if client.dry_run else ("published" if live_offer_html is not None else "scheduled"),
+        "status": "planned" if client.dry_run else ("published" if publish_immediately else "scheduled"),
         "wp_status": created.get("status", "future" if not client.dry_run else "dry_run"),
         "post_id": created.get("id"),
         "link": created.get("link"),

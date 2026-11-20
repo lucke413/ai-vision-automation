@@ -30,6 +30,7 @@ on:
       - 'config/amazon-affiliate.json'
       - 'config/amazon-promotions.json'
       - 'config/amazon-editorial-offers.json'
+      - 'config/practical-guides/**'
       - '.github/workflows/ai-vision.yml'
       - '.github/workflows/legacy-content-repair.yml'
   schedule:
@@ -188,6 +189,35 @@ jobs:
           name: ai-vision-amazon-promotions
           path: data/amazon_promotions_report.json
           retention-days: 7
+
+  practical-guide:
+    needs: editorial-preflight
+    if: ${{ always() && !cancelled() && ((github.event_name == 'schedule' && github.event.schedule == '17 11 * * *') || (github.event_name == 'push' && needs.editorial-preflight.result == 'success' && contains(github.event.head_commit.message, '[AI-VISION-PRACTICAL-GUIDE]'))) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+      WP_USERNAME: ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      WP_DRY_RUN: ${{ vars.WP_PUBLISH_MODE == 'dry-run' && 'true' || 'false' }}
+      AMAZON_ASSOCIATE_TAG: ${{ vars.AMAZON_ASSOCIATE_TAG }}
+      WP_TIMEZONE: Europe/Rome
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python scripts/practical_guides.py prepare
+      - name: Installa il generatore di copertine
+        if: ${{ env.WP_DRY_RUN == 'false' && hashFiles('data/practical_guide_plan.json') != '' }}
+        run: python -m pip install -r requirements-cover.txt
+      - name: Pubblica la guida verificata
+        if: ${{ hashFiles('data/practical_guide_plan.json') != '' }}
+        run: python scripts/practical_guides.py publish
 
   ai-pipeline:
     if: ${{ (github.event_name == 'schedule' && github.event.schedule == '17 11 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.offers_only) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[AI-VISION-QA]')) }}
