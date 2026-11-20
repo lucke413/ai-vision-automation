@@ -1,4 +1,4 @@
-"""Restore editorial descriptions and direct product links in two archived editions."""
+"""Restore editorial descriptions and direct product links in the 19 November editions."""
 import argparse
 import html
 import json
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SITE = "https://aivision.altervista.org"
 SOURCE = "ece36d0da88bab542c477e7175b8ae7f0076b9b4"
 TARGETS = (
+    (2983, "amazon-black-friday-2026-11-19-1", "black-friday-first"),
     (3003, "amazon-black-friday-2026-11-19-2", "black-friday"),
     (3006, "amazon-offerte-ordinarie-2026-11-19", "daily"),
 )
@@ -28,8 +29,13 @@ NOTE = ('<p class="aivision-offer-archive"><strong>Selezione d’archivio del 19
         'Per le promozioni attuali, consulta la <a href="/category/offerte-2/">sezione Offerte</a>.</p>')
 
 
-def render_archive(offers, tag=""):
-    sections = [f'<div class="{MARKER}">', f"<p>{DISCLOSURE}</p>", NOTE, "<h2>Scelte da AI Vision per voi</h2>"]
+def render_archive(offers, tag, heading, disclosure, note):
+    sections = [f'<div class="{MARKER}">']
+    if disclosure:
+        sections.append(f"<p>{DISCLOSURE}</p>")
+    if note:
+        sections.append(NOTE)
+    sections.append(f"<h2>{heading}</h2>")
     for category in dict.fromkeys(offer.category for offer in offers):
         sections.append(f"<h3>{html.escape(category)}</h3>")
         for offer in (item for item in offers if item.category == category):
@@ -42,25 +48,40 @@ def render_archive(offers, tag=""):
     return "\n".join([*sections, "</div>"])
 
 
+def historical_config(filename):
+    return json.loads(subprocess.check_output(["git", "show", f"{SOURCE}:config/{filename}"], cwd=ROOT))
+
+
+def archive_section(offers, checked, tag, *, heading="Scelte da AI Vision per voi", disclosure=True, note=True):
+    expected = LEGACY_MARKER.sub(LEGACY_NOTICE, render_offers(offers, checked, heading=heading, disclosure=disclosure))
+    archived = render_archive(offers, "", heading, disclosure, note)
+    linked = render_archive(offers, tag, heading, disclosure, note)
+    return expected, archived, linked, {offer.key for offer in offers if offer.key}
+
+
+def historical_offers(rows, expires):
+    return [Offer(product_asin(row["url"]), row["category"], row["title"], row["description"], row["why"],
+                  "", row["url"], expires) for row in rows]
+
+
 def original_sections(tag):
-    raw = subprocess.check_output(
-        ["git", "show", f"{SOURCE}:config/amazon-editorial-offers.json"], cwd=ROOT
-    )
-    for edition in json.loads(raw):
+    for edition in historical_config("amazon-editorial-offers.json"):
         checked = parse_utc(edition["checked_at"])
         expires = parse_utc(edition["expires_at"])
-        offers = [Offer(product_asin(row["url"]), row["category"], row["title"], row["description"], row["why"],
-                        "", row["url"], expires) for row in edition["products"]]
+        offers = historical_offers(edition["products"], expires)
         if edition["kind"] == "black-friday":
-            # The first edition already contained two products and took 18 more from this feed.
-            first = {offer.key for offer in spread_by_category(offers)[:18]}
-            offers = [offer for offer in offers if offer.key not in first]
+            # The first edition already contained two products and took 18 more at 22:55.
+            reviewed = historical_config("amazon-reviewed-editions.json")["2026-11-19"]
+            first = spread_by_category(offers)[:18]
+            yield "black-friday-first", (
+                archive_section(historical_offers(reviewed["products"], expires), checked, tag,
+                                heading="I prodotti segnalati"),
+                archive_section(first, checked, tag, heading="Aggiornamento delle 22:55", disclosure=False, note=False),
+            )
+            used = {offer.key for offer in first}
+            offers = [offer for offer in offers if offer.key not in used]
         offers = spread_by_category(offers)[:20]
-        product_ids = {offer.key for offer in offers if offer.key}
-        if len(product_ids) != 20:
-            raise ValueError("La selezione originale non contiene 20 prodotti distinti.")
-        expected = LEGACY_MARKER.sub(LEGACY_NOTICE, render_offers(offers, checked))
-        yield edition["kind"], (expected, render_archive(offers), render_archive(offers, tag), product_ids)
+        yield edition["kind"], (archive_section(offers, checked, tag),)
 
 
 def read_post(client, post_id, slug):
@@ -85,14 +106,12 @@ def verify_public(slug, product_ids):
     response = requests.get(f"{SITE}/{slug}/", params={"aivision_archive_check": int(time())}, timeout=45)
     response.raise_for_status()
     page = BeautifulSoup(response.content, "html.parser")
-    note = page.select_one(".aivision-offer-archive")
-    if not note:
-        raise RuntimeError(f"Nota di archivio assente su {slug}.")
-    section = note.parent
-    linked = [asin for link in section.select("a[href]") if (asin := product_asin(link["href"]))]
-    if (len(section.select("h4")) != 20 or section.select(".aivision-amazon-price, img")
-            or len(linked) != 20 or set(linked) != product_ids
-            or "Questa offerta è terminata" in section.get_text()):
+    sections = page.select(f"div.{MARKER}")
+    linked = [asin for section in sections for link in section.select("a[href]") if (asin := product_asin(link["href"]))]
+    if (len(page.select(".aivision-offer-archive")) != 1 or len(linked) != 20 or set(linked) != product_ids
+            or sum(len(section.select("h4")) for section in sections) != 20
+            or any(section.select(".aivision-amazon-price, img") or "Questa offerta è terminata" in section.get_text()
+                   for section in sections)):
         raise RuntimeError(f"Selezione incompleta su {slug}.")
 
 
@@ -111,9 +130,14 @@ def main():
     plans = []
     for post_id, slug, kind in TARGETS:
         post = read_post(client, post_id, slug)
-        legacy, archived, new, product_ids = sources[kind]
+        body = post["content"]["raw"]
+        product_ids = set()
         try:
-            body = planned_content(post["content"]["raw"], legacy, archived, new)
+            for legacy, archived, new, ids in sources[kind]:
+                body = planned_content(body, legacy, archived, new)
+                product_ids.update(ids)
+            if len(product_ids) != 20:
+                raise ValueError("La selezione originale non contiene 20 prodotti distinti.")
         except ValueError as exc:
             raise ValueError(f"{slug}: {exc}") from exc
         plans.append((post, body, product_ids))
