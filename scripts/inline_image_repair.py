@@ -297,7 +297,8 @@ def repair_post(client: WordPressClient, post: dict, upgrade: dict | None = None
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--upgrade-post", type=int, help="Aggiorna solo la copertina indicata nel manifest.")
+    parser.add_argument("--upgrade-post", type=int, action="append",
+                        help="Aggiorna una copertina indicata nel manifest. Ripetibile.")
     args = parser.parse_args()
     if os.environ.get("WP_INLINE_IMAGE_REPAIR", "").strip().lower() != "true":
         print("Bloccato: impostare WP_INLINE_IMAGE_REPAIR=true per autorizzare le scritture.")
@@ -312,26 +313,27 @@ def main() -> int:
     client = WordPressClient(base_url, username, app_password, dry_run=False)
     manifest = UPGRADE_DIR / "manifest.json"
     upgrades = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
-    if args.upgrade_post is not None:
-        post_id = args.upgrade_post
-        upgrade = upgrades.get(str(post_id))
-        if not upgrade:
-            raise PublisherError(f"Nessuna copertina associata all'articolo {post_id}.")
-        post = request_with_retry(
-            client.session, "get", client._url(f"posts/{post_id}"), params={"context": "edit"}
-        ).json()
-        if post["status"] != "publish":
-            raise PublisherError(f"L'articolo {post_id} non è pubblicato.")
-        if post.get("featured_media") != upgrade["previous_media"]:
-            _, inline_url = leading_cover(raw_content(post))
-            current = fetch_media(client, int(post["featured_media"])) if post.get("featured_media") else {}
-            current_url = str(current.get("source_url") or "")
-            if (media_path(current_url).endswith(f"/ai-vision-photo-{post_id}.jpg")
-                    and media_path(inline_url) == media_path(current_url)):
-                print(f"Copertina dell'articolo {post_id} già aggiornata.")
-                return 0
-            raise PublisherError(f"La copertina dell'articolo {post_id} è cambiata durante il controllo.")
-        posts = [post]
+    if args.upgrade_post:
+        posts = []
+        for post_id in dict.fromkeys(args.upgrade_post):
+            upgrade = upgrades.get(str(post_id))
+            if not upgrade or not (UPGRADE_DIR / f"{post_id}.jpg").is_file():
+                raise PublisherError(f"Nessuna copertina associata all'articolo {post_id}.")
+            post = request_with_retry(
+                client.session, "get", client._url(f"posts/{post_id}"), params={"context": "edit"}
+            ).json()
+            if post["status"] != "publish":
+                raise PublisherError(f"L'articolo {post_id} non è pubblicato.")
+            if post.get("featured_media") != upgrade["previous_media"]:
+                _, inline_url = leading_cover(raw_content(post))
+                current = fetch_media(client, int(post["featured_media"])) if post.get("featured_media") else {}
+                current_url = str(current.get("source_url") or "")
+                if (media_path(current_url).endswith(f"/ai-vision-photo-{post_id}.jpg")
+                        and media_path(inline_url) == media_path(current_url)):
+                    print(f"Copertina dell'articolo {post_id} già aggiornata.")
+                    continue
+                raise PublisherError(f"La copertina dell'articolo {post_id} è cambiata durante il controllo.")
+            posts.append(post)
     else:
         posts = fetch_all_posts(client)
     backup = {
@@ -341,7 +343,7 @@ def main() -> int:
         "posts": posts,
     }
     write_json_atomic(BACKUP_PATH, backup)
-    print(f"Backup integrale salvato prima delle modifiche: {BACKUP_PATH} ({len(posts)} articoli).")
+    print(f"Backup salvato prima delle modifiche: {BACKUP_PATH} ({len(posts)} articoli).")
 
     repaired: list[dict] = []
     errors: list[dict] = []

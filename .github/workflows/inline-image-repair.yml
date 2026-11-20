@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -31,9 +34,9 @@ jobs:
 
       - name: Install dependencies
         env:
-          TARGET_COVER: ${{ contains(github.event.head_commit.message, '[AI-VISION-SSD-COVER]') }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "$TARGET_COVER" = true ]; then
+          if [ "$EVENT_NAME" = push ]; then
             python -m pip install -r requirements.txt
           else
             python -m pip install -r requirements.txt -r requirements-cover.txt
@@ -44,20 +47,33 @@ jobs:
           python -m py_compile scripts/wp_publisher.py scripts/inline_image_repair.py
           python -m unittest tests.test_inline_image_repair -v
 
-      - name: Back up and repair published and scheduled articles
+      - name: Back up and update the selected covers
         env:
           WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           WP_INLINE_IMAGE_REPAIR: "true"
           HF_HUB_DOWNLOAD_TIMEOUT: "60"
-          TARGET_COVER: ${{ contains(github.event.head_commit.message, '[AI-VISION-SSD-COVER]') }}
+          EVENT_NAME: ${{ github.event_name }}
+          PREVIOUS_REVISION: ${{ github.event.before }}
+          CURRENT_REVISION: ${{ github.sha }}
         run: |
-          if [ "$TARGET_COVER" = true ]; then
-            python scripts/inline_image_repair.py --upgrade-post 3049
-          else
+          if [ "$EVENT_NAME" != push ]; then
             python scripts/inline_image_repair.py
+            exit
           fi
+          paths=$(git diff --name-only --diff-filter=AM "$PREVIOUS_REVISION" "$CURRENT_REVISION" -- 'assets/cover-upgrades/*.jpg')
+          args=()
+          while IFS= read -r path; do
+            if [[ $path =~ ^assets/cover-upgrades/([0-9]+)\.jpg$ ]]; then
+              args+=(--upgrade-post "${BASH_REMATCH[1]}")
+            fi
+          done <<< "$paths"
+          if [ "${#args[@]}" -eq 0 ]; then
+            echo "Nessuna nuova copertina da caricare."
+            exit
+          fi
+          python scripts/inline_image_repair.py "${args[@]}"
 
       - name: Upload full backup and repair report
         if: always()
