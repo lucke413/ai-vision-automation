@@ -153,7 +153,10 @@ def load_image_model():
         MODEL_ID, revision=MODEL_REVISION, use_safetensors=True, torch_dtype=torch.float32,
         safety_checker=safety_checker, feature_extractor=processor,
     )
-    model.scheduler = DPMSolverMultistepScheduler.from_config(model.scheduler.config, use_karras_sigmas=True)
+    model.scheduler = DPMSolverMultistepScheduler.from_config(
+        model.scheduler.config, algorithm_type="dpmsolver++", solver_type="midpoint",
+        solver_order=2, final_sigmas_type="zero", use_karras_sigmas=True,
+    )
     return model
 
 
