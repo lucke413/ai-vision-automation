@@ -24,7 +24,7 @@ MODEL_REVISION = "a85df6a8bd976cdd08b4fd8f3b73f229c9e54df5"
 CREATIVE_COMMONS = re.compile(r"^https://creativecommons\.org/(?:licenses/by(?:-sa)?/(?:2\.0|2\.5|3\.0|4\.0)|publicdomain/(?:zero|mark)/1\.0)/?$")
 PHOTO_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff")
 MODEL_LOCK = Lock()
-EDITORIAL_LIGHT = "Bright editorial photography, clear directional light, rich natural colors, crisp subject contrast"
+EDITORIAL_LIGHT = "Vibrant editorial photograph, bright colored surfaces, directional daylight, crisp natural contrast"
 
 
 class CoverUnavailable(RuntimeError):
@@ -155,7 +155,7 @@ def generate_ai_cover(draft: dict) -> bytes:
         import torch
 
         with MODEL_LOCK, torch.inference_mode():
-            result = load_image_model()(prompt, width=640, height=384, num_inference_steps=6, guidance_scale=6.0,
+            result = load_image_model()(prompt, width=640, height=384, num_inference_steps=8, guidance_scale=6.0,
                            generator=torch.Generator().manual_seed(seed))
         if any(result.nsfw_content_detected or []):
             raise CoverUnavailable("Il generatore ha respinto questa copertina.")
@@ -174,6 +174,7 @@ def generate_ai_cover(draft: dict) -> bytes:
 
 def grade_ai_cover(image: Image.Image) -> Image.Image:
     """Lift deep midtones without brightening highlights or altering external photos."""
+    image = ImageOps.autocontrast(image, cutoff=0.6, preserve_tone=True)
     luma = ImageStat.Stat(image.convert("L")).median[0]
     if luma < 115:
         gamma = max(0.72, min(1.0, luma / 115))

@@ -30,7 +30,14 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt -r requirements-cover.txt
+        env:
+          TARGET_COVER: ${{ contains(github.event.head_commit.message, '[AI-VISION-SSD-COVER]') }}
+        run: |
+          if [ "$TARGET_COVER" = true ]; then
+            python -m pip install -r requirements.txt
+          else
+            python -m pip install -r requirements.txt -r requirements-cover.txt
+          fi
 
       - name: Compile and test repair
         run: |
@@ -44,7 +51,13 @@ jobs:
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           WP_INLINE_IMAGE_REPAIR: "true"
           HF_HUB_DOWNLOAD_TIMEOUT: "60"
-        run: python scripts/inline_image_repair.py
+          TARGET_COVER: ${{ contains(github.event.head_commit.message, '[AI-VISION-SSD-COVER]') }}
+        run: |
+          if [ "$TARGET_COVER" = true ]; then
+            python scripts/inline_image_repair.py --upgrade-post 3049
+          else
+            python scripts/inline_image_repair.py
+          fi
 
       - name: Upload full backup and repair report
         if: always()

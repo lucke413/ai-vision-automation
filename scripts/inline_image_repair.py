@@ -2,6 +2,7 @@
 """Sostituisce le copertine a bande e ripristina le copertine mancanti."""
 from __future__ import annotations
 
+import argparse
 import html
 import io
 import json
@@ -295,6 +296,9 @@ def repair_post(client: WordPressClient, post: dict, upgrade: dict | None = None
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--upgrade-post", type=int, help="Aggiorna solo la copertina indicata nel manifest.")
+    args = parser.parse_args()
     if os.environ.get("WP_INLINE_IMAGE_REPAIR", "").strip().lower() != "true":
         print("Bloccato: impostare WP_INLINE_IMAGE_REPAIR=true per autorizzare le scritture.")
         return 2
@@ -306,7 +310,30 @@ def main() -> int:
         return 2
 
     client = WordPressClient(base_url, username, app_password, dry_run=False)
-    posts = fetch_all_posts(client)
+    manifest = UPGRADE_DIR / "manifest.json"
+    upgrades = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
+    if args.upgrade_post is not None:
+        post_id = args.upgrade_post
+        upgrade = upgrades.get(str(post_id))
+        if not upgrade:
+            raise PublisherError(f"Nessuna copertina associata all'articolo {post_id}.")
+        post = request_with_retry(
+            client.session, "get", client._url(f"posts/{post_id}"), params={"context": "edit"}
+        ).json()
+        if post["status"] != "publish":
+            raise PublisherError(f"L'articolo {post_id} non è pubblicato.")
+        if post.get("featured_media") != upgrade["previous_media"]:
+            _, inline_url = leading_cover(raw_content(post))
+            current = fetch_media(client, int(post["featured_media"])) if post.get("featured_media") else {}
+            current_url = str(current.get("source_url") or "")
+            if (media_path(current_url).endswith(f"/ai-vision-photo-{post_id}.jpg")
+                    and media_path(inline_url) == media_path(current_url)):
+                print(f"Copertina dell'articolo {post_id} già aggiornata.")
+                return 0
+            raise PublisherError(f"La copertina dell'articolo {post_id} è cambiata durante il controllo.")
+        posts = [post]
+    else:
+        posts = fetch_all_posts(client)
     backup = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "site": base_url,
@@ -316,8 +343,6 @@ def main() -> int:
     write_json_atomic(BACKUP_PATH, backup)
     print(f"Backup integrale salvato prima delle modifiche: {BACKUP_PATH} ({len(posts)} articoli).")
 
-    manifest = UPGRADE_DIR / "manifest.json"
-    upgrades = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
     repaired: list[dict] = []
     errors: list[dict] = []
     worker = local()
