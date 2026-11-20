@@ -27,6 +27,7 @@ TELEGRAM_URL = "https://t.me/aivision_tech"
 PREVIOUS_TELEGRAM_HASH = "13825a80433f002788defe90b8328586d5ef0414d9a904cb5d3484321d4307ca"
 RESPONSIVE_NAME = "AI Vision: lettura e spazi pubblicitari responsive"
 RESPONSIVE_SOURCE = SOURCE.with_name("responsive-layout.php")
+PREVIOUS_RESPONSIVE_HASH = "16fb5561034de4b21e8efaf4b82cba16f279606e62804641e0730f98e9c4e158"
 NAVIGATION_NAME = "AI Vision: navigazione offerte e indice articoli"
 NAVIGATION_SOURCE = SOURCE.with_name("editorial-navigation.php")
 ARTICLES = (
@@ -268,7 +269,8 @@ def main():
             deploy(admin, public, TELEGRAM_NAME, TELEGRAM_SOURCE, verify_telegram_offers,
                    previous_hash=PREVIOUS_TELEGRAM_HASH)
         elif args.responsive_layout:
-            deploy(admin, public, RESPONSIVE_NAME, RESPONSIVE_SOURCE, verify_responsive_layout)
+            deploy(admin, public, RESPONSIVE_NAME, RESPONSIVE_SOURCE, verify_responsive_layout,
+                   previous_hash=PREVIOUS_RESPONSIVE_HASH)
         elif args.reading_widget:
             deploy(admin, public, READING_NAME, READING_SOURCE, verify_reading_widget,
                    previous_hash=PREVIOUS_READING_HASH)

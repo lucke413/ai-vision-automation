@@ -18,7 +18,7 @@ main.single-class { padding-top: clamp(18px, 2.5vw, 36px); }
 
 .single-class article.page-content-single > :is(p, ul, ol, blockquote) {
     max-inline-size: 72ch;
-    font-size: clamp(1rem, .95rem + .22vw, 1.125rem);
+    font-size: clamp(16px, 14px + .3vw, 18px);
     line-height: 1.7;
     overflow-wrap: anywhere;
 }
@@ -38,8 +38,13 @@ main.single-class { padding-top: clamp(18px, 2.5vw, 36px); }
     }
 }
 
+@media (min-width: 992px) and (max-width: 1199.98px) {
+    .mg-menu-full #menu-menu-principale > li > a { font-size: 13px; letter-spacing: normal; }
+}
+
 @media (max-width: 991.98px) {
     .mg-headwidget > .mg-head-detail { display: none; }
+    .mg-headwidget .navbar-toggler { min-width: 44px; min-height: 44px; }
     .aiv-telegram-offers .aiv-telegram-offers-inner > a {
         display: inline-flex;
         align-items: center;
@@ -75,7 +80,7 @@ main.single-class { padding-top: clamp(18px, 2.5vw, 36px); }
         padding-inline: clamp(15px, 4vw, 24px);
     }
     .single-class .mg-blog-post-box .mg-header h1 {
-        font-size: clamp(1.625rem, 5.6vw, 2rem);
+        font-size: clamp(26px, 5.6vw, 32px);
         line-height: 1.25;
         overflow-wrap: anywhere;
     }
