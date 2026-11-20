@@ -1,0 +1,38 @@
+name: AI Vision article header
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/article-header.yml'
+      - 'wordpress/article-header.php'
+      - 'scripts/deploy_article_header.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivision-article-header
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[AI-VISION-ARTICLE-HEADER]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: php -l wordpress/article-header.php
+      - run: python -m pip install -r requirements.txt
+      - name: Attiva le barre Newsup e verifica il sito
+        env:
+          WP_BASE_URL: ${{ secrets.WP_BASE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python scripts/deploy_article_header.py
